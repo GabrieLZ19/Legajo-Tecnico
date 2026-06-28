@@ -1,0 +1,256 @@
+import { supabaseAdmin } from '../config/supabase';
+import { InformeVisita, PeligroDetectado, PuntoMejora, AccionMejora } from '../types/database';
+
+export const informeService = {
+  async crearInforme(
+    preventorId: string,
+    data: {
+      empresa_id: string;
+      actividad?: string;
+      fecha_hora_visita: string;
+      lugar_visita?: string;
+      contacto_visita?: string;
+      declaracion_legal?: string;
+      observaciones?: string;
+      peligros?: Array<{ descripcion: string; medida_control?: string }>;
+      puntos_mejora?: Array<{
+        detalle: string;
+        acciones?: Array<{ descripcion: string }>;
+      }>;
+    }
+  ) {
+    // 1. Obtener o generar número de informe
+    // Usaremos un count temporal como fallback si no tenemos la función `next_numero_informe`
+    const { count } = await supabaseAdmin
+      .from('informes_visita')
+      .select('*', { count: 'exact', head: true })
+      .eq('empresa_id', data.empresa_id);
+    
+    const numero_informe = (count || 0) + 1;
+
+    // 2. Insertar cabecera
+    const { data: informe, error: errInforme } = await supabaseAdmin
+      .from('informes_visita')
+      .insert({
+        empresa_id: data.empresa_id,
+        preventor_id: preventorId,
+        numero_informe,
+        actividad: data.actividad,
+        fecha_hora_visita: data.fecha_hora_visita,
+        lugar_visita: data.lugar_visita,
+        contacto_visita: data.contacto_visita,
+        declaracion_legal: data.declaracion_legal,
+        observaciones: data.observaciones,
+        estado_firma: 'borrador',
+      })
+      .select()
+      .single();
+
+    if (errInforme || !informe) {
+      throw new Error(`Error al crear cabecera del informe: ${errInforme?.message}`);
+    }
+
+    try {
+      // 3. Insertar peligros
+      if (data.peligros && data.peligros.length > 0) {
+        const peligrosToInsert = data.peligros.map((p, i) => ({
+          informe_id: informe.id,
+          descripcion: p.descripcion,
+          medida_control: p.medida_control,
+          orden: i,
+        }));
+        const { error: errPeligros } = await supabaseAdmin.from('peligros_detectados').insert(peligrosToInsert);
+        if (errPeligros) throw errPeligros;
+      }
+
+      // 4. Insertar puntos de mejora y acciones
+      if (data.puntos_mejora && data.puntos_mejora.length > 0) {
+        for (let i = 0; i < data.puntos_mejora.length; i++) {
+          const pm = data.puntos_mejora[i];
+          const { data: puntoInsertado, error: errPunto } = await supabaseAdmin
+            .from('puntos_mejora')
+            .insert({
+              informe_id: informe.id,
+              numero_item: i + 1,
+              detalle: pm.detalle,
+              orden: i,
+            })
+            .select()
+            .single();
+          
+          if (errPunto) throw errPunto;
+
+          if (pm.acciones && pm.acciones.length > 0) {
+            const accionesToInsert = pm.acciones.map((acc) => ({
+              informe_id: informe.id,
+              empresa_id: data.empresa_id,
+              punto_mejora_id: puntoInsertado.id,
+              numero_item: i + 1,
+              descripcion: acc.descripcion,
+              estado: 'pendiente',
+            }));
+            const { error: errAcc } = await supabaseAdmin.from('acciones_mejora').insert(accionesToInsert);
+            if (errAcc) throw errAcc;
+          }
+        }
+      }
+
+      // 5. Sincronizar observaciones de texto plano con puntos y acciones de mejora
+      if (data.observaciones) {
+        await syncObservacionesToAcciones(informe.id, data.empresa_id, data.observaciones);
+      }
+
+      return informe as InformeVisita;
+
+    } catch (error: any) {
+      // Compensación manual si algo falla en cascada
+      await supabaseAdmin.from('informes_visita').delete().eq('id', informe.id);
+      throw new Error(`Error al insertar detalles del informe. Rolled back. Detalles: ${error.message}`);
+    }
+  },
+
+  async listarPorEmpresa(empresaId: string) {
+    const { data, error } = await supabaseAdmin
+      .from('informes_visita')
+      .select('*')
+      .eq('empresa_id', empresaId)
+      .order('fecha_hora_visita', { ascending: false });
+
+    if (error) throw error;
+    return data;
+  },
+
+  async obtenerPorId(id: string) {
+    const { data: informe, error: errInf } = await supabaseAdmin
+      .from('informes_visita')
+      .select('*, peligros_detectados(*), puntos_mejora(*), acciones_mejora(*), firmas_informe(*)')
+      .eq('id', id)
+      .single();
+
+    if (errInf) throw errInf;
+    return informe;
+  },
+
+  async editarBorrador(id: string, updateData: Partial<InformeVisita>) {
+    // Validar estado
+    const { data: current } = await supabaseAdmin
+      .from('informes_visita')
+      .select('estado_firma, empresa_id')
+      .eq('id', id)
+      .single();
+
+    if (!current || current.estado_firma !== 'borrador') {
+      throw new Error('Solo se pueden editar informes en estado borrador');
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('informes_visita')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Sincronizar observaciones si se enviaron en la actualización
+    if ('observaciones' in updateData) {
+      await syncObservacionesToAcciones(id, current.empresa_id, updateData.observaciones as string | undefined);
+    }
+
+    return data;
+  }
+};
+
+/**
+ * Sincroniza el texto de observaciones del informe con la tabla de puntos_mejora y acciones_mejora.
+ * Parsea el texto línea por línea (detectando viñetas) y crea/actualiza los registros individuales.
+ */
+async function syncObservacionesToAcciones(informeId: string, empresaId: string, observacionesText: string | undefined) {
+  if (!observacionesText) {
+    // Si no hay observaciones, eliminar todos los puntos y acciones previos
+    await supabaseAdmin.from('acciones_mejora').delete().eq('informe_id', informeId);
+    await supabaseAdmin.from('puntos_mejora').delete().eq('informe_id', informeId);
+    return;
+  }
+
+  // 1. Parsear el texto por líneas/viñetas
+  const lineas = observacionesText
+    .split(/\r?\n/)
+    .map(line => {
+      // Limpiar viñetas comunes: -, *, •, ·, números como 1., 2)
+      let clean = line.trim();
+      clean = clean.replace(/^[\s\-\*•·]+/, ''); // viñetas de símbolos
+      clean = clean.replace(/^\d+[\.\)]\s*/, ''); // viñetas numéricas tipo 1. o 1)
+      return clean.trim();
+    })
+    .filter(line => line.length > 0);
+
+  if (lineas.length === 0) {
+    await supabaseAdmin.from('acciones_mejora').delete().eq('informe_id', informeId);
+    await supabaseAdmin.from('puntos_mejora').delete().eq('informe_id', informeId);
+    return;
+  }
+
+  // 2. Obtener puntos y acciones existentes para este informe
+  const { data: existentes } = await supabaseAdmin
+    .from('puntos_mejora')
+    .select('id, detalle')
+    .eq('informe_id', informeId);
+
+  const existentesMap = new Map<string, string>(); // detalle -> id
+  existentes?.forEach(p => existentesMap.set(p.detalle, p.id));
+
+  const nuevasLineasSet = new Set(lineas);
+  
+  // Eliminar los puntos de mejora que ya no están en las nuevas observaciones
+  const aEliminar = existentes?.filter(p => !nuevasLineasSet.has(p.detalle)) || [];
+  if (aEliminar.length > 0) {
+    const idsEliminar = aEliminar.map(p => p.id);
+    await supabaseAdmin.from('acciones_mejora').delete().in('punto_mejora_id', idsEliminar);
+    await supabaseAdmin.from('puntos_mejora').delete().in('id', idsEliminar);
+  }
+
+  // Insertar o actualizar los puntos de mejora y acciones
+  for (let i = 0; i < lineas.length; i++) {
+    const detalle = lineas[i];
+    let puntoId = existentesMap.get(detalle);
+
+    if (!puntoId) {
+      // Crear punto de mejora
+      const { data: nuevoPunto, error: errPunto } = await supabaseAdmin
+        .from('puntos_mejora')
+        .insert({
+          informe_id: informeId,
+          numero_item: i + 1,
+          detalle,
+          orden: i,
+        })
+        .select()
+        .single();
+
+      if (errPunto || !nuevoPunto) continue;
+      puntoId = nuevoPunto.id;
+
+      // Crear acción de mejora correspondiente en estado pendiente
+      await supabaseAdmin.from('acciones_mejora').insert({
+        informe_id: informeId,
+        empresa_id: empresaId,
+        punto_mejora_id: puntoId,
+        numero_item: i + 1,
+        descripcion: detalle,
+        estado: 'pendiente',
+      });
+    } else {
+      // Si ya existe, actualizamos su número de ítem y orden para que coincida con el nuevo orden
+      await supabaseAdmin
+        .from('puntos_mejora')
+        .update({ numero_item: i + 1, orden: i })
+        .eq('id', puntoId);
+
+      await supabaseAdmin
+        .from('acciones_mejora')
+        .update({ numero_item: i + 1 })
+        .eq('punto_mejora_id', puntoId);
+    }
+  }
+}
