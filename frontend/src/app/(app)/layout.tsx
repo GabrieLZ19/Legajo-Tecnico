@@ -87,8 +87,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             className="flex items-center gap-2 shrink-0 hover:opacity-90 transition-opacity cursor-pointer select-none"
           >
             <div className="h-9 w-9 rounded-lg bg-blue-600 flex items-center justify-center shadow-xs">
-              <Home className="h-5 w-5 text-white block sm:hidden" />
-              <ShieldCheck className="h-5 w-5 text-white hidden sm:block" />
+              <ShieldCheck className="h-5 w-5 text-white" />
             </div>
             <span className="font-bold text-[#1e3a8a] text-sm sm:text-md md:text-lg block">
               Legajo Técnico
