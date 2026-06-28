@@ -100,11 +100,11 @@ export default function PlanAccionPage() {
         </div>
 
         {/* Botones de Descarga */}
-        <div className="flex flex-wrap gap-3">
+        <div className="grid grid-cols-2 sm:flex gap-3 w-full sm:w-auto select-none">
           <button
             onClick={handleExportExcel}
             disabled={exportingExcel || isLoading || !acciones || acciones.length === 0}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-50 hover:bg-emerald-150/80 border border-emerald-250 text-emerald-700 font-bold rounded-xl text-xs transition-all shadow-2xs hover:shadow-xs disabled:opacity-50 cursor-pointer select-none"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-50 hover:bg-emerald-150/80 border border-emerald-250 text-emerald-700 font-bold rounded-xl text-xs transition-all shadow-2xs hover:shadow-xs disabled:opacity-50 cursor-pointer w-full"
           >
             {exportingExcel ? (
               <Loader className="h-4 w-4 animate-spin" />
@@ -117,7 +117,7 @@ export default function PlanAccionPage() {
           <button
             onClick={handleExportPDF}
             disabled={exportingPdf || isLoading || !acciones || acciones.length === 0}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-rose-50 hover:bg-rose-150/80 border border-rose-250 text-rose-700 font-bold rounded-xl text-xs transition-all shadow-2xs hover:shadow-xs disabled:opacity-50 cursor-pointer select-none"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-rose-50 hover:bg-rose-150/80 border border-rose-250 text-rose-700 font-bold rounded-xl text-xs transition-all shadow-2xs hover:shadow-xs disabled:opacity-50 cursor-pointer w-full"
           >
             {exportingPdf ? (
               <Loader className="h-4 w-4 animate-spin" />
@@ -130,31 +130,31 @@ export default function PlanAccionPage() {
       </div>
 
       {/* Tarjetas de Estadísticas */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-2xs flex flex-col justify-center min-h-[90px]">
-          <span className="text-3xl font-black text-amber-500 font-sans leading-none">
+      <div className="grid grid-cols-3 gap-3 sm:gap-6">
+        <div className="bg-white border border-slate-200 rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-2xs flex flex-col items-center justify-center text-center min-h-[80px] sm:min-h-[90px]">
+          <span className="text-2xl sm:text-3xl font-black text-amber-500 font-sans leading-none">
             {isLoading ? "-" : pendientes}
           </span>
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider mt-1.5 font-sans">
+          <span className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-wider mt-1.5 font-sans">
             Pendientes
           </span>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-2xs flex flex-col justify-center min-h-[90px]">
-          <span className="text-3xl font-black text-emerald-500 font-sans leading-none">
+        <div className="bg-white border border-slate-200 rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-2xs flex flex-col items-center justify-center text-center min-h-[80px] sm:min-h-[90px]">
+          <span className="text-2xl sm:text-3xl font-black text-emerald-500 font-sans leading-none">
             {isLoading ? "-" : cumplidas}
           </span>
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider mt-1.5 font-sans">
+          <span className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-wider mt-1.5 font-sans">
             Cumplidas
           </span>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-2xs flex flex-col justify-center min-h-[90px]">
-          <span className="text-3xl font-black text-slate-900 font-sans leading-none">
+        <div className="bg-white border border-slate-200 rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-2xs flex flex-col items-center justify-center text-center min-h-[80px] sm:min-h-[90px]">
+          <span className="text-2xl sm:text-3xl font-black text-slate-900 font-sans leading-none">
             {isLoading ? "-" : totalAcciones}
           </span>
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider mt-1.5 font-sans">
-            Total de acciones
+          <span className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-wider mt-1.5 font-sans">
+            Total<span className="hidden sm:inline"> de acciones</span>
           </span>
         </div>
       </div>
@@ -187,81 +187,141 @@ export default function PlanAccionPage() {
           </div>
         </div>
       ) : acciones && acciones.length > 0 ? (
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-2xs overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-100">
-              <thead className="bg-slate-50/70 select-none">
-                <tr>
-                  <th className="px-6 py-4 text-left text-[9px] font-black text-slate-400 uppercase tracking-wider font-sans">
-                    #
-                  </th>
-                  <th className="px-6 py-4 text-left text-[9px] font-black text-slate-400 uppercase tracking-wider font-sans">
-                    Acción de Mejora
-                  </th>
-                  <th className="px-6 py-4 text-left text-[9px] font-black text-slate-400 uppercase tracking-wider font-sans">
-                    Empresa · Sector · Fecha
-                  </th>
-                  <th className="px-6 py-4 text-left text-[9px] font-black text-slate-400 uppercase tracking-wider font-sans">
-                    Estado
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
-                {acciones.map((acc, index) => {
-                  const sector = acc.informes_visita?.lugar_visita || "Planta";
-                  const fechaVisita = acc.informes_visita?.fecha_hora_visita
-                    ? new Date(acc.informes_visita.fecha_hora_visita).toLocaleDateString("es-AR", {
-                        day: "2-digit",
-                        month: "2-digit",
-                      })
-                    : "";
+        <div className="space-y-4">
+          {/* Vista Desktop: Tabla */}
+          <div className="hidden md:block bg-white border border-slate-200 rounded-2xl shadow-2xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-100">
+                <thead className="bg-slate-50/70 select-none">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-[9px] font-black text-slate-400 uppercase tracking-wider font-sans">
+                      #
+                    </th>
+                    <th className="px-6 py-4 text-left text-[9px] font-black text-slate-400 uppercase tracking-wider font-sans">
+                      Acción de Mejora
+                    </th>
+                    <th className="px-6 py-4 text-left text-[9px] font-black text-slate-400 uppercase tracking-wider font-sans">
+                      Empresa · Sector · Fecha
+                    </th>
+                    <th className="px-6 py-4 text-left text-[9px] font-black text-slate-400 uppercase tracking-wider font-sans">
+                      Estado
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {acciones.map((acc, index) => {
+                    const sector = acc.informes_visita?.lugar_visita || "Planta";
+                    const fechaVisita = acc.informes_visita?.fecha_hora_visita
+                      ? new Date(acc.informes_visita.fecha_hora_visita).toLocaleDateString("es-AR", {
+                          day: "2-digit",
+                          month: "2-digit",
+                        })
+                      : "";
 
-                  return (
-                    <tr key={acc.id} className="hover:bg-slate-50/40 transition-colors">
-                      {/* Número */}
-                      <td className="px-6 py-4 whitespace-nowrap text-xs font-bold text-slate-400 font-sans">
-                        {index + 1}
-                      </td>
+                    return (
+                      <tr key={acc.id} className="hover:bg-slate-50/40 transition-colors">
+                        {/* Número */}
+                        <td className="px-6 py-4 whitespace-nowrap text-xs font-bold text-slate-400 font-sans">
+                          {index + 1}
+                        </td>
 
-                      {/* Acción de Mejora */}
-                      <td className="px-6 py-4 text-xs font-black text-slate-900 font-sans max-w-md">
-                        {acc.descripcion}
-                      </td>
+                        {/* Acción de Mejora */}
+                        <td className="px-6 py-4 text-xs font-black text-slate-900 font-sans max-w-md">
+                          {acc.descripcion}
+                        </td>
 
-                      {/* Empresa · Sector · Fecha */}
-                      <td className="px-6 py-4 whitespace-nowrap text-xs font-bold text-slate-450 font-sans">
-                        {empresa?.razon_social} · {sector} · {fechaVisita}
-                      </td>
+                        {/* Empresa · Sector · Fecha */}
+                        <td className="px-6 py-4 whitespace-nowrap text-xs font-bold text-slate-450 font-sans">
+                          {empresa?.razon_social} · {sector} · {fechaVisita}
+                        </td>
 
-                      {/* Estado */}
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <select
-                          value={acc.estado}
-                          onChange={(e) => handleStatusChange(acc.id, e.target.value as any)}
-                          className={`text-[10px] font-black px-3 py-1.5 rounded-full border border-transparent outline-hidden cursor-pointer transition-all ${
-                            acc.estado === "cumplida"
-                              ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100/70 hover:border-emerald-200"
-                              : acc.estado === "atendida"
-                                ? "bg-blue-50 text-blue-700 hover:bg-blue-100/70 hover:border-blue-200"
-                                : "bg-amber-50 text-amber-700 hover:bg-amber-100/70 hover:border-amber-200"
-                          }`}
-                        >
-                          <option value="pendiente" className="bg-white text-slate-800 font-semibold">
-                            Pendiente
-                          </option>
-                          <option value="atendida" className="bg-white text-slate-800 font-semibold">
-                            Atendida
-                          </option>
-                          <option value="cumplida" className="bg-white text-slate-800 font-semibold">
-                            Cumplida
-                          </option>
-                        </select>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        {/* Estado */}
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <select
+                            value={acc.estado}
+                            onChange={(e) => handleStatusChange(acc.id, e.target.value as any)}
+                            className={`text-[10px] font-black px-3 py-1.5 rounded-full border border-transparent outline-hidden cursor-pointer transition-all ${
+                              acc.estado === "cumplida"
+                                ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100/70 hover:border-emerald-200"
+                                : acc.estado === "atendida"
+                                  ? "bg-blue-50 text-blue-700 hover:bg-blue-100/70 hover:border-blue-200"
+                                  : "bg-amber-50 text-amber-700 hover:bg-amber-100/70 hover:border-amber-200"
+                            }`}
+                          >
+                            <option value="pendiente" className="bg-white text-slate-800 font-semibold">
+                              Pendiente
+                            </option>
+                            <option value="atendida" className="bg-white text-slate-800 font-semibold">
+                              Atendida
+                            </option>
+                            <option value="cumplida" className="bg-white text-slate-800 font-semibold">
+                              Cumplida
+                            </option>
+                          </select>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Vista Mobile: Tarjetas */}
+          <div className="block md:hidden space-y-4">
+            {acciones.map((acc, index) => {
+              const sector = acc.informes_visita?.lugar_visita || "Planta";
+              const fechaVisita = acc.informes_visita?.fecha_hora_visita
+                ? new Date(acc.informes_visita.fecha_hora_visita).toLocaleDateString("es-AR", {
+                    day: "2-digit",
+                    month: "2-digit",
+                  })
+                : "";
+
+              return (
+                <div key={acc.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs space-y-4">
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-bold text-slate-400">
+                      ÍTEM {index + 1}
+                    </span>
+                    <h3 className="text-sm font-black text-slate-900 font-sans leading-snug">
+                      {acc.descripcion}
+                    </h3>
+                    <p className="text-xs font-bold text-slate-450 font-sans pt-1">
+                      {empresa?.razon_social} · {sector} · {fechaVisita}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-3.5 border-t border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Estado
+                    </span>
+
+                    <select
+                      value={acc.estado}
+                      onChange={(e) => handleStatusChange(acc.id, e.target.value as any)}
+                      className={`text-[10px] font-black px-3.5 py-1.5 rounded-full border border-transparent outline-hidden cursor-pointer transition-all ${
+                        acc.estado === "cumplida"
+                          ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100/70"
+                          : acc.estado === "atendida"
+                            ? "bg-blue-50 text-blue-700 hover:bg-blue-100/70"
+                            : "bg-amber-50 text-amber-700 hover:bg-amber-100/70"
+                      }`}
+                    >
+                      <option value="pendiente" className="bg-white text-slate-800 font-semibold">
+                        Pendiente
+                      </option>
+                      <option value="atendida" className="bg-white text-slate-800 font-semibold">
+                        Atendida
+                      </option>
+                      <option value="cumplida" className="bg-white text-slate-800 font-semibold">
+                        Cumplida
+                      </option>
+                    </select>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       ) : (

@@ -217,7 +217,7 @@ export default function InformesPage() {
         </button>
       </form>
 
-      {/* Tabla de Informes */}
+      {/* Tabla/Tarjetas de Informes */}
       {isLoading ? (
         <div className="space-y-3">
           <div className="h-16 bg-white border border-slate-200 rounded-2xl animate-pulse"></div>
@@ -225,93 +225,106 @@ export default function InformesPage() {
           <div className="h-16 bg-white border border-slate-200 rounded-2xl animate-pulse"></div>
         </div>
       ) : filteredInformes && filteredInformes.length > 0 ? (
-        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-100 text-left text-sm">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th
-                    scope="col"
-                    className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32"
-                  >
-                    Fecha
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider"
-                  >
-                    Empresa — Área
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider"
-                  >
-                    Resumen
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32"
-                  >
-                    Estado
-                  </th>
-                  <th scope="col" className="relative px-6 py-4 w-28">
-                    <span className="sr-only">Acciones</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
-                {filteredInformes.map((inf) => (
-                  <tr
-                    key={inf.id}
-                    className="hover:bg-slate-50/50 transition-colors"
-                  >
-                    {/* Fecha */}
-                    <td className="whitespace-nowrap px-6 py-4.5 font-bold text-slate-700">
-                      {formatTableDate(inf.fecha_hora_visita)}
-                    </td>
-
-                    {/* Empresa — Área */}
-                    <td className="whitespace-nowrap px-6 py-4.5 font-bold text-slate-900">
-                      {empresa?.razon_social || "Empresa"} —{" "}
-                      {inf.lugar_visita || "Planta 1"}
-                    </td>
-
-                    {/* Resumen */}
-                    <td className="px-6 py-4.5 text-slate-500 font-medium">
-                      <span className="line-clamp-1">
-                        {inf.actividad ||
-                          "Relevamiento general de condiciones de higiene y seguridad."}
-                      </span>
-                    </td>
-
-                    {/* Estado */}
-                    <td className="whitespace-nowrap px-6 py-4.5">
-                      <span
-                        className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold ${
+        <div className="space-y-4">
+          {/* Vista Desktop: Tabla */}
+          <div className="hidden md:block bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-100 text-left text-sm">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th scope="col" className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32">
+                      Fecha
+                    </th>
+                    <th scope="col" className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Empresa — Área
+                    </th>
+                    <th scope="col" className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Resumen
+                    </th>
+                    <th scope="col" className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32">
+                      Estado
+                    </th>
+                    <th scope="col" className="relative px-6 py-4 w-28">
+                      <span className="sr-only">Acciones</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {filteredInformes.map((inf) => (
+                    <tr key={inf.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="whitespace-nowrap px-6 py-4.5 font-bold text-slate-700">
+                        {formatTableDate(inf.fecha_hora_visita)}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4.5 font-bold text-slate-900">
+                        {empresa?.razon_social || "Empresa"} — {inf.lugar_visita || "Planta 1"}
+                      </td>
+                      <td className="px-6 py-4.5 text-slate-500 font-medium">
+                        <span className="line-clamp-1">
+                          {inf.actividad || "Relevamiento general de condiciones de higiene y seguridad."}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4.5">
+                        <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold ${
                           inf.estado_firma === "firmado"
                             ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
                             : "bg-amber-50 text-amber-700 border border-amber-100"
-                        }`}
-                      >
-                        {inf.estado_firma === "firmado"
-                          ? "Cerrado"
-                          : "Pendiente"}
-                      </span>
-                    </td>
+                        }`}>
+                          {inf.estado_firma === "firmado" ? "Cerrado" : "Pendiente"}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4.5 text-right text-sm font-bold">
+                        <Link href={`/informes/${inf.id}`} className="text-brand-primary hover:text-blue-600 transition-colors">
+                          Ver detalle
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
 
-                    {/* Acción */}
-                    <td className="whitespace-nowrap px-6 py-4.5 text-right text-sm font-bold">
-                      <Link
-                        href={`/informes/${inf.id}`}
-                        className="text-brand-primary hover:text-blue-600 transition-colors"
-                      >
-                        Ver detalle
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {/* Vista Mobile: Tarjetas */}
+          <div className="block md:hidden space-y-4">
+            {filteredInformes.map((inf) => {
+              const isFirmado = inf.estado_firma === "firmado";
+              return (
+                <div key={inf.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs space-y-4">
+                  <div className="flex justify-between items-start gap-4">
+                    <div>
+                      <span className="text-xs font-black text-slate-400 font-sans block">
+                        N° {String(inf.numero_informe).padStart(6, "0")}
+                      </span>
+                      <span className="text-sm font-black text-slate-900 font-sans block mt-1 leading-snug">
+                        {inf.actividad || "Relevamiento general"}
+                      </span>
+                      <span className="text-xs font-bold text-slate-500 font-sans block mt-1.5">
+                        {empresa?.razon_social} · {inf.lugar_visita || "Planta 1"}
+                      </span>
+                    </div>
+                    <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shrink-0 ${
+                      isFirmado
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                        : "bg-amber-50 text-amber-700 border border-amber-100"
+                    }`}>
+                      {isFirmado ? "Cerrado" : "Pendiente"}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-3.5 border-t border-slate-100">
+                    <span className="text-xs font-bold text-slate-400">
+                      {new Date(inf.fecha_hora_visita).toLocaleDateString("es-AR")}
+                    </span>
+                    <Link
+                      href={`/informes/${inf.id}`}
+                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl text-xs transition-all cursor-pointer"
+                    >
+                      Ver detalle
+                    </Link>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       ) : (

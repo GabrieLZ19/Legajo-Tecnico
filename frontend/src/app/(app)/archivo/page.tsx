@@ -386,7 +386,7 @@ function FileRow({ informe }: { informe: any }) {
   const fechaFormateada = new Date(informe.fecha_hora_visita).toLocaleDateString("es-AR");
 
   return (
-    <div className="flex items-center justify-between p-4 hover:bg-slate-50/40 transition-colors">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 gap-3 hover:bg-slate-50/40 transition-colors">
       <div className="flex items-center gap-4 min-w-0">
         <div className="h-10 w-10 bg-slate-50 border border-slate-150 rounded-xl flex items-center justify-center shrink-0">
           <FileText className="h-5 w-5 text-slate-555" />
@@ -395,8 +395,8 @@ function FileRow({ informe }: { informe: any }) {
           <span className="font-black text-slate-900 block text-sm">
             Informe N° {String(informe.numero_informe).padStart(6, "0")}
           </span>
-          <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 mt-0.5 select-none">
-            <span className="truncate">{informe.actividad || "Relevamiento técnico"}</span>
+          <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold text-slate-400 mt-0.5 select-none">
+            <span className="truncate max-w-[120px] sm:max-w-none">{informe.actividad || "Relevamiento técnico"}</span>
             <span>·</span>
             <div className="flex items-center gap-1 shrink-0 text-slate-450">
               <Building2 className="h-3 w-3" />
@@ -408,20 +408,20 @@ function FileRow({ informe }: { informe: any }) {
         </div>
       </div>
 
-      <div className="flex items-center gap-3 shrink-0">
+      <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto pt-2.5 sm:pt-0 border-t border-slate-100 sm:border-0 shrink-0">
         {/* Estado de Firma / Descarga */}
         {isFirmado && informe.url_pdf_generado ? (
           <a
             href={informe.url_pdf_generado}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100/80 text-emerald-700 border border-emerald-200 font-black px-3 py-1.5 rounded-xl text-xs transition-all shadow-2xs"
+            className="inline-flex items-center justify-center gap-1.5 bg-emerald-50 hover:bg-emerald-100/80 text-emerald-700 border border-emerald-200 font-black px-3 py-1.5 rounded-xl text-xs transition-all shadow-2xs w-full sm:w-auto"
           >
             <FileDown className="h-3.5 w-3.5" />
             Descargar
           </a>
         ) : (
-          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400 bg-slate-50 border border-slate-150 px-2.5 py-1.5 rounded-xl select-none">
+          <span className="inline-flex items-center justify-center gap-1 text-[10px] font-bold text-slate-400 bg-slate-50 border border-slate-150 px-2.5 py-1.5 rounded-xl select-none w-full sm:w-auto">
             <Clock className="h-3 w-3 text-slate-400" />
             Pendiente Firma
           </span>
@@ -429,7 +429,7 @@ function FileRow({ informe }: { informe: any }) {
 
         <Link
           href={`/informes/${informe.id}`}
-          className="px-3.5 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 font-black rounded-xl text-xs transition-all shadow-2xs"
+          className="px-3.5 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 font-black rounded-xl text-xs transition-all shadow-2xs text-center w-full sm:w-auto"
         >
           Detalle
         </Link>

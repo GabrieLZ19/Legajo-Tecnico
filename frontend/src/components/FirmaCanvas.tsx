@@ -43,34 +43,34 @@ export const FirmaCanvas: React.FC<FirmaCanvasProps> = ({ onSave, onCancel, titl
         />
       </div>
 
-      <div className="flex justify-between items-center gap-3">
-        {onCancel && (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="px-4 py-2 text-sm font-semibold text-slate-500 hover:text-slate-700 transition-colors cursor-pointer"
-          >
-            Cancelar
-          </button>
-        )}
-        <div className="flex gap-2 ml-auto">
+      <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
+        <div className="flex justify-between items-center gap-2 w-full sm:w-auto">
+          {onCancel && (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="px-4 py-2.5 text-xs font-bold text-slate-500 hover:text-slate-700 transition-colors cursor-pointer"
+            >
+              Cancelar
+            </button>
+          )}
           <button
             type="button"
             onClick={handleClear}
-            className="inline-flex items-center gap-1.5 px-3 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-bold transition-colors cursor-pointer"
           >
             <RotateCcw className="h-3.5 w-3.5" />
             Limpiar
           </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow-xs transition-all cursor-pointer"
-          >
-            <Check className="h-4 w-4" />
-            Confirmar Firma
-          </button>
         </div>
+        <button
+          type="button"
+          onClick={handleSave}
+          className="inline-flex items-center justify-center gap-1.5 px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer w-full sm:w-auto"
+        >
+          <Check className="h-4 w-4 stroke-3" />
+          Confirmar Firma
+        </button>
       </div>
     </div>
   );
