@@ -20,13 +20,38 @@ export const informeService = {
     }
   ) {
     // 1. Obtener o generar número de informe
-    // Usaremos un count temporal como fallback si no tenemos la función `next_numero_informe`
-    const { count } = await supabaseAdmin
-      .from('informes_visita')
-      .select('*', { count: 'exact', head: true })
-      .eq('empresa_id', data.empresa_id);
-    
-    const numero_informe = (count || 0) + 1;
+    let numero_informe: number | null = null;
+    try {
+      // Intentar usar la función almacenada next_numero_informe de la base de datos
+      const { data: rpcNum, error: rpcError } = await supabaseAdmin
+        .rpc('next_numero_informe', { p_empresa_id: data.empresa_id });
+      
+      if (!rpcError && typeof rpcNum === 'number') {
+        numero_informe = rpcNum;
+      } else if (rpcError) {
+        console.error('RPC error fetching next_numero_informe, falling back to query:', rpcError);
+      }
+    } catch (e) {
+      console.error('Error calling next_numero_informe RPC, falling back to query:', e);
+    }
+
+    // Fallback robusto si el RPC no está disponible o falla:
+    // Buscamos el valor máximo actual de numero_informe para esta empresa y sumamos 1
+    if (numero_informe === null) {
+      const { data: maxInforme, error: maxError } = await supabaseAdmin
+        .from('informes_visita')
+        .select('numero_informe')
+        .eq('empresa_id', data.empresa_id)
+        .order('numero_informe', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (maxError) {
+        console.error('Error fetching max numero_informe:', maxError);
+      }
+      
+      numero_informe = (maxInforme?.numero_informe || 0) + 1;
+    }
 
     // 2. Insertar cabecera
     const { data: informe, error: errInforme } = await supabaseAdmin

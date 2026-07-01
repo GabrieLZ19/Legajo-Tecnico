@@ -34,7 +34,7 @@ export default function NuevoInformePage() {
 
   // Campos del formulario principal (según mockup W04)
   const [lugar, setLugar] = useState("Planta 1");
-  const [actividad, setActividad] = useState("Relevamiento Técnico de Seguridad e Higiene");
+  const [actividad, setActividad] = useState("");
   const [fecha, setFecha] = useState("");
   const [hora, setHora] = useState("");
   const [observaciones, setObservaciones] = useState("");
