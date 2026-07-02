@@ -39,6 +39,19 @@ export const editarInformeSchema = z.object({
     contacto_visita: z.string().optional(),
     declaracion_legal: z.string().optional(),
     observaciones: z.string().optional(),
+    puntos_mejora: z.array(
+      z.object({
+        id: z.string().uuid().optional(),
+        detalle: z.string().min(1, 'El detalle del punto de mejora es requerido'),
+        evidencia_url: z.string().optional(),
+        acciones: z.array(
+          z.object({
+            id: z.string().uuid().optional(),
+            descripcion: z.string().min(1, 'La descripción de la acción es requerida'),
+          })
+        ).optional(),
+      })
+    ).optional(),
   }),
 });
 

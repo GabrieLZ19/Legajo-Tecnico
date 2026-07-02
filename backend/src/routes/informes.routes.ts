@@ -22,7 +22,7 @@ router.post('/:id/evidencia', upload.array('evidencia', 10), validate(subirEvide
 router.post('/:id/firma-preventor', validate(firmaSchema), informesController.firmarPreventor);
 router.post('/:id/firma-dueno', validate(firmaSchema), informesController.firmarDueno);
 
-// PDF stub
-router.get('/:id/pdf', (req, res) => { res.status(501).json({ error: 'Not implemented (descarga de PDF)' }); });
+// PDF
+router.get('/:id/pdf', informesController.descargarPdf);
 
 export default router;

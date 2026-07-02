@@ -3,6 +3,7 @@ import { informeService } from '../services/informe.service';
 import { firmaService } from '../services/firma.service';
 import { supabaseAdmin } from '../config/supabase';
 import { storageService } from '../services/storage.service';
+import { pdfService } from '../services/pdf.service';
 
 export const informesController = {
   async crearInforme(req: Request, res: Response, next: NextFunction) {
@@ -152,6 +153,16 @@ export const informesController = {
       }
 
       res.json({ success: true, evidencias_urls: urls });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async descargarPdf(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = req.params.id as string;
+      const url = await pdfService.generarPdf(id);
+      res.redirect(url);
     } catch (error) {
       next(error);
     }

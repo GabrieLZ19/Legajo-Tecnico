@@ -125,7 +125,7 @@ export const informeService = {
         await syncObservacionesToAcciones(informe.id, data.empresa_id, data.observaciones);
       }
 
-      return informe as InformeVisita;
+      return await informeService.obtenerPorId(informe.id);
 
     } catch (error: any) {
       // Compensación manual si algo falla en cascada
@@ -156,7 +156,7 @@ export const informeService = {
     return informe;
   },
 
-  async editarBorrador(id: string, updateData: Partial<InformeVisita>) {
+  async editarBorrador(id: string, updateData: Partial<InformeVisita> & { puntos_mejora?: any[] }) {
     // Validar estado
     const { data: current } = await supabaseAdmin
       .from('informes_visita')
@@ -168,21 +168,135 @@ export const informeService = {
       throw new Error('Solo se pueden editar informes en estado borrador');
     }
 
-    const { data, error } = await supabaseAdmin
+    // Separar puntos_mejora del resto de las columnas para evitar error en el update de la tabla informes_visita
+    const { puntos_mejora, ...restData } = updateData;
+
+    const { error } = await supabaseAdmin
       .from('informes_visita')
-      .update(updateData)
-      .eq('id', id)
-      .select()
-      .single();
+      .update(restData)
+      .eq('id', id);
 
     if (error) throw error;
 
-    // Sincronizar observaciones si se enviaron en la actualización
-    if ('observaciones' in updateData) {
+    // Sincronizar puntos de mejora estructurados si se enviaron
+    if (puntos_mejora) {
+      // 1. Obtener puntos de mejora existentes
+      const { data: pmExistentes, error: errPm } = await supabaseAdmin
+        .from('puntos_mejora')
+        .select('id, evidencia_url')
+        .eq('informe_id', id);
+        
+      if (errPm) throw errPm;
+      
+      const payloadIds = puntos_mejora.map((pm: any) => pm.id).filter(Boolean) as string[];
+      
+      // 2. Borrar puntos de mejora que ya no están en el payload
+      const aEliminar = pmExistentes?.filter(pm => !payloadIds.includes(pm.id)) || [];
+      if (aEliminar.length > 0) {
+        const idsEliminar = aEliminar.map(pm => pm.id);
+        // Borrar acciones correspondientes
+        await supabaseAdmin.from('acciones_mejora').delete().in('punto_mejora_id', idsEliminar);
+        // Borrar puntos
+        await supabaseAdmin.from('puntos_mejora').delete().in('id', idsEliminar);
+      }
+      
+      // 3. Procesar el payload (insertar nuevos o actualizar existentes)
+      for (let i = 0; i < puntos_mejora.length; i++) {
+        const pm = puntos_mejora[i];
+        
+        if (pm.id) {
+          // Actualizar existente
+          const { error: errUpdatePm } = await supabaseAdmin
+            .from('puntos_mejora')
+            .update({
+              numero_item: i + 1,
+              detalle: pm.detalle,
+              evidencia_url: pm.evidencia_url,
+              orden: i
+            })
+            .eq('id', pm.id);
+            
+          if (errUpdatePm) throw errUpdatePm;
+          
+          // Actualizar o insertar sus acciones
+          if (pm.acciones && pm.acciones.length > 0) {
+            const { data: accExistentes } = await supabaseAdmin
+              .from('acciones_mejora')
+              .select('id')
+              .eq('punto_mejora_id', pm.id);
+              
+            const payloadAccIds = pm.acciones.map((a: any) => a.id).filter(Boolean) as string[];
+            
+            // Borrar acciones no incluidas
+            const accEliminar = accExistentes?.filter(a => !payloadAccIds.includes(a.id)) || [];
+            if (accEliminar.length > 0) {
+              await supabaseAdmin.from('acciones_mejora').delete().in('id', accEliminar.map(a => a.id));
+            }
+            
+            // Procesar acciones
+            for (const acc of pm.acciones) {
+              if (acc.id) {
+                await supabaseAdmin
+                  .from('acciones_mejora')
+                  .update({
+                    numero_item: i + 1,
+                    descripcion: acc.descripcion
+                  })
+                  .eq('id', acc.id);
+              } else {
+                await supabaseAdmin
+                  .from('acciones_mejora')
+                  .insert({
+                    informe_id: id,
+                    empresa_id: current.empresa_id,
+                    punto_mejora_id: pm.id,
+                    numero_item: i + 1,
+                    descripcion: acc.descripcion,
+                    estado: 'pendiente'
+                  });
+              }
+            }
+          } else {
+            await supabaseAdmin.from('acciones_mejora').delete().eq('punto_mejora_id', pm.id);
+          }
+        } else {
+          // Crear nuevo punto
+          const { data: nuevoPunto, error: errNewPm } = await supabaseAdmin
+            .from('puntos_mejora')
+            .insert({
+              informe_id: id,
+              numero_item: i + 1,
+              detalle: pm.detalle,
+              orden: i,
+              evidencia_url: pm.evidencia_url
+            })
+            .select()
+            .single();
+            
+          if (errNewPm) throw errNewPm;
+          
+          // Crear acciones
+          if (pm.acciones && pm.acciones.length > 0) {
+            const accionesToInsert = pm.acciones.map((acc: any) => ({
+              informe_id: id,
+              empresa_id: current.empresa_id,
+              punto_mejora_id: nuevoPunto.id,
+              numero_item: i + 1,
+              descripcion: acc.descripcion,
+              estado: 'pendiente'
+            }));
+            await supabaseAdmin.from('acciones_mejora').insert(accionesToInsert);
+          }
+        }
+      }
+    }
+
+    // Sincronizar observaciones si se enviaron (para compatibilidad hacia atrás si la hay)
+    if ('observaciones' in updateData && !puntos_mejora) {
       await syncObservacionesToAcciones(id, current.empresa_id, updateData.observaciones as string | undefined);
     }
 
-    return data;
+    return await informeService.obtenerPorId(id);
   }
 };
 

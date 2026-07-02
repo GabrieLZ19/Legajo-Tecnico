@@ -10,13 +10,24 @@ export const firmaService = {
     firmaBase64: string,
     ipAddress?: string
   ) {
-    // 1. Subir la firma a Supabase Storage (aquí mockeamos la subida de base64 y guardamos un string temporal o real)
-    // En una implementación real se extrae el buffer del base64 y se sube a Storage
-    // const buffer = Buffer.from(firmaBase64.replace(/^data:image\/\w+;base64,/, ''), 'base64');
-    // await supabaseAdmin.storage.from('firmas_digitales').upload(...)
+    // 1. Subir la firma a Supabase Storage
+    const buffer = Buffer.from(firmaBase64.replace(/^data:image\/\w+;base64,/, ''), 'base64');
+    const filePath = `${informeId}_${tipo}_${Date.now()}.png`;
     
-    // Asumimos que firmaUrl es el resultado del storage
-    const firmaUrl = `firmas_digitales/${informeId}_${tipo}_${Date.now()}.png`;
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from('firmas_digitales')
+      .upload(filePath, buffer, {
+        contentType: 'image/png',
+        upsert: true
+      });
+      
+    if (uploadError) throw uploadError;
+    
+    const { data: publicUrlData } = supabaseAdmin.storage
+      .from('firmas_digitales')
+      .getPublicUrl(filePath);
+      
+    const firmaUrl = publicUrlData.publicUrl;
 
     // 2. Insertar/Actualizar en tabla firmas_informe (idempotente)
     const { error: errFirma } = await supabaseAdmin
