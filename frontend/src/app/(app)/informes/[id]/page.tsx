@@ -32,6 +32,30 @@ export default function InformeDetallePage() {
 
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+
+  const handleDescargarPDF = async () => {
+    setDownloadingPdf(true);
+    try {
+      const response = await api.get(`/informes/${id}/pdf`, {
+        responseType: "blob",
+      });
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `constancia_visita_${informe?.numero_informe || id}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+      showAlert("success", "Descarga exitosa", "El informe PDF se ha descargado correctamente.");
+    } catch (err) {
+      console.error(err);
+      showAlert("error", "Error al descargar", "No se pudo generar o descargar el PDF del informe.");
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -618,25 +642,14 @@ export default function InformeDetallePage() {
           </div>
 
           {/* Descargar Constancia (PDF) */}
-          {informe.url_pdf_generado ? (
-            <a
-              href={informe.url_pdf_generado}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full py-3.5 bg-slate-900 hover:bg-slate-850 text-white rounded-xl flex items-center justify-center gap-2 text-xs font-black transition-colors shadow-md shadow-slate-900/10 cursor-pointer"
-            >
-              <FileDown className="h-4 w-4" />
-              Descargar Constancia (PDF)
-            </a>
-          ) : (
-            <button
-              disabled
-              className="w-full py-3.5 bg-slate-100 text-slate-400 rounded-xl flex items-center justify-center gap-2 text-xs font-black cursor-not-allowed border border-slate-200"
-            >
-              <FileDown className="h-4 w-4" />
-              Descargar Constancia (PDF)
-            </button>
-          )}
+          <button
+            onClick={handleDescargarPDF}
+            disabled={downloadingPdf}
+            className="w-full py-3.5 bg-slate-900 hover:bg-slate-850 text-white rounded-xl flex items-center justify-center gap-2 text-xs font-black transition-colors shadow-md shadow-slate-900/10 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <FileDown className="h-4 w-4" />
+            {downloadingPdf ? "Generando PDF..." : "Descargar Constancia (PDF)"}
+          </button>
         </div>
       </div>
 
