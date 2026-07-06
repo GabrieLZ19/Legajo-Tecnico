@@ -11,7 +11,9 @@ interface AuthContextType {
   empresa: Empresa | null;
   loading: boolean;
   login: (cuit: string, username: string, pass: string) => Promise<void>;
+  loginAdmin: (email: string, pass: string) => Promise<void>;
   logout: () => void;
+  cambiarEmpresaContexto: (empresa: Empresa) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -60,6 +62,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const loginAdmin = async (email: string, pass: string) => {
+    setLoading(true);
+    try {
+      const response = await api.post('/auth/login-admin', { email, password: pass });
+      const { access_token, perfil } = response.data;
+
+      // Guardar en cookies (expira en 7 días)
+      Cookies.set('token', access_token, { expires: 7, secure: true });
+      Cookies.set('perfil', JSON.stringify(perfil), { expires: 7, secure: true });
+      
+      // Limpiar datos de empresa ya que los admins son globales
+      Cookies.remove('empresa');
+      setEmpresa(null);
+
+      setUser(perfil);
+      router.push('/admin/dashboard');
+    } catch (error: any) {
+      throw new Error(error.response?.data?.error || 'Error al iniciar sesión como administrador');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const logout = () => {
     Cookies.remove('token');
     Cookies.remove('perfil');
@@ -69,8 +94,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     router.push('/login');
   };
 
+  /**
+   * Cambia la empresa activa en el contexto del usuario.
+   * Persiste la selección en cookies y fuerza un re-render de los componentes
+   * que dependen de `empresa` para actualizar métricas e información.
+   */
+  const cambiarEmpresaContexto = (nuevaEmpresa: Empresa) => {
+    Cookies.set('empresa', JSON.stringify(nuevaEmpresa), { expires: 7, secure: true });
+    setEmpresa(nuevaEmpresa);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, empresa, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, empresa, loading, login, loginAdmin, logout, cambiarEmpresaContexto }}>
       {children}
     </AuthContext.Provider>
   );

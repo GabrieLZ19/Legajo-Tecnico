@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import Link from "next/link";
 import {
   ShieldCheck,
   Lock,
@@ -39,58 +40,16 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-white">
-      {/* Panel Izquierdo (Diseño Corporativo) */}
-      <div className="hidden md:flex md:w-1/2 bg-[#050b14] text-white p-16 flex-col justify-center relative overflow-hidden">
-        {/* Gráfico de curvas concéntricas de fondo (Layered Gradient Curves) */}
-        <div className="absolute top-[-200px] right-[-200px] w-[900px] h-[900px] rounded-full bg-[#0a152d]/30 pointer-events-none" />
-        <div className="absolute top-[-150px] right-[-150px] w-[750px] h-[750px] rounded-full bg-[#0d1e3d]/40 pointer-events-none" />
-        <div className="absolute top-[-100px] right-[-100px] w-[600px] h-[600px] rounded-full bg-[#11264e]/50 pointer-events-none" />
-        <div className="absolute top-[-50px] right-[-50px] w-[450px] h-[450px] rounded-full bg-[#163063]/30 pointer-events-none" />
-
-        <div className="relative z-10 space-y-12 max-w-lg">
-          {/* Logo e Identidad */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-4">
-              <div className="h-14 w-14 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-600/30">
-                <ShieldCheck className="h-8 w-8 text-white" />
-              </div>
-              <h1 className="text-4xl font-extrabold tracking-tight">
-                Legajo Técnico
-              </h1>
-            </div>
-            <p className="text-lg text-brand-text-light font-medium leading-relaxed">
-              Gestión digital de seguridad e higiene laboral.
-            </p>
-          </div>
-
-          {/* Características */}
-          <ul className="space-y-6">
-            <li className="flex items-center gap-4">
-              <div className="h-6 w-6 rounded-full bg-blue-950 border border-blue-800 flex items-center justify-center shrink-0">
-                <Check className="h-3.5 w-3.5 text-blue-500 stroke-3" />
-              </div>
-              <span className="text-sm font-medium text-slate-200">
-                Informes de visita con firma digital
-              </span>
-            </li>
-            <li className="flex items-center gap-4">
-              <div className="h-6 w-6 rounded-full bg-blue-950 border border-blue-800 flex items-center justify-center shrink-0">
-                <Check className="h-3.5 w-3.5 text-blue-500 stroke-3" />
-              </div>
-              <span className="text-sm font-medium text-slate-200">
-                Plan de acción y archivo histórico
-              </span>
-            </li>
-            <li className="flex items-center gap-4">
-              <div className="h-6 w-6 rounded-full bg-blue-950 border border-blue-800 flex items-center justify-center shrink-0">
-                <Check className="h-3.5 w-3.5 text-blue-500 stroke-3" />
-              </div>
-              <span className="text-sm font-medium text-slate-200">
-                Entrega y licitación de EPP
-              </span>
-            </li>
-          </ul>
-        </div>
+      {/* Panel Izquierdo (Collage + Branding) */}
+      <div className="hidden md:flex md:w-1/2 relative overflow-hidden">
+        {/* Imagen de fondo */}
+        <img
+          src="/login.jpg"
+          alt="Industria y construcción"
+          className="absolute inset-0 w-full h-full object-contain"
+        />
+        {/* Overlay oscuro */}
+        <div className="absolute inset-0 " />
       </div>
 
       {/* Panel Derecho (Formulario de Login) */}
@@ -213,13 +172,23 @@ export default function LoginPage() {
                 {loading ? "Ingresando..." : "Ingresar"}
               </button>
 
-              <div className="text-center">
-                <a
-                  href="#"
-                  className="text-xs font-bold text-brand-secondary hover:underline transition-all"
-                >
-                  ¿Olvidaste tu contraseña?
-                </a>
+              <div className="text-center space-y-2">
+                <div>
+                  <a
+                    href="#"
+                    className="text-xs font-bold text-brand-secondary hover:underline transition-all"
+                  >
+                    ¿Olvidaste tu contraseña?
+                  </a>
+                </div>
+                <div className="pt-2 border-t border-slate-100">
+                  <Link
+                    href="/login-admin"
+                    className="text-xs font-black text-brand-secondary hover:text-brand-primary transition-colors"
+                  >
+                    ¿Eres administrador? Iniciar sesión aquí
+                  </Link>
+                </div>
               </div>
             </div>
           </form>

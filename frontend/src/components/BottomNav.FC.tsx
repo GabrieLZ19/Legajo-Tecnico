@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, FileText, CheckSquare, Archive, Settings } from 'lucide-react';
+import { Home, FileText, CheckSquare, HardHat, GraduationCap } from 'lucide-react';
 
 export const BottomNav: React.FC = () => {
   const pathname = usePathname();
@@ -12,8 +12,8 @@ export const BottomNav: React.FC = () => {
     { name: 'Inicio', href: '/dashboard', icon: Home },
     { name: 'Informes', href: '/informes', icon: FileText },
     { name: 'Plan', href: '/plan-accion', icon: CheckSquare },
-    { name: 'Archivo', href: '/archivo', icon: Archive },
-    { name: 'Ajustes', href: '/configuracion', icon: Settings },
+    { name: 'EPP', href: '/epp', icon: HardHat },
+    { name: 'Capacit.', href: '/capacitaciones', icon: GraduationCap },
   ];
 
   return (

@@ -1,7 +1,12 @@
-export type RolUsuario = 'admin' | 'preventor' | 'dueno' | 'ente_regulador';
-export type EstadoFirmaInforme = 'borrador' | 'pendiente_preventor' | 'pendiente_dueno' | 'firmado' | 'archivado';
-export type EstadoAccion = 'pendiente' | 'cumplida' | 'atendida';
-export type TipoFirma = 'preventor' | 'dueno' | 'asistente_capacitacion';
+export type RolUsuario = "admin" | "preventor" | "dueno" | "ente_regulador";
+export type EstadoFirmaInforme =
+  | "borrador"
+  | "pendiente_preventor"
+  | "pendiente_dueno"
+  | "firmado"
+  | "archivado";
+export type EstadoAccion = "pendiente" | "cumplida" | "atendida";
+export type TipoFirma = "preventor" | "dueno" | "asistente_capacitacion";
 
 export interface Empresa {
   id: string;
@@ -14,6 +19,20 @@ export interface Empresa {
   created_at: string;
 }
 
+export interface AdminEmpresaOption extends Empresa {
+  preventor_empresas?: Array<{
+    preventor_id: string;
+    perfiles?: {
+      nombre_completo?: string | null;
+    } | null;
+  }>;
+  consultoras?: {
+    id?: string;
+    nombre?: string | null;
+    logo_url?: string | null;
+  } | null;
+}
+
 export interface Perfil {
   id: string;
   consultora_id?: string;
@@ -23,6 +42,16 @@ export interface Perfil {
   rol: RolUsuario;
   activo: boolean;
   created_at: string;
+  permisos_personalizados?: any;
+}
+
+export interface AdminUsuario extends Perfil {
+  preventor_empresas?: Array<{
+    empresa_id: string;
+    empresas?: {
+      razon_social?: string | null;
+    } | null;
+  }>;
 }
 
 export interface PeligroDetectado {
@@ -98,3 +127,72 @@ export interface MetricasDashboard {
   observaciones_abiertas: number;
   porcentaje_cumplimiento: number;
 }
+
+// ── Capacitaciones ──
+export type EstadoCapacitacion = 'borrador' | 'activa' | 'cerrada';
+
+export interface Capacitacion {
+  id: string;
+  empresa_id: string;
+  preventor_id: string;
+  titulo: string;
+  temario?: string;
+  fecha: string;
+  estado: EstadoCapacitacion;
+  created_at: string;
+  total_preguntas?: number;
+  total_asistencias?: number;
+  capacitacion_preguntas?: CapacitacionPregunta[];
+  capacitacion_asistencias?: CapacitacionAsistencia[];
+}
+
+export interface CapacitacionPregunta {
+  id: string;
+  capacitacion_id: string;
+  pregunta: string;
+  opciones: string[];
+  respuesta_correcta: number;
+  orden: number;
+}
+
+export interface CapacitacionAsistencia {
+  id: string;
+  capacitacion_id: string;
+  nombre_empleado: string;
+  dni_empleado: string;
+  sector?: string;
+  puntaje: number;
+  aprobado: boolean;
+  firma_url?: string;
+  created_at: string;
+}
+
+// ── EPP ──
+export type EstadoEntregaEpp = 'registrada' | 'firmada' | 'anulada';
+
+export interface EppTipo {
+  id: string;
+  nombre: string;
+  descripcion?: string;
+  activo: boolean;
+}
+
+export interface EppEntrega {
+  id: string;
+  empresa_id: string;
+  preventor_id: string;
+  epp_tipo_id: string;
+  nombre_empleado: string;
+  dni_empleado: string;
+  cantidad: number;
+  marca?: string;
+  modelo?: string;
+  certificacion?: string;
+  fecha_entrega: string;
+  firma_url?: string;
+  estado: EstadoEntregaEpp;
+  pdf_url?: string;
+  created_at: string;
+  epp_tipos?: EppTipo | null;
+}
+

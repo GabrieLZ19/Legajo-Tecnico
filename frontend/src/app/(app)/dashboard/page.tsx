@@ -14,7 +14,6 @@ import {
   ShieldCheck,
   GraduationCap,
   Award,
-  Lock,
   HardHat,
   ClipboardList,
 } from "lucide-react";
@@ -185,7 +184,10 @@ export default function DashboardPage() {
           </Link>
 
           {/* Entrega de EPP */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs flex flex-col justify-between h-36">
+          <Link
+            href="/epp"
+            className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between h-36 cursor-pointer"
+          >
             <div className="h-10 w-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
               <HardHat className="h-6 w-6" />
             </div>
@@ -197,7 +199,7 @@ export default function DashboardPage() {
                 Habilitado
               </span>
             </div>
-          </div>
+          </Link>
 
           {/* Plan de Acción */}
           <Link
@@ -218,22 +220,22 @@ export default function DashboardPage() {
           </Link>
 
           {/* Capacitaciones */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs flex flex-col justify-between h-36 relative overflow-hidden">
-            <div className="absolute top-4 right-4 text-slate-300">
-              <Lock className="h-4 w-4" />
-            </div>
-            <div className="h-10 w-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400">
+          <Link
+            href="/capacitaciones"
+            className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between h-36 cursor-pointer"
+          >
+            <div className="h-10 w-10 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600">
               <GraduationCap className="h-6 w-6" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-400">
+              <h3 className="text-sm font-bold text-slate-800">
                 Capacitaciones
               </h3>
-              <span className="inline-flex mt-2 text-[10px] font-bold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-amber-100">
-                Fase 2
+              <span className="inline-flex mt-2 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-emerald-100">
+                Habilitado
               </span>
             </div>
-          </div>
+          </Link>
         </div>
       </div>
 
