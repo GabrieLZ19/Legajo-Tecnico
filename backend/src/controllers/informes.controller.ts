@@ -22,11 +22,36 @@ export const informesController = {
   async listarInformes(req: Request, res: Response, next: NextFunction) {
     try {
       const { empresaId } = req.query;
-      if (!empresaId) {
-        return res.status(400).json({ error: 'empresaId es requerido en query' });
+      const user = req.user;
+
+      if (empresaId) {
+        const informes = await informeService.listarPorEmpresa(empresaId as string);
+        return res.json(informes);
       }
-      const informes = await informeService.listarPorEmpresa(empresaId as string);
-      res.json(informes);
+
+      // Si no se provee empresaId, verificar rol del usuario
+      if (user?.rol === 'admin') {
+        const consultoraId = user.consultora_id || 'd3b07384-d113-4ec2-a9b6-419dc4040835';
+        const { data: empresas } = await supabaseAdmin
+          .from('empresas')
+          .select('id')
+          .eq('consultora_id', consultoraId);
+        
+        const empresaIds = empresas?.map(e => e.id) || [];
+        if (empresaIds.length === 0) {
+          return res.json([]);
+        }
+        const informes = await informeService.listarPorEmpresas(empresaIds);
+        return res.json(informes);
+      }
+
+      // Si es otro rol y tiene empresa_id asignado
+      if (user?.empresa_id) {
+        const informes = await informeService.listarPorEmpresa(user.empresa_id);
+        return res.json(informes);
+      }
+
+      return res.status(400).json({ error: 'empresaId es requerido en query' });
     } catch (error) {
       next(error);
     }

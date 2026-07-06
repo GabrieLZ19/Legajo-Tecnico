@@ -64,5 +64,33 @@ export const plantillasController = {
     } catch (error) {
       next(error);
     }
+  },
+
+  async actualizarPlantilla(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = req.params.id as string;
+      const { nombre, contenido } = req.body;
+      const consultoraId = req.user!.consultora_id;
+
+      const plantilla = await plantillasService.obtenerPorId(id);
+      if (!plantilla) {
+        res.status(404).json({ error: 'Plantilla no encontrada' });
+        return;
+      }
+
+      if (plantilla.consultora_id !== consultoraId) {
+        res.status(403).json({ error: 'No tienes permiso para editar esta plantilla' });
+        return;
+      }
+
+      const actualizada = await plantillasService.actualizarPlantilla(id, {
+        nombre: nombre?.trim(),
+        contenido: contenido?.trim(),
+      });
+
+      res.json(actualizada);
+    } catch (error) {
+      next(error);
+    }
   }
 };

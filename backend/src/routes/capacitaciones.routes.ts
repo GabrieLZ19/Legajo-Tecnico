@@ -1,8 +1,19 @@
 import { Router } from 'express';
+import { requireAuth, requireRole } from '../middlewares/auth';
+import { capacitacionesController } from '../controllers/capacitaciones.controller';
+
 const router = Router();
 
-router.post('/', (req, res) => { res.status(501).json({ error: 'Not implemented' }); });
-router.get('/:id/qr', (req, res) => { res.status(501).json({ error: 'Not implemented' }); });
-router.post('/:id/asistencia', (req, res) => { res.status(501).json({ error: 'Not implemented' }); });
+// Rutas protegidas (requieren autenticación)
+router.get('/', requireAuth, capacitacionesController.listar);
+router.post('/', requireAuth, requireRole('preventor', 'admin'), capacitacionesController.crear);
+router.get('/:id', requireAuth, capacitacionesController.detalle);
+router.patch('/:id', requireAuth, requireRole('preventor', 'admin'), capacitacionesController.actualizarEstado);
+router.get('/:id/qr', requireAuth, capacitacionesController.generarQR);
+router.put('/:id', requireAuth, requireRole('preventor', 'admin'), capacitacionesController.actualizar);
+router.delete('/:id', requireAuth, requireRole('preventor', 'admin'), capacitacionesController.eliminar);
+
+// Ruta PÚBLICA: evaluación del empleado (sin autenticación - accedida desde el QR)
+router.post('/:id/evaluar', capacitacionesController.evaluar);
 
 export default router;

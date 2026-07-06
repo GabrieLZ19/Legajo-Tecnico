@@ -9,6 +9,7 @@ const router = Router();
 router.post('/login', validate(loginSchema), authController.login);
 router.post('/login-admin', validate(loginAdminSchema), authController.loginAdmin);
 router.get('/me', requireAuth, authController.me);
+router.get('/mis-empresas', requireAuth, authController.misEmpresas);
 // router.post('/logout', requireAuth, authController.logout); // Implementar luego
 
 export default router;

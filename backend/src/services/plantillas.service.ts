@@ -46,5 +46,20 @@ export const plantillasService = {
       .eq('id', id);
 
     if (error) throw error;
+  },
+
+  async actualizarPlantilla(id: string, data: {
+    nombre?: string;
+    contenido?: string;
+  }) {
+    const { data: updated, error } = await supabaseAdmin
+      .from('plantillas_declaracion')
+      .update(data)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return updated;
   }
 };

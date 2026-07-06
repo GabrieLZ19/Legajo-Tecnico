@@ -145,6 +145,17 @@ export const informeService = {
     return data;
   },
 
+  async listarPorEmpresas(empresaIds: string[]) {
+    const { data, error } = await supabaseAdmin
+      .from('informes_visita')
+      .select('*, empresas(razon_social)')
+      .in('empresa_id', empresaIds)
+      .order('fecha_hora_visita', { ascending: false });
+
+    if (error) throw error;
+    return data;
+  },
+
   async obtenerPorId(id: string) {
     const { data: informe, error: errInf } = await supabaseAdmin
       .from('informes_visita')

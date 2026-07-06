@@ -9,6 +9,7 @@ router.use(requireAuth);
 
 router.get('/', plantillasController.listarPlantillas);
 router.post('/', plantillasController.crearPlantilla);
+router.put('/:id', plantillasController.actualizarPlantilla);
 router.delete('/:id', plantillasController.eliminarPlantilla);
 
 export default router;

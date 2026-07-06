@@ -1,113 +1,127 @@
-import { supabaseAdmin } from './config/supabase';
+import { supabaseAdmin } from "./config/supabase";
 
 async function seed() {
-  console.log('🌱 Iniciando seeding...');
+  console.log("🌱 Iniciando seeding...");
 
   try {
-    // 1. Crear Consultora
-    const { data: consultora, error: errCons } = await supabaseAdmin
-      .from('consultoras')
-      .insert({
-        nombre: 'Consultora Alpha S.H.',
-        logo_url: null,
-        config: {}
-      })
-      .select()
-      .single();
+    // 1. Obtener o Crear Consultora
+    let { data: consultora } = await supabaseAdmin
+      .from("consultoras")
+      .select("*")
+      .eq("nombre", "Consultora Alpha S.H.")
+      .maybeSingle();
 
-    if (errCons) throw new Error(`Error al crear consultora: ${errCons.message}`);
-    console.log(`✅ Consultora creada: ${consultora.nombre} (${consultora.id})`);
+    if (!consultora) {
+      const { data, error: errCons } = await supabaseAdmin
+        .from("consultoras")
+        .insert({
+          nombre: "Consultora Alpha S.H.",
+          logo_url: null,
+          config: {},
+        })
+        .select()
+        .single();
 
-    // 2. Crear Empresa
-    const cuitTest = '30123456789';
-    const { data: empresa, error: errEmp } = await supabaseAdmin
-      .from('empresas')
-      .insert({
-        consultora_id: consultora.id,
-        cuit: cuitTest,
-        razon_social: 'Empresa Test S.A.',
-        actividad: 'Metalúrgica',
-        logo_url: null,
-        porcentaje_cumplimiento: 0.00
-      })
-      .select()
-      .single();
+      if (errCons)
+        throw new Error(`Error al crear consultora: ${errCons.message}`);
+      consultora = data;
+      console.log(
+        `✅ Consultora creada: ${consultora.nombre} (${consultora.id})`,
+      );
+    } else {
+      console.log(
+        `ℹ️ Consultora ya existe: ${consultora.nombre} (${consultora.id})`,
+      );
+    }
 
-    if (errEmp) throw new Error(`Error al crear empresa: ${errEmp.message}`);
-    console.log(`✅ Empresa creada: ${empresa.razon_social} (CUIT: ${empresa.cuit})`);
+    // 2. Crear Admin en Auth si no existe (No toca preventores ni dueños existentes)
+    const adminEmail = "admin@legajotecnico.com";
+    const adminUsername = "admin";
 
-    // 3. Crear Preventor en Auth (se disparará el trigger a perfiles)
-    const preventorEmail = `preventor1@${cuitTest}.legajo.local`;
-    const preventorUsername = 'preventor1';
-    const passwordComun = 'password123';
-
-    // Eliminar si ya existe en auth
     const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
-    const prevUser = existingUsers?.users.find(u => u.email === preventorEmail);
-    if (prevUser) {
-      await supabaseAdmin.auth.admin.deleteUser(prevUser.id);
-      console.log('🗑️ Preventor antiguo eliminado para re-seed');
+    const adminUser = existingUsers?.users.find((u) => u.email === adminEmail);
+
+    if (!adminUser) {
+      const { data: authAdmin, error: errAuthAdmin } =
+        await supabaseAdmin.auth.admin.createUser({
+          email: adminEmail,
+          password: "admin123",
+          email_confirm: true,
+          user_metadata: {
+            rol: "admin",
+            nombre_completo: "Administrador General",
+            username: adminUsername,
+            consultora_id: consultora.id,
+          },
+        });
+
+      if (errAuthAdmin) throw errAuthAdmin;
+      console.log(`✅ Admin creado en Auth: ${adminEmail}`);
+    } else {
+      console.log(
+        `ℹ️ El usuario administrador (${adminEmail}) ya existe en el sistema.`,
+      );
     }
 
-    const { data: authPreventor, error: errAuthPrev } = await supabaseAdmin.auth.admin.createUser({
-      email: preventorEmail,
-      password: passwordComun,
-      email_confirm: true,
-      user_metadata: {
-        rol: 'preventor',
-        nombre_completo: 'Juan Preventor',
-        username: preventorUsername,
-        consultora_id: consultora.id
-      }
-    });
+    // 3. Crear empresa de prueba para demos si no existe
+    const demoCuit = "30123456789";
+    const { data: existingEmpresa } = await supabaseAdmin
+      .from("empresas")
+      .select("*")
+      .eq("cuit", demoCuit)
+      .maybeSingle();
 
-    if (errAuthPrev || !authPreventor.user) {
-      throw new Error(`Error al crear preventor auth: ${errAuthPrev?.message}`);
+    const demoEmpresaPayload = {
+      consultora_id: consultora.id,
+      cuit: demoCuit,
+      razon_social: "MOTORTECH S.A",
+      actividad: "Industria y construcción",
+      domicilio: "Av. San Martín 450",
+      localidad: "Mendoza, Mendoza",
+      codigo_postal: "M5500",
+      telefono: "+54 261 555-0101",
+      contacto: "Contacto Comercial",
+      porcentaje_cumplimiento: 100,
+    };
+
+    if (!existingEmpresa) {
+      const { data: demoEmpresa, error: errEmpresa } = await supabaseAdmin
+        .from("empresas")
+        .insert(demoEmpresaPayload)
+        .select()
+        .single();
+
+      if (errEmpresa)
+        throw new Error(`Error al crear empresa demo: ${errEmpresa.message}`);
+      console.log(
+        `✅ Empresa demo creada: ${demoEmpresa.razon_social} (${demoEmpresa.cuit})`,
+      );
+    } else if (
+      existingEmpresa.razon_social !== demoEmpresaPayload.razon_social
+    ) {
+      const { data: updatedEmpresa, error: errUpdate } = await supabaseAdmin
+        .from("empresas")
+        .update(demoEmpresaPayload)
+        .eq("id", existingEmpresa.id)
+        .select()
+        .single();
+
+      if (errUpdate)
+        throw new Error(
+          `Error al actualizar empresa demo: ${errUpdate.message}`,
+        );
+      console.log(
+        `✅ Empresa demo actualizada: ${updatedEmpresa.razon_social} (${updatedEmpresa.cuit})`,
+      );
+    } else {
+      console.log(
+        `ℹ️ La empresa demo ya existe: ${existingEmpresa.razon_social} (${existingEmpresa.cuit})`,
+      );
     }
-    console.log(`✅ Preventor creado en Auth: ${preventorEmail}`);
 
-    // 4. Crear Dueño en Auth
-    const duenoEmail = `dueno1@${cuitTest}.legajo.local`;
-    const duenoUsername = 'dueno1';
-
-    const duenUser = existingUsers?.users.find(u => u.email === duenoEmail);
-    if (duenUser) {
-      await supabaseAdmin.auth.admin.deleteUser(duenUser.id);
-      console.log('🗑️ Dueño antiguo eliminado para re-seed');
-    }
-
-    const { data: authDueno, error: errAuthDuen } = await supabaseAdmin.auth.admin.createUser({
-      email: duenoEmail,
-      password: passwordComun,
-      email_confirm: true,
-      user_metadata: {
-        rol: 'dueno',
-        nombre_completo: 'Carlos Dueño',
-        username: duenoUsername,
-        consultora_id: consultora.id,
-        empresa_id: empresa.id
-      }
-    });
-
-    if (errAuthDuen || !authDueno.user) {
-      throw new Error(`Error al crear dueño auth: ${errAuthDuen?.message}`);
-    }
-    console.log(`✅ Dueño creado en Auth: ${duenoEmail}`);
-
-    // 5. Asociar Preventor a Empresa (preventor_empresas)
-    const { error: errAsoc } = await supabaseAdmin
-      .from('preventor_empresas')
-      .insert({
-        preventor_id: authPreventor.user.id,
-        empresa_id: empresa.id
-      });
-
-    if (errAsoc) throw new Error(`Error al asociar preventor a empresa: ${errAsoc.message}`);
-    console.log('✅ Preventor asociado a la empresa en preventor_empresas');
-
-    console.log('🎉 Seeding completado con éxito!');
+    console.log("🎉 Seeding completado con éxito!");
   } catch (error: any) {
-    console.error('❌ Error en el seeding:', error.message);
+    console.error("❌ Error en el seeding:", error.message);
   }
 }
 
