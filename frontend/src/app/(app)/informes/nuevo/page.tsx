@@ -393,36 +393,39 @@ export default function NuevoInformePage() {
       <form onSubmit={handleSave} className="max-w-4xl mx-auto space-y-6">
         {/* Panel Principal */}
         <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-6 shadow-2xs">
-          {/* Empresa / Lugar + Actividad */}
+          {/* Empresa + Lugar */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Empresa */}
             <div className="space-y-2">
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                Empresa / Lugar
+                Empresa
               </label>
-              <div className="flex items-center gap-2 pl-3.5 pr-3 py-3 border border-slate-200 rounded-xl bg-brand-input-bg text-slate-755 focus-within:ring-2 focus-within:ring-blue-600/25 focus-within:border-blue-600 transition-all select-none">
-                <Building2 className="h-5 w-5 text-blue-600 shrink-0" />
-
-                {/* Razón Social (Fija, no editable) */}
-                <span className="text-sm font-bold text-slate-700 shrink-0">
+              <div className="flex items-center gap-2 pl-3.5 pr-3 py-3 border border-slate-200 rounded-xl bg-slate-50 text-slate-500 transition-all select-none">
+                <Building2 className="h-5 w-5 text-slate-400 shrink-0" />
+                <span className="text-sm font-bold text-slate-600 shrink-0">
                   {empresaData ? empresaData.razon_social : "Cargando..."}
                 </span>
-
-                <span className="text-slate-400 font-bold select-none shrink-0">
-                  —
-                </span>
-
-                {/* Input de Lugar / Área (Editable) */}
-                <input
-                  type="text"
-                  required
-                  placeholder="Planta 1"
-                  value={lugar}
-                  onChange={(e) => setLugar(e.target.value)}
-                  className="block flex-1 bg-transparent border-0 p-0 text-slate-700 placeholder-slate-400 focus:ring-0 focus:outline-hidden text-sm font-bold min-w-0"
-                />
               </div>
             </div>
 
+            {/* Lugar */}
+            <div className="space-y-2">
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                Lugar
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="Planta 1"
+                value={lugar}
+                onChange={(e) => setLugar(e.target.value)}
+                className="block w-full border border-slate-200 rounded-xl px-3.5 py-3 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-600/25 focus:border-blue-600 transition-all font-bold text-slate-700 bg-brand-input-bg"
+              />
+            </div>
+          </div>
+
+          {/* Actividad + Fecha + Hora */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {/* Actividad / Tipo de Visita */}
             <div className="space-y-2">
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
@@ -431,15 +434,13 @@ export default function NuevoInformePage() {
               <input
                 type="text"
                 required
+                placeholder="Ej. Relevamiento general"
                 value={actividad}
                 onChange={(e) => setActividad(e.target.value)}
                 className="block w-full border border-slate-200 rounded-xl px-3.5 py-3 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-600/25 focus:border-blue-600 transition-all font-bold text-slate-700 bg-brand-input-bg"
               />
             </div>
-          </div>
 
-          {/* Fecha y Hora */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Fecha */}
             <div className="space-y-2">
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
