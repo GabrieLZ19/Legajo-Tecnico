@@ -67,6 +67,7 @@ export interface AccionMejora {
   numero_item?: number;
   descripcion: string;
   estado: EstadoAccion;
+  responsable?: string;
   fecha_cumplimiento?: string;
   created_at: string;
 }

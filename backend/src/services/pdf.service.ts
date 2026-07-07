@@ -234,7 +234,11 @@ export const pdfService = {
             doc.fillColor(darkText).font('Helvetica').fontSize(8.5);
             
             if (accionesAsociadas.length > 0) {
-              doc.text(accionesAsociadas[0].descripcion, textX, cardY + 85, { width: textWidth, height: 22, ellipsis: true });
+              const textAcc = accionesAsociadas.map((a: any) => {
+                const resp = a.responsable ? ` (Resp: ${a.responsable})` : '';
+                return `• ${a.descripcion}${resp}`;
+              }).join('  |  ');
+              doc.text(textAcc, textX, cardY + 85, { width: textWidth, height: 22, ellipsis: true });
             } else {
               doc.fillColor('#9CA3AF').font('Helvetica-Oblique').text('Sin acción de mejora asociada', textX, cardY + 85);
             }
@@ -267,8 +271,9 @@ export const pdfService = {
         
         doc.fillColor(darkText).font('Helvetica-Bold').fontSize(8);
         doc.text('ITEM', 50, tableY + 5, { width: 40, align: 'center' });
-        doc.text('ACCIÓN DE MEJORA SUGERIDA', 95, tableY + 5, { width: 325 });
-        doc.text('ESTADO', 430, tableY + 5, { width: 115, align: 'center' });
+        doc.text('ACCIÓN DE MEJORA SUGERIDA', 95, tableY + 5, { width: 245 });
+        doc.text('RESPONSABLE', 345, tableY + 5, { width: 95, align: 'center' });
+        doc.text('ESTADO', 445, tableY + 5, { width: 100, align: 'center' });
         
         doc.y = tableY + 18;
         
@@ -281,8 +286,9 @@ export const pdfService = {
               doc.rect(50, newTableY, 495, 18).stroke();
               doc.fillColor(darkText).font('Helvetica-Bold').fontSize(8);
               doc.text('ITEM', 50, newTableY + 5, { width: 40, align: 'center' });
-              doc.text('ACCIÓN DE MEJORA SUGERIDA', 95, newTableY + 5, { width: 325 });
-              doc.text('ESTADO', 430, newTableY + 5, { width: 115, align: 'center' });
+              doc.text('ACCIÓN DE MEJORA SUGERIDA', 95, newTableY + 5, { width: 245 });
+              doc.text('RESPONSABLE', 345, newTableY + 5, { width: 95, align: 'center' });
+              doc.text('ESTADO', 445, newTableY + 5, { width: 100, align: 'center' });
               doc.y = newTableY + 18;
             }
             
@@ -298,14 +304,18 @@ export const pdfService = {
             doc.strokeColor('#E5E7EB').rect(50, rowY, 495, rowHeight).stroke();
             // Dibujar divisorias de columnas
             doc.moveTo(90, rowY).lineTo(90, rowY + rowHeight).stroke();
-            doc.moveTo(430, rowY).lineTo(430, rowY + rowHeight).stroke();
+            doc.moveTo(340, rowY).lineTo(340, rowY + rowHeight).stroke();
+            doc.moveTo(440, rowY).lineTo(440, rowY + rowHeight).stroke();
             
             // Textos
             doc.fillColor(darkText).font('Helvetica-Bold').fontSize(8);
             doc.text(`${acc.numero_item || (index + 1)}.0`, 50, rowY + 7, { width: 40, align: 'center' });
             
             doc.font('Helvetica').fontSize(8);
-            doc.text(acc.descripcion, 98, rowY + 7, { width: 320, height: 14, ellipsis: true });
+            doc.text(acc.descripcion, 98, rowY + 7, { width: 238, height: 14, ellipsis: true });
+            
+            doc.font('Helvetica').fontSize(8);
+            doc.text(acc.responsable || '-', 342, rowY + 7, { width: 95, align: 'center', height: 14, ellipsis: true });
             
             // Dibujar Píldora/Badge de Estado
             const isCumplida = acc.estado?.toLowerCase() === 'cumplida';
@@ -315,7 +325,7 @@ export const pdfService = {
             
             const badgeWidth = 65;
             const badgeHeight = 12;
-            const badgeX = 430 + (115 - badgeWidth) / 2;
+            const badgeX = 440 + (100 - badgeWidth) / 2;
             const badgeY = rowY + (rowHeight - badgeHeight) / 2;
             
             doc.save();

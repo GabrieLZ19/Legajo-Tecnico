@@ -21,6 +21,7 @@ export const crearInformeSchema = z.object({
         acciones: z.array(
           z.object({
             descripcion: z.string().min(1, 'La descripción de la acción es requerida'),
+            responsable: z.string().optional(),
           })
         ).optional(),
       })
@@ -48,6 +49,7 @@ export const editarInformeSchema = z.object({
           z.object({
             id: z.string().uuid().optional(),
             descripcion: z.string().min(1, 'La descripción de la acción es requerida'),
+            responsable: z.string().optional(),
           })
         ).optional(),
       })
