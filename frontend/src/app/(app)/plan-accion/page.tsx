@@ -227,7 +227,14 @@ export default function PlanAccionPage() {
 
                         {/* Acción de Mejora */}
                         <td className="px-6 py-4 text-xs font-black text-slate-900 font-sans max-w-md">
-                          {acc.descripcion}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span>{acc.descripcion}</span>
+                            {acc.responsable && (
+                              <span className="text-[9px] px-1.5 py-0.5 bg-blue-50 text-blue-655 font-bold rounded-md uppercase tracking-wider">
+                                Resp: {acc.responsable}
+                              </span>
+                            )}
+                          </div>
                         </td>
 
                         {/* Empresa · Sector · Fecha */}
@@ -284,8 +291,13 @@ export default function PlanAccionPage() {
                     <span className="text-[10px] font-bold text-slate-400">
                       ÍTEM {index + 1}
                     </span>
-                    <h3 className="text-sm font-black text-slate-900 font-sans leading-snug">
-                      {acc.descripcion}
+                    <h3 className="text-sm font-black text-slate-900 font-sans leading-snug flex items-center gap-2 flex-wrap">
+                      <span>{acc.descripcion}</span>
+                      {acc.responsable && (
+                        <span className="text-[9px] px-1.5 py-0.5 bg-blue-50 text-blue-655 font-bold rounded-md uppercase tracking-wider">
+                          Resp: {acc.responsable}
+                        </span>
+                      )}
                     </h3>
                     <p className="text-xs font-bold text-slate-450 font-sans pt-1">
                       {empresa?.razon_social} · {sector} · {fechaVisita}

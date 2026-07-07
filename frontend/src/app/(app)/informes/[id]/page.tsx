@@ -409,8 +409,13 @@ export default function InformeDetallePage() {
                               key={acc.id}
                               className="flex items-center justify-between text-xs border-t border-slate-50 pt-2 first:border-0 first:pt-0"
                             >
-                              <span className="text-slate-600 font-semibold">
-                                {acc.descripcion}
+                              <span className="text-slate-600 font-semibold flex items-center gap-2 flex-wrap">
+                                <span>{acc.descripcion}</span>
+                                {acc.responsable && (
+                                  <span className="text-[9px] px-1.5 py-0.5 bg-blue-50 text-blue-650 font-bold rounded-md uppercase tracking-wider">
+                                    Resp: {acc.responsable}
+                                  </span>
+                                )}
                               </span>
                               <select
                                 value={acc.estado}

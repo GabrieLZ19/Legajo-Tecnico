@@ -44,11 +44,17 @@ export default function NuevoInformePage() {
   const [fecha, setFecha] = useState("");
   const [hora, setHora] = useState("");
 
+  interface AccionLocal {
+    id?: string;
+    descripcion: string;
+    responsable: string;
+  }
+
   // Estructura de Observaciones locales
   interface ObservacionLocal {
     id_temp: string;
     detalle: string;
-    accion: string;
+    acciones: AccionLocal[];
     imagenFile?: File;
     previewUrl?: string;
   }
@@ -60,7 +66,7 @@ export default function NuevoInformePage() {
   const [showObsModal, setShowObsModal] = useState(false);
   const [editingObs, setEditingObs] = useState<ObservacionLocal | null>(null);
   const [obsDetalle, setObsDetalle] = useState("");
-  const [obsAccion, setObsAccion] = useState("");
+  const [obsAcciones, setObsAcciones] = useState<AccionLocal[]>([{ descripcion: "", responsable: "" }]);
   const [obsImagenFile, setObsImagenFile] = useState<File | null>(null);
   const [obsPreviewUrl, setObsPreviewUrl] = useState<string | null>(null);
 
@@ -226,7 +232,7 @@ export default function NuevoInformePage() {
   const openAddModal = () => {
     setEditingObs(null);
     setObsDetalle("");
-    setObsAccion("");
+    setObsAcciones([{ descripcion: "", responsable: "" }]);
     setObsImagenFile(null);
     setObsPreviewUrl(null);
     setShowObsModal(true);
@@ -235,7 +241,11 @@ export default function NuevoInformePage() {
   const openEditModal = (obs: ObservacionLocal) => {
     setEditingObs(obs);
     setObsDetalle(obs.detalle);
-    setObsAccion(obs.accion);
+    setObsAcciones(
+      obs.acciones && obs.acciones.length > 0
+        ? obs.acciones.map((a) => ({ ...a }))
+        : [{ descripcion: "", responsable: "" }]
+    );
     setObsImagenFile(obs.imagenFile || null);
     setObsPreviewUrl(obs.previewUrl || null);
     setShowObsModal(true);
@@ -254,6 +264,9 @@ export default function NuevoInformePage() {
   const handleSaveObservacion = () => {
     if (!obsDetalle.trim()) return;
 
+    // Filtrar acciones vacías
+    const filteredAcciones = obsAcciones.filter((a) => a.descripcion.trim().length > 0);
+
     if (editingObs) {
       setObservacionesCargadas((prev) =>
         prev.map((item) =>
@@ -261,7 +274,7 @@ export default function NuevoInformePage() {
             ? {
                 ...item,
                 detalle: obsDetalle,
-                accion: obsAccion,
+                acciones: filteredAcciones,
                 imagenFile: obsImagenFile || undefined,
                 previewUrl: obsPreviewUrl || undefined,
               }
@@ -272,7 +285,7 @@ export default function NuevoInformePage() {
       const newObs: ObservacionLocal = {
         id_temp: Math.random().toString(36).substring(7),
         detalle: obsDetalle,
-        accion: obsAccion,
+        acciones: filteredAcciones,
         imagenFile: obsImagenFile || undefined,
         previewUrl: obsPreviewUrl || undefined,
       };
@@ -282,7 +295,7 @@ export default function NuevoInformePage() {
     setShowObsModal(false);
     setEditingObs(null);
     setObsDetalle("");
-    setObsAccion("");
+    setObsAcciones([{ descripcion: "", responsable: "" }]);
     setObsImagenFile(null);
     setObsPreviewUrl(null);
   };
@@ -316,7 +329,10 @@ export default function NuevoInformePage() {
         peligros: [],
         puntos_mejora: observacionesCargadas.map((obs) => ({
           detalle: obs.detalle,
-          acciones: obs.accion ? [{ descripcion: obs.accion }] : [],
+          acciones: obs.acciones.map((a) => ({
+            descripcion: a.descripcion,
+            responsable: a.responsable || undefined,
+          })),
         })),
       };
 
@@ -730,13 +746,24 @@ export default function NuevoInformePage() {
                       <h4 className="text-xs font-bold text-slate-850 mt-1 leading-normal wrap-break-word">
                         {obs.detalle}
                       </h4>
-                      {obs.accion && (
-                        <p className="text-xs text-slate-500 font-semibold mt-1 bg-white border border-slate-100 rounded-lg p-2 leading-relaxed">
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide mr-1.5">
-                            Acción de mejora:
-                          </span>{" "}
-                          {obs.accion}
-                        </p>
+                      {obs.acciones && obs.acciones.length > 0 && (
+                        <div className="space-y-1.5 mt-1.5">
+                          {obs.acciones.map((acc, accIdx) => (
+                            <div key={accIdx} className="text-xs text-slate-500 font-semibold bg-white border border-slate-100 rounded-lg p-2 leading-relaxed flex items-center justify-between">
+                              <span>
+                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide mr-1.5">
+                                  Acción {obs.acciones.length > 1 ? `#${accIdx + 1}` : ""}:
+                                </span>{" "}
+                                {acc.descripcion}
+                              </span>
+                              {acc.responsable && (
+                                <span className="text-[9px] px-2 py-0.5 bg-blue-50 text-blue-650 font-bold rounded-md">
+                                  Resp: {acc.responsable}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -849,18 +876,69 @@ export default function NuevoInformePage() {
                 />
               </div>
 
-              {/* Acción de Mejora */}
-              <div className="space-y-2">
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  Acción de Mejora Sugerida
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ej. Reordenar cables, colocar cartel..."
-                  value={obsAccion}
-                  onChange={(e) => setObsAccion(e.target.value)}
-                  className="block w-full border border-slate-200 rounded-xl px-3.5 py-3 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-600/25 focus:border-blue-600 transition-all font-bold text-slate-700 bg-brand-input-bg"
-                />
+              {/* Acciones de Mejora */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    Acciones de Mejora Sugeridas
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setObsAcciones(prev => [...prev, { descripcion: "", responsable: "" }])}
+                    className="inline-flex items-center text-[10px] font-bold text-blue-650 hover:underline cursor-pointer"
+                  >
+                    + Nueva acción
+                  </button>
+                </div>
+                
+                <div className="space-y-3 max-h-52 overflow-y-auto pr-1">
+                  {obsAcciones.map((acc, index) => (
+                    <div key={index} className="space-y-2 p-3 bg-slate-50/50 rounded-xl border border-slate-100 relative">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-wide">
+                          Acción #{index + 1}
+                        </span>
+                        {obsAcciones.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => setObsAcciones(prev => prev.filter((_, i) => i !== index))}
+                            className="text-[9px] font-bold text-red-500 hover:underline cursor-pointer"
+                          >
+                            Eliminar
+                          </button>
+                        )}
+                      </div>
+                      
+                      <div className="grid grid-cols-1 gap-2">
+                        <div>
+                          <input
+                            type="text"
+                            placeholder="Descripción de la acción..."
+                            value={acc.descripcion}
+                            required
+                            onChange={(e) => {
+                              const newDesc = e.target.value;
+                              setObsAcciones(prev => prev.map((item, i) => i === index ? { ...item, descripcion: newDesc } : item));
+                            }}
+                            className="block w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-hidden focus:ring-2 focus:ring-blue-600/25 focus:border-blue-600 transition-all font-bold text-slate-700 bg-white"
+                          />
+                        </div>
+                        <div>
+                          <input
+                            type="text"
+                            placeholder="Responsable (Ej. Hig. y Seg.)"
+                            value={acc.responsable}
+                            onChange={(e) => {
+                              const newResp = e.target.value;
+                              setObsAcciones(prev => prev.map((item, i) => i === index ? { ...item, responsable: newResp } : item));
+                            }}
+                            className="block w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-hidden focus:ring-2 focus:ring-blue-600/25 focus:border-blue-600 transition-all font-bold text-slate-700 bg-white"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -878,7 +956,7 @@ export default function NuevoInformePage() {
               <button
                 type="button"
                 onClick={handleSaveObservacion}
-                disabled={!obsDetalle.trim()}
+                disabled={!obsDetalle.trim() || obsAcciones.some(a => !a.descripcion.trim())}
                 className="px-4 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {editingObs ? "Guardar Cambios" : "Guardar Observación"}
