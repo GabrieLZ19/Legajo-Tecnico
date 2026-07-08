@@ -23,13 +23,26 @@ export default function InformesPage() {
   const [tempSearchTerm, setTempSearchTerm] = useState("");
   const [tempFechaDesde, setTempFechaDesde] = useState(firstDayOfMonth);
   const [tempFechaHasta, setTempFechaHasta] = useState(lastDayOfMonth);
+  const [tempEstado, setTempEstado] = useState<string>("todos");
+  const [tempLugar, setTempLugar] = useState<string>("todos");
 
   // Estado aplicado de los filtros (se activa al hacer clic en "Filtrar")
   const [appliedSearchTerm, setAppliedSearchTerm] = useState("");
   const [appliedFechaDesde, setAppliedFechaDesde] = useState(firstDayOfMonth);
   const [appliedFechaHasta, setAppliedFechaHasta] = useState(lastDayOfMonth);
+  const [appliedEstado, setAppliedEstado] = useState<string>("todos");
+  const [appliedLugar, setAppliedLugar] = useState<string>("todos");
 
   const canCreate = user?.rol === "preventor" || user?.rol === "admin";
+
+  // Obtener todos los lugares únicos para el filtro
+  const lugaresUnicos = Array.from(
+    new Set(
+      informes
+        ?.map((inf) => inf.lugar_visita)
+        .filter((l): l is string => !!l) || []
+    )
+  ).sort();
 
   // Formateador de fecha para la tabla (ej: "12 May")
   const formatTableDate = (dateStr: string) => {
@@ -54,12 +67,32 @@ export default function InformesPage() {
     return `${day} ${month}`;
   };
 
+  const getEstadoBadge = (estado: string) => {
+    switch (estado) {
+      case "borrador":
+        return { label: "Borrador", classes: "bg-slate-100 text-slate-700 border border-slate-200" };
+      case "pendiente_preventor":
+        return { label: "Pte. Preventor", classes: "bg-blue-50 text-blue-700 border border-blue-100" };
+      case "pendiente_dueno":
+        return { label: "Pte. Dueño", classes: "bg-amber-50 text-amber-700 border border-amber-100" };
+      case "firmado":
+        return { label: "Cerrado", classes: "bg-emerald-50 text-emerald-700 border border-emerald-100" };
+      case "archivado":
+        return { label: "Archivado", classes: "bg-indigo-50 text-indigo-700 border border-indigo-100" };
+      default:
+        return { label: estado, classes: "bg-slate-100 text-slate-700 border border-slate-200" };
+    }
+  };
+
+
   // Aplicar filtros al hacer clic en el botón o enviar el formulario
   const handleFiltrar = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setAppliedSearchTerm(tempSearchTerm);
     setAppliedFechaDesde(tempFechaDesde);
     setAppliedFechaHasta(tempFechaHasta);
+    setAppliedEstado(tempEstado);
+    setAppliedLugar(tempLugar);
   };
 
   // Filtrado de informes por texto y por rango de fechas aplicados
@@ -87,7 +120,13 @@ export default function InformesPage() {
     const matchesDesde = !startDate || visitDate >= startDate;
     const matchesHasta = !endDate || visitDate <= endDate;
 
-    return matchesText && matchesDesde && matchesHasta;
+    // Filtro por estado de firma
+    const matchesEstado = appliedEstado === "todos" || inf.estado_firma === appliedEstado;
+
+    // Filtro por lugar / planta
+    const matchesLugar = appliedLugar === "todos" || inf.lugar_visita === appliedLugar;
+
+    return matchesText && matchesDesde && matchesHasta && matchesEstado && matchesLugar;
   });
 
   return (
@@ -141,6 +180,48 @@ export default function InformesPage() {
             onChange={(e) => setTempSearchTerm(e.target.value)}
             className="block w-full pl-11 pr-3 py-3 border border-slate-200 rounded-xl bg-white text-slate-800 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-600/25 focus:border-blue-600 text-sm transition-all font-semibold"
           />
+        </div>
+
+        {/* Filtro Estado */}
+        <div className="flex items-center gap-2 border border-slate-200 rounded-xl bg-white px-3 py-2 min-w-[150px] hover:border-slate-300 transition-colors">
+          <div className="flex flex-col flex-1 min-w-0">
+            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider leading-none">
+              Estado
+            </span>
+            <select
+              value={tempEstado}
+              onChange={(e) => setTempEstado(e.target.value)}
+              className="text-sm font-bold text-slate-700 bg-transparent border-0 p-0 focus:ring-0 focus:outline-hidden cursor-pointer w-full mt-1.5 leading-none"
+            >
+              <option value="todos">Todos</option>
+              <option value="borrador">Borrador</option>
+              <option value="pendiente_preventor">Pendiente Preventor</option>
+              <option value="pendiente_dueno">Pendiente Dueño</option>
+              <option value="firmado">Firmado</option>
+              <option value="archivado">Archivado</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Filtro Lugar / Planta */}
+        <div className="flex items-center gap-2 border border-slate-200 rounded-xl bg-white px-3 py-2 min-w-[150px] hover:border-slate-300 transition-colors">
+          <div className="flex flex-col flex-1 min-w-0">
+            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider leading-none">
+              Lugar / Planta
+            </span>
+            <select
+              value={tempLugar}
+              onChange={(e) => setTempLugar(e.target.value)}
+              className="text-sm font-bold text-slate-700 bg-transparent border-0 p-0 focus:ring-0 focus:outline-hidden cursor-pointer w-full mt-1.5 leading-none"
+            >
+              <option value="todos">Todos</option>
+              {lugaresUnicos.map((lug) => (
+                <option key={lug} value={lug}>
+                  {lug}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {/* Filtro Desde */}
@@ -264,13 +345,14 @@ export default function InformesPage() {
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-6 py-4.5">
-                        <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                          inf.estado_firma === "firmado"
-                            ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
-                            : "bg-amber-50 text-amber-700 border border-amber-100"
-                        }`}>
-                          {inf.estado_firma === "firmado" ? "Cerrado" : "Pendiente"}
-                        </span>
+                        {(() => {
+                          const badge = getEstadoBadge(inf.estado_firma);
+                          return (
+                            <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold ${badge.classes}`}>
+                              {badge.label}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="whitespace-nowrap px-6 py-4.5 text-right text-sm font-bold">
                         <Link href={`/informes/${inf.id}`} className="text-brand-primary hover:text-blue-600 transition-colors">
@@ -302,13 +384,14 @@ export default function InformesPage() {
                         {empresa?.razon_social} · {inf.lugar_visita || "Planta 1"}
                       </span>
                     </div>
-                    <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shrink-0 ${
-                      isFirmado
-                        ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
-                        : "bg-amber-50 text-amber-700 border border-amber-100"
-                    }`}>
-                      {isFirmado ? "Cerrado" : "Pendiente"}
-                    </span>
+                    {(() => {
+                      const badge = getEstadoBadge(inf.estado_firma);
+                      return (
+                        <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shrink-0 ${badge.classes}`}>
+                          {badge.label}
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   <div className="flex items-center justify-between pt-3.5 border-t border-slate-100">

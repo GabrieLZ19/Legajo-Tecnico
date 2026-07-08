@@ -58,13 +58,22 @@ export default function DashboardPage() {
     <div className="space-y-8">
       {/* Encabezado Bienvenida */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <span className="text-sm font-semibold text-slate-500 flex items-center gap-1.5">
-            Hola, {firstName}{" "}
-          </span>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight mt-1">
-            Panel de Legajo Técnico
-          </h1>
+        <div className="flex items-center gap-3">
+          <div className="h-12 w-12 overflow-hidden rounded-xl bg-slate-50 border border-slate-200 shadow-2xs shrink-0 select-none">
+            <img
+              src="/login.jpg"
+              alt="Logo Legajo Técnico"
+              className="h-full w-full object-contain"
+            />
+          </div>
+          <div>
+            <span className="text-sm font-semibold text-slate-500 flex items-center gap-1.5">
+              Hola, {firstName}{" "}
+            </span>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight mt-0.5">
+              Panel de Legajo Técnico
+            </h1>
+          </div>
         </div>
         {canCreate && (
           <Link

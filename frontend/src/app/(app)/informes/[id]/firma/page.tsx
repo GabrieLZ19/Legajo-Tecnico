@@ -47,11 +47,11 @@ export default function FirmaInformePage() {
         firma_base64: base64
       });
 
-      // Invalidar cache y volver al listado de informes
+      // Invalidar cache y volver al detalle del informe
       queryClient.invalidateQueries({ queryKey: ['informe', id] });
       queryClient.invalidateQueries({ queryKey: ['informes'] });
       
-      router.push('/informes');
+      router.push(`/informes/${id}`);
     } catch (err: any) {
       showAlert('error', 'Error al firmar', err.response?.data?.error || 'Error al guardar la firma');
     } finally {

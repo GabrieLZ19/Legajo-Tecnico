@@ -121,11 +121,16 @@ export default function InformeDetallePage() {
     }
   };
 
-  const preventorFirmado = informe.firmas_informe?.some(
-    (f) => f.tipo === "preventor",
-  );
-  const duenoFirmado = informe.firmas_informe?.some((f) => f.tipo === "dueno");
-  const informeCerrado = preventorFirmado && duenoFirmado;
+  const preventorFirmado =
+    informe.estado_firma === "pendiente_dueno" ||
+    informe.estado_firma === "firmado" ||
+    informe.estado_firma === "archivado";
+  const duenoFirmado =
+    informe.estado_firma === "firmado" ||
+    informe.estado_firma === "archivado";
+  const informeCerrado =
+    informe.estado_firma === "firmado" ||
+    informe.estado_firma === "archivado";
 
   // Formatear la fecha para los títulos
   const fechaVisita = new Date(informe.fecha_hora_visita);
