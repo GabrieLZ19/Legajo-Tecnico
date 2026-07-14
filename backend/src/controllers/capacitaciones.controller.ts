@@ -138,6 +138,44 @@ export const capacitacionesController = {
   },
 
   /**
+   * GET /:id/publica - Detalle público de una capacitación para evaluación (sin respuestas correctas ni asistencias)
+   */
+  async detallePublico(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+
+      const { data, error } = await supabaseAdmin
+        .from('capacitaciones')
+        .select(`
+          id, titulo, temario, estado, fecha,
+          capacitacion_preguntas(id, enunciado, opciones, orden)
+        `)
+        .eq('id', id)
+        .single();
+
+      if (error || !data) {
+        return res.status(404).json({ error: 'Capacitación no encontrada' });
+      }
+
+      if (data.estado !== 'activa') {
+        return res.status(400).json({ error: 'La capacitación no está activa para evaluaciones' });
+      }
+
+      // Mapear enunciado a pregunta para mantener compatibilidad con frontend
+      if (data.capacitacion_preguntas) {
+        data.capacitacion_preguntas = data.capacitacion_preguntas.map((p: any) => ({
+          ...p,
+          pregunta: p.enunciado,
+        }));
+      }
+
+      res.json(data);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  /**
    * PATCH /:id - Actualizar estado de la capacitación (borrador -> activa -> cerrada)
    */
   async actualizarEstado(req: Request, res: Response, next: NextFunction) {
@@ -528,7 +566,7 @@ export const capacitacionesController = {
           .fillColor('#4B5563')
           .fontSize(9)
           .text(
-            `Capacitación: ${cap.titulo}  |  Fecha: ${new Date(cap.fecha).toLocaleDateString('es-AR')}`
+            `Capacitación: ${cap.titulo}  |  Fecha: ${cap.fecha ? (typeof cap.fecha === 'string' ? cap.fecha : cap.fecha.toISOString()).split('T')[0].split('-').reverse().join('/') : ''}`
           );
         doc
           .text(

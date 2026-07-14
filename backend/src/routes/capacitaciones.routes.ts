@@ -15,6 +15,7 @@ router.put('/:id', requireAuth, requireRole('preventor', 'admin'), capacitacione
 router.delete('/:id', requireAuth, requireRole('preventor', 'admin'), capacitacionesController.eliminar);
 
 // Ruta PÚBLICA: evaluación del empleado (sin autenticación - accedida desde el QR)
+router.get('/:id/publica', capacitacionesController.detallePublico);
 router.post('/:id/evaluar', capacitacionesController.evaluar);
 
 export default router;
