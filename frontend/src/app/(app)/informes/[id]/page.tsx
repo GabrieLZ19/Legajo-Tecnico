@@ -21,6 +21,10 @@ import {
   Clock,
   Camera,
   X,
+  Share2,
+  Copy,
+  Check,
+  Mail,
 } from "lucide-react";
 
 export default function InformeDetallePage() {
@@ -33,6 +37,8 @@ export default function InformeDetallePage() {
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const handleDescargarPDF = async () => {
     setDownloadingPdf(true);
@@ -613,7 +619,7 @@ export default function InformeDetallePage() {
             </h2>
 
             <div className="grid grid-cols-2 gap-4">
-              <div className="bg-slate-50 border border-slate-100 rounded-xl p-3.5 text-center flex flex-col items-center justify-center gap-1.5">
+              <div className="bg-slate-50 border border-slate-100 rounded-xl p-3.5 text-center flex flex-col items-center justify-center gap-1.5 relative">
                 <div
                   className={`h-8 w-8 rounded-full flex items-center justify-center ${
                     duenoFirmado
@@ -629,6 +635,15 @@ export default function InformeDetallePage() {
                 <span className="text-[9px] text-slate-400 font-bold">
                   Responsable Empresa
                 </span>
+                {!duenoFirmado && (
+                  <button
+                    onClick={() => setShowShareModal(true)}
+                    className="mt-1.5 inline-flex items-center gap-1 text-[9px] font-black bg-blue-50 hover:bg-blue-100 text-blue-600 px-2 py-1 rounded-md transition-colors cursor-pointer"
+                  >
+                    <Share2 className="h-2.5 w-2.5" />
+                    Enviar
+                  </button>
+                )}
               </div>
 
               <div className="bg-slate-50 border border-slate-100 rounded-xl p-3.5 text-center flex flex-col items-center justify-center gap-1.5">
@@ -685,6 +700,116 @@ export default function InformeDetallePage() {
               alt="Evidencia a tamaño completo"
               className="max-w-full max-h-full object-contain rounded-2xl shadow-2xl border border-slate-800/30"
             />
+          </div>
+        </div>
+      )}
+
+      {/* Modal para compartir enlace de firma */}
+      {showShareModal && (
+        <div
+          className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fadeIn"
+          onClick={() => setShowShareModal(false)}
+        >
+          <div
+            className="bg-white border border-slate-200 rounded-2xl p-6 max-w-md w-full shadow-2xl relative space-y-4 animate-scaleUp cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowShareModal(false)}
+              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer"
+            >
+              <X className="h-4.5 w-4.5" />
+            </button>
+
+            <div className="space-y-1">
+              <h3 className="text-base font-black text-slate-900">
+                Compartir enlace de firma
+              </h3>
+              <p className="text-xs text-slate-500 font-bold">
+                Envía este enlace al dueño o responsable de la empresa para que pueda descargar la constancia y firmar el informe de visita.
+              </p>
+            </div>
+
+            {/* Opciones de compartir */}
+            <div className="grid grid-cols-1 gap-2.5">
+              {/* WhatsApp */}
+              <a
+                href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
+                  `Hola, te comparto el link del Informe de Visita N° ${String(
+                    informe.numero_informe
+                  ).padStart(6, "0")} para que puedas descargarlo y firmarlo: ${
+                    typeof window !== "undefined"
+                      ? `${window.location.origin}/informes/${id}`
+                      : ""
+                  }`
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-3 px-4 bg-emerald-50 hover:bg-emerald-100 border border-emerald-250 rounded-xl flex items-center justify-between text-emerald-800 transition-all cursor-pointer font-bold text-xs"
+              >
+                <span className="flex items-center gap-2">
+                  <svg
+                    className="h-5 w-5 text-emerald-600 fill-emerald-600 shrink-0"
+                    viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L0 24l6.335-1.662c1.746.953 3.71 1.454 5.709 1.455h.008c6.56 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
+                  </svg>
+                  Compartir por WhatsApp
+                </span>
+                <span className="text-[10px] text-emerald-600 font-black">ABRIR</span>
+              </a>
+
+              {/* Email */}
+              <a
+                href={`mailto:?subject=${encodeURIComponent(
+                  `Firma de Informe de Visita N° ${String(
+                    informe.numero_informe
+                  ).padStart(6, "0")}`
+                )}&body=${encodeURIComponent(
+                  `Hola,\n\nTe comparto el link para acceder al Informe de Visita N° ${String(
+                    informe.numero_informe
+                  ).padStart(6, "0")} de higiene y seguridad.\nDesde allí podrás descargar la constancia de visita y firmar de conformidad:\n\n${
+                    typeof window !== "undefined"
+                      ? `${window.location.origin}/informes/${id}`
+                      : ""
+                  }\n\nSaludos.`
+                )}`}
+                className="w-full py-3 px-4 bg-blue-50 hover:bg-blue-100 border border-blue-250 rounded-xl flex items-center justify-between text-blue-800 transition-all cursor-pointer font-bold text-xs"
+              >
+                <span className="flex items-center gap-2">
+                  <Mail className="h-5 w-5 text-blue-600" />
+                  Compartir por Email
+                </span>
+                <span className="text-[10px] text-blue-600 font-black">ABRIR</span>
+              </a>
+
+              {/* Copiar Enlace */}
+              <button
+                onClick={() => {
+                  if (typeof window !== "undefined") {
+                    navigator.clipboard.writeText(
+                      `${window.location.origin}/informes/${id}`
+                    );
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }
+                }}
+                className="w-full py-3 px-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl flex items-center justify-between text-slate-800 transition-all cursor-pointer font-bold text-xs"
+              >
+                <span className="flex items-center gap-2">
+                  {copied ? (
+                    <Check className="h-5 w-5 text-emerald-600 animate-scaleUp" />
+                  ) : (
+                    <Copy className="h-5 w-5 text-slate-600" />
+                  )}
+                  {copied ? "¡Enlace copiado!" : "Copiar enlace al portapapeles"}
+                </span>
+                <span className="text-[10px] text-slate-500 font-black">
+                  {copied ? "HECHO" : "COPIAR"}
+                </span>
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -79,8 +79,8 @@ export default function AdminLayout({
       <aside className="hidden md:flex flex-col w-64 bg-brand-dark text-white shrink-0 border-r border-slate-900">
         {/* Header Logo */}
         <div className="h-20 flex items-center gap-3 px-6 border-b border-slate-900">
-          <div className="h-10 w-10 rounded-xl bg-brand-secondary flex items-center justify-center shadow-md shrink-0">
-            <ShieldCheck className="h-6 w-6 text-white" />
+          <div className="h-10 w-10 rounded-xl overflow-hidden flex items-center justify-center shadow-md shrink-0 bg-slate-100">
+            <img src="/login.jpg" alt="Logo" className="h-full w-full object-cover" />
           </div>
           <div>
             <span className="font-extrabold text-sm text-white block leading-tight">
@@ -145,8 +145,8 @@ export default function AdminLayout({
       {/* Mobile Top Header */}
       <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-brand-dark text-white flex items-center justify-between px-4 z-40 border-b border-slate-900">
         <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-brand-secondary flex items-center justify-center">
-            <ShieldCheck className="h-5 w-5 text-white" />
+          <div className="h-8 w-8 rounded-lg overflow-hidden flex items-center justify-center bg-slate-100">
+            <img src="/login.jpg" alt="Logo" className="h-full w-full object-cover" />
           </div>
           <span className="font-bold text-xs uppercase tracking-wider">
             CRM
@@ -180,8 +180,8 @@ export default function AdminLayout({
         }`}
       >
         <div className="h-16 flex items-center gap-2 px-6 border-b border-slate-900">
-          <div className="h-8 w-8 rounded-lg bg-brand-secondary flex items-center justify-center">
-            <ShieldCheck className="h-5 w-5 text-white" />
+          <div className="h-8 w-8 rounded-lg overflow-hidden flex items-center justify-center bg-slate-100">
+            <img src="/login.jpg" alt="Logo" className="h-full w-full object-cover" />
           </div>
           <span className="font-bold text-sm text-blue-100 uppercase">
             Legajo Técnico

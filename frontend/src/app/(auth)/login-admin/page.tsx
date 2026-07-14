@@ -31,8 +31,8 @@ export default function LoginAdminPage() {
         
         {/* Encabezado */}
         <div className="text-center space-y-3">
-          <div className="h-14 w-14 rounded-2xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/20 mx-auto">
-            <ShieldCheck className="h-7 w-7 text-white" />
+          <div className="h-14 w-14 rounded-2xl overflow-hidden flex items-center justify-center shadow-lg mx-auto bg-slate-100">
+            <img src="/login.jpg" alt="Logo" className="h-full w-full object-cover" />
           </div>
           <div className="space-y-1">
             <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">

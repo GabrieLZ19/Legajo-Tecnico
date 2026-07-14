@@ -30,6 +30,18 @@ export default function DashboardPage() {
   const canCreate = user?.rol === "preventor" || user?.rol === "admin";
   const firstName = user?.nombre_completo?.split(" ")[0] || "Usuario";
 
+  const pct = loadingMetrics ? 0 : metricas?.porcentaje_cumplimiento || 0;
+  let badgeText = "Riesgo Alto";
+  let badgeClass = "bg-rose-500/20 text-rose-200 border-rose-500/30";
+
+  if (pct >= 80) {
+    badgeText = "Empresa Segura";
+    badgeClass = "bg-emerald-500/20 text-emerald-200 border-emerald-500/30";
+  } else if (pct >= 50) {
+    badgeText = "Riesgo Moderado";
+    badgeClass = "bg-amber-500/20 text-amber-200 border-amber-500/30";
+  }
+
   // Mapear los informes recientes para la actividad
   const actividadesRecientes =
     informes?.slice(0, 3).map((inf) => {
@@ -99,9 +111,11 @@ export default function DashboardPage() {
             <span className="text-xs font-bold uppercase tracking-wider text-blue-100">
               Cumplimiento Global • {empresa?.razon_social || "Empresa"}
             </span>
-            <div className="flex items-center gap-1 bg-white/10 backdrop-blur-md border border-white/20 px-3 py-1 rounded-full text-xs font-bold">
+            <div
+              className={`flex items-center gap-1 backdrop-blur-md border px-3 py-1 rounded-full text-xs font-bold ${badgeClass}`}
+            >
               <Award className="h-3.5 w-3.5" />
-              <span>Empresa Segura</span>
+              <span>{badgeText}</span>
             </div>
           </div>
 
