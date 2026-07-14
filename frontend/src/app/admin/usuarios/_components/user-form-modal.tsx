@@ -7,7 +7,7 @@ import {
   getRoleBadgeClasses,
   getRoleLabel,
 } from "@/lib/adminUsuarios";
-import { Loader2, X } from "lucide-react";
+import { Loader2, X, Eye, EyeOff } from "lucide-react";
 import type { AdminUsuarioFormValues } from "@/hooks/useAdminUsuarios";
 
 type UserFormModalProps = {
@@ -38,6 +38,7 @@ export function UserFormModal({
   onSubmit,
 }: UserFormModalProps) {
   const [values, setValues] = useState<AdminUsuarioFormValues>(initialValues);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -155,14 +156,29 @@ export function UserFormModal({
                     />
                   </Field>
                   <Field label="Contraseña inicial" required>
-                    <input
-                      type="password"
-                      required
-                      value={values.password}
-                      onChange={(e) => updateField("password", e.target.value)}
-                      placeholder="••••••••"
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-slate-400"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        required
+                        value={values.password}
+                        onChange={(e) =>
+                          updateField("password", e.target.value)
+                        }
+                        placeholder="••••••••"
+                        className="w-full rounded-2xl border border-slate-200 bg-white pl-4 pr-10 py-3 text-sm font-medium text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-slate-400"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                      >
+                        {showPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
                   </Field>
                 </>
               ) : (
@@ -271,15 +287,6 @@ export function UserFormModal({
                 mejor.
               </p>
             </div>
-
-            {!isEditing && (
-              <div className="rounded-2xl border border-dashed border-blue-200 bg-white p-4">
-                <p className="text-xs font-bold text-blue-800">
-                  El usuario se crea en Supabase Auth y luego se sincroniza con
-                  el perfil interno.
-                </p>
-              </div>
-            )}
           </aside>
 
           <div className="flex items-center justify-between border-t border-blue-100 pt-2 lg:col-span-2">

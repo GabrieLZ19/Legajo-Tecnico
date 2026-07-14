@@ -34,6 +34,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [user, loading, router]);
 
+  // Middleware/Guardia de ruta en cliente: redirecciona si un dueño intenta entrar a vistas administrativas
+  useEffect(() => {
+    if (!loading && user) {
+      const isDueno = user.rol === "dueno";
+      if (isDueno) {
+        const isEppRoute = pathname.startsWith("/epp");
+        const isCapacitacionesRoute = pathname.startsWith("/capacitaciones");
+        const isInformeNuevoRoute = pathname === "/informes/nuevo";
+        const isInformeEditarRoute = pathname.endsWith("/editar");
+
+        if (isEppRoute || isCapacitacionesRoute || isInformeNuevoRoute || isInformeEditarRoute) {
+          router.replace("/dashboard");
+        }
+      }
+    }
+  }, [user, loading, pathname, router]);
+
   useEffect(() => {
     if (empresa) {
       if (!empresa.razon_social) {
@@ -92,8 +109,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     { name: "Inicio", href: "/dashboard" },
     { name: "Informes", href: "/informes" },
     { name: "Plan de Acción", href: "/plan-accion" },
-    { name: "EPP", href: "/epp", disabled: false },
-    { name: "Capacitaciones", href: "/capacitaciones", disabled: false },
+    ...(user?.rol !== "dueno"
+      ? [
+          { name: "EPP", href: "/epp", disabled: false },
+          { name: "Capacitaciones", href: "/capacitaciones", disabled: false },
+        ]
+      : []),
   ];
 
   const handleSeleccionarEmpresa = (emp: Empresa) => {

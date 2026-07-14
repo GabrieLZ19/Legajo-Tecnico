@@ -6,6 +6,7 @@ import { useInformeDetalle } from "@/hooks/useInformes";
 import { api } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAlert } from "@/context/AlertContext";
+import { useAuth } from "@/hooks/useAuth";
 import {
   Calendar,
   User,
@@ -33,6 +34,7 @@ export default function InformeDetallePage() {
   const queryClient = useQueryClient();
   const { showAlert } = useAlert();
   const { data: informe, isLoading, error } = useInformeDetalle(id as string);
+  const { user } = useAuth();
 
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -176,7 +178,7 @@ export default function InformeDetallePage() {
 
         {/* Acciones Rápidas */}
         <div className="flex gap-2">
-          {!preventorFirmado && (
+          {!preventorFirmado && (user?.rol === "preventor" || user?.rol === "admin") && (
             <>
               <button
                 onClick={() => router.push(`/informes/${id}/editar`)}

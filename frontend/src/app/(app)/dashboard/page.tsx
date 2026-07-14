@@ -187,7 +187,7 @@ export default function DashboardPage() {
           <span className="text-xs font-bold text-slate-400">Según CUIT</span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${user?.rol !== 'dueno' ? 'lg:grid-cols-4' : ''}`}>
           {/* Route to Informes */}
           <Link
             href="/informes"
@@ -206,23 +206,25 @@ export default function DashboardPage() {
             </div>
           </Link>
 
-          {/* Entrega de EPP */}
-          <Link
-            href="/epp"
-            className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between h-36 cursor-pointer"
-          >
-            <div className="h-10 w-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
-              <HardHat className="h-6 w-6" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-slate-800">
-                Entrega de EPP
-              </h3>
-              <span className="inline-flex mt-2 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-emerald-100">
-                Habilitado
-              </span>
-            </div>
-          </Link>
+          {/* Entrega de EPP (Solo para preventor y admin) */}
+          {user?.rol !== 'dueno' && (
+            <Link
+              href="/epp"
+              className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between h-36 cursor-pointer"
+            >
+              <div className="h-10 w-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+                <HardHat className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-800">
+                  Entrega de EPP
+                </h3>
+                <span className="inline-flex mt-2 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-emerald-100">
+                  Habilitado
+                </span>
+              </div>
+            </Link>
+          )}
 
           {/* Plan de Acción */}
           <Link
@@ -242,23 +244,25 @@ export default function DashboardPage() {
             </div>
           </Link>
 
-          {/* Capacitaciones */}
-          <Link
-            href="/capacitaciones"
-            className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between h-36 cursor-pointer"
-          >
-            <div className="h-10 w-10 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600">
-              <GraduationCap className="h-6 w-6" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-slate-800">
-                Capacitaciones
-              </h3>
-              <span className="inline-flex mt-2 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-emerald-100">
-                Habilitado
-              </span>
-            </div>
-          </Link>
+          {/* Capacitaciones (Solo para preventor y admin) */}
+          {user?.rol !== 'dueno' && (
+            <Link
+              href="/capacitaciones"
+              className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between h-36 cursor-pointer"
+            >
+              <div className="h-10 w-10 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600">
+                <GraduationCap className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-800">
+                  Capacitaciones
+                </h3>
+                <span className="inline-flex mt-2 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-emerald-100">
+                  Habilitado
+                </span>
+              </div>
+            </Link>
+          )}
         </div>
       </div>
 

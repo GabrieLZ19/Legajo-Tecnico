@@ -5,15 +5,20 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Home, FileText, CheckSquare, HardHat, GraduationCap } from 'lucide-react';
 
+import { useAuth } from '@/hooks/useAuth';
+
 export const BottomNav: React.FC = () => {
   const pathname = usePathname();
+  const { user } = useAuth();
 
   const navItems = [
     { name: 'Inicio', href: '/dashboard', icon: Home },
     { name: 'Informes', href: '/informes', icon: FileText },
     { name: 'Plan', href: '/plan-accion', icon: CheckSquare },
-    { name: 'EPP', href: '/epp', icon: HardHat },
-    { name: 'Capacit.', href: '/capacitaciones', icon: GraduationCap },
+    ...(user?.rol !== 'dueno' ? [
+      { name: 'EPP', href: '/epp', icon: HardHat },
+      { name: 'Capacit.', href: '/capacitaciones', icon: GraduationCap },
+    ] : []),
   ];
 
   return (
