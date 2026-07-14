@@ -144,7 +144,7 @@ export default function CapacitacionesPage() {
                   <div className="flex flex-wrap items-center gap-y-1.5 gap-x-3 mt-1.5">
                     <span className="text-[11px] text-slate-400 font-semibold flex items-center gap-1 shrink-0">
                       <Calendar className="h-3.5 w-3.5" />
-                      {new Date(cap.fecha).toLocaleDateString("es-AR")}
+                      {cap.fecha ? cap.fecha.split("T")[0].split("-").reverse().join("/") : ""}
                     </span>
                     <span className="text-[11px] text-slate-400 font-semibold flex items-center gap-1 shrink-0">
                       <HelpCircle className="h-3.5 w-3.5" />

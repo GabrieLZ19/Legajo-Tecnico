@@ -25,7 +25,7 @@ export const BottomNav: React.FC = () => {
     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-lg md:hidden z-50">
       <div className="flex justify-around items-center h-16">
         {navItems.map((item) => {
-          const isActive = pathname.startsWith(item.href);
+          const isActive = pathname ? pathname.startsWith(item.href) : false;
           const Icon = item.icon;
 
           return (

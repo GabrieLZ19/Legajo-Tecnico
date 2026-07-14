@@ -31,6 +31,19 @@ import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { useAlert } from "@/context/AlertContext";
 
+const esCorrecto = (respuestaCorrecta: any, optIdx: number) => {
+  if (respuestaCorrecta === undefined || respuestaCorrecta === null) return false;
+  if (typeof respuestaCorrecta === "string" && respuestaCorrecta.startsWith("[")) {
+    try {
+      const array = JSON.parse(respuestaCorrecta);
+      if (Array.isArray(array)) {
+        return array.map(Number).includes(optIdx);
+      }
+    } catch (e) {}
+  }
+  return Number(respuestaCorrecta) === optIdx;
+};
+
 export default function DetalleCapacitacionPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
@@ -70,10 +83,17 @@ export default function DetalleCapacitacionPage() {
     try {
       const { data } = await api.get(`/capacitaciones/${id}`);
       setCap(data);
+      if (data) {
+        // Auto-generar / cargar el QR al cargar la capacitación
+        setLoadingQr(true);
+        const { data: qr } = await api.get(`/capacitaciones/${id}/qr`);
+        setQrData(qr);
+      }
     } catch (err) {
       console.error("Error:", err);
     } finally {
       setLoading(false);
+      setLoadingQr(false);
     }
   };
 
@@ -240,7 +260,7 @@ export default function DetalleCapacitacionPage() {
             <div className="flex flex-wrap items-center gap-3 mt-1.5">
               <span className="text-xs text-slate-400 font-semibold flex items-center gap-1 shrink-0">
                 <Calendar className="h-3.5 w-3.5" />
-                {new Date(cap.fecha).toLocaleDateString("es-AR")}
+                {cap.fecha ? cap.fecha.split("T")[0].split("-").reverse().join("/") : ""}
               </span>
               <span
                 className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider border shrink-0 ${estadoColor(
@@ -339,9 +359,14 @@ export default function DetalleCapacitacionPage() {
           )}
         </div>
 
-        {qrData ? (
-          <div className="flex flex-col items-center gap-4 py-4">
-            <div className="bg-white p-4 rounded-2xl border-2 border-blue-100 shadow-lg">
+        {loadingQr ? (
+          <div className="flex flex-col items-center justify-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-600"></div>
+            <p className="text-xs text-slate-400 mt-3 font-semibold">Cargando código QR...</p>
+          </div>
+        ) : qrData ? (
+          <div className="flex flex-col items-center gap-4 py-4 animate-in fade-in duration-300">
+            <div className="bg-white p-4 rounded-2xl border-2 border-blue-100 shadow-lg animate-in zoom-in-95 duration-200">
               <img
                 src={qrData.qr}
                 alt="QR de evaluación"
@@ -392,23 +417,26 @@ export default function DetalleCapacitacionPage() {
                   {idx + 1}. {p.pregunta}
                 </p>
                 <div className="mt-2 space-y-1">
-                  {p.opciones.map((opt: string, optIdx: number) => (
-                    <div
-                      key={optIdx}
-                      className={`text-xs px-3 py-1.5 rounded-lg flex items-center gap-2 ${
-                        optIdx === p.respuesta_correcta
-                          ? "bg-emerald-50 text-emerald-700 font-bold"
-                          : "text-slate-600"
-                      }`}
-                    >
-                      {optIdx === p.respuesta_correcta ? (
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                      ) : (
-                        <div className="h-3.5 w-3.5 rounded-full border border-slate-300 shrink-0" />
-                      )}
-                      {opt}
-                    </div>
-                  ))}
+                  {p.opciones.map((opt: string, optIdx: number) => {
+                    const isCorrect = esCorrecto(p.respuesta_correcta, optIdx);
+                    return (
+                      <div
+                        key={optIdx}
+                        className={`text-xs px-3 py-1.5 rounded-lg flex items-center gap-2 border ${
+                          isCorrect
+                            ? "bg-emerald-50 text-emerald-700 font-bold border-emerald-200"
+                            : "text-slate-600 border-transparent"
+                        }`}
+                      >
+                        {isCorrect ? (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                        ) : (
+                          <div className="h-3.5 w-3.5 rounded-full border border-slate-300 shrink-0" />
+                        )}
+                        {opt}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ))}

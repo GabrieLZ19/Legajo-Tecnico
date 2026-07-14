@@ -36,7 +36,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Middleware/Guardia de ruta en cliente: redirecciona si un dueño intenta entrar a vistas administrativas
   useEffect(() => {
-    if (!loading && user) {
+    if (!loading && user && pathname) {
       const isDueno = user.rol === "dueno";
       if (isDueno) {
         const isEppRoute = pathname.startsWith("/epp");
@@ -146,7 +146,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {/* Navigation Links (Desktop) */}
           <nav className="hidden md:flex items-center space-x-1 ml-6">
             {navItems.map((item) => {
-              const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+              const isActive = pathname ? (pathname === item.href || pathname.startsWith(item.href + '/')) : false;
               return (
                 <Link
                   key={item.name}
