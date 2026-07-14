@@ -12,7 +12,12 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
     return;
   }
 
-  const statusCode = err.statusCode || 500;
+  let statusCode = 500;
+  if (err.statusCode) {
+    statusCode = typeof err.statusCode === 'string' ? parseInt(err.statusCode, 10) : err.statusCode;
+  } else if (err.status) {
+    statusCode = typeof err.status === 'string' ? parseInt(err.status, 10) : err.status;
+  }
   const message = err.message || 'Error interno del servidor';
 
   res.status(statusCode).json({

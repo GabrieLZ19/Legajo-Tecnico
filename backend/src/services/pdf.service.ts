@@ -117,7 +117,7 @@ export const pdfService = {
             informe.empresas.consultoras.logo_url,
           );
           if (logoBuffer) {
-            doc.image(logoBuffer, 50, yPos, { width: 100 });
+            doc.image(logoBuffer, 50, yPos, { fit: [120, 60], valign: 'center' });
           } else {
             doc
               .fontSize(10)
@@ -126,7 +126,7 @@ export const pdfService = {
               .text(
                 informe.empresas?.consultoras?.nombre || "CONSULTORA",
                 50,
-                yPos,
+                yPos + 20,
                 { width: 200 },
               );
           }
@@ -138,7 +138,7 @@ export const pdfService = {
             .text(
               informe.empresas?.consultoras?.nombre || "CONSULTORA",
               50,
-              yPos,
+              yPos + 20,
               { width: 200 },
             );
         }
@@ -149,13 +149,13 @@ export const pdfService = {
             informe.empresas.logo_url,
           );
           if (logoBuffer) {
-            doc.image(logoBuffer, 445, yPos, { width: 100 });
+            doc.image(logoBuffer, 425, yPos, { fit: [120, 60], align: 'right', valign: 'center' });
           } else {
             doc
               .fontSize(10)
               .fillColor(secondaryColor)
               .font("Helvetica-Bold")
-              .text(informe.empresas?.razon_social || "EMPRESA", 345, yPos, {
+              .text(informe.empresas?.razon_social || "EMPRESA", 345, yPos + 20, {
                 width: 200,
                 align: "right",
               });
@@ -165,16 +165,14 @@ export const pdfService = {
             .fontSize(10)
             .fillColor(secondaryColor)
             .font("Helvetica-Bold")
-            .text(informe.empresas?.razon_social || "EMPRESA", 345, yPos, {
+            .text(informe.empresas?.razon_social || "EMPRESA", 345, yPos + 20, {
               width: 200,
               align: "right",
             });
         }
 
-        doc.moveDown(4);
-        yPos = doc.y;
-
-        // Título Principal
+        // Título Principal (Posicionamiento absoluto para consistencia de margen tras logos de distinto alto)
+        yPos = 125;
         doc.rect(50, yPos, 495, 30).fill(primaryColor);
         doc
           .fillColor("#FFFFFF")
@@ -185,8 +183,9 @@ export const pdfService = {
             width: 485,
           });
 
+        doc.y = yPos + 30;
         doc.moveDown(1.5);
-        yPos = doc.y + 10;
+        yPos = doc.y;
 
         // 2. Datos Generales de la Visita (Grilla Técnica Estilo Excel)
         doc.strokeColor("#E5E7EB").lineWidth(1);

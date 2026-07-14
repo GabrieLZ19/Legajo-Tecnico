@@ -424,5 +424,197 @@ export const capacitacionesController = {
     } catch (error) {
       next(error);
     }
+  },
+
+  /**
+   * GET /:id/exportar - Exportar asistencias de una capacitación (CSV o PDF) con filtros
+   */
+  async exportarAsistencias(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const { format, search, sector, estado } = req.query;
+
+      // Obtener capacitación con asistencias y datos de empresa
+      const { data: cap, error: capError } = await supabaseAdmin
+        .from('capacitaciones')
+        .select(`
+          *,
+          empresas(razon_social, cuit),
+          capacitacion_asistencias(id, nombre_empleado, documento, sector, puntaje, firmado_at)
+        `)
+        .eq('id', id)
+        .single();
+
+      if (capError || !cap) {
+        return res.status(404).json({ error: 'Capacitación no encontrada' });
+      }
+
+      let asistencias = cap.capacitacion_asistencias || [];
+
+      // Filtro por búsqueda (nombre o DNI)
+      if (search) {
+        const queryStr = String(search).toLowerCase();
+        asistencias = asistencias.filter((a: any) =>
+          a.nombre_empleado?.toLowerCase().includes(queryStr) ||
+          a.documento?.includes(queryStr)
+        );
+      }
+
+      // Filtro por sector
+      if (sector) {
+        const sectorStr = String(sector).toLowerCase();
+        asistencias = asistencias.filter((a: any) =>
+          a.sector?.toLowerCase() === sectorStr
+        );
+      }
+
+      // Filtro por estado
+      if (estado) {
+        if (estado === 'aprobado') {
+          asistencias = asistencias.filter((a: any) => a.puntaje >= 60);
+        } else if (estado === 'desaprobado') {
+          asistencias = asistencias.filter((a: any) => a.puntaje < 60);
+        }
+      }
+
+      // Exportar en formato CSV
+      if (format === 'csv') {
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader(
+          'Content-Disposition',
+          `attachment; filename=asistencias_capacitacion_${id}.csv`,
+        );
+
+        let csvContent = '\uFEFF'; // BOM para excel en español
+        csvContent += 'N°,Nombre y Apellido,DNI,Sector,Puntaje,Estado,Fecha de Registro\n';
+
+        asistencias.forEach((a: any, idx: number) => {
+          const nombre = a.nombre_empleado || 'N/A';
+          const dni = a.documento || 'N/A';
+          const sec = a.sector || 'N/A';
+          const puntaje = a.puntaje !== undefined ? `${a.puntaje}%` : 'N/A';
+          const est = a.puntaje >= 60 ? 'APROBADO' : 'DESAPROBADO';
+          const fecha = a.firmado_at ? new Date(a.firmado_at).toLocaleDateString('es-AR') : 'N/A';
+
+          csvContent += `"${idx + 1}","${nombre}","${dni}","${sec}","${puntaje}","${est}","${fecha}"\n`;
+        });
+
+        return res.send(csvContent);
+      }
+
+      // Exportar en formato PDF
+      if (format === 'pdf') {
+        const PDFDocument = require('pdfkit');
+        const doc = new PDFDocument({
+          size: 'A4',
+          margin: 40,
+          bufferPages: true,
+          autoPageBreak: false,
+        });
+
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader(
+          'Content-Disposition',
+          `attachment; filename=asistencias_capacitacion_${id}.pdf`,
+        );
+        doc.pipe(res);
+
+        // Cabecera Principal
+        doc
+          .fillColor('#1B365D')
+          .fontSize(20)
+          .text('Registro de Asistencia y Evaluación', { bold: true });
+        doc
+          .fillColor('#4B5563')
+          .fontSize(9)
+          .text(
+            `Capacitación: ${cap.titulo}  |  Fecha: ${new Date(cap.fecha).toLocaleDateString('es-AR')}`
+          );
+        doc
+          .text(
+            `Empresa: ${cap.empresas?.razon_social || 'N/A'}  |  CUIT: ${cap.empresas?.cuit || 'N/A'}  |  Generado: ${new Date().toLocaleDateString('es-AR')}`
+          );
+        doc.moveDown(1.5);
+
+        // Estadísticas
+        const total = asistencias.length;
+        const aprobados = asistencias.filter((a: any) => a.puntaje >= 60).length;
+        const desaprobados = total - aprobados;
+
+        const startY = doc.y;
+        const cardWidth = 160;
+        const cardHeight = 45;
+        const cardGap = 15;
+
+        // Tarjeta 1: Aprobados
+        doc.roundedRect(40, startY, cardWidth, cardHeight, 6).fillColor('#D1FAE5').fill();
+        doc.fillColor('#059669').fontSize(14).text(String(aprobados), 50, startY + 8, { bold: true });
+        doc.fillColor('#065F46').fontSize(8).text('Aprobados (>=60%)', 50, startY + 24);
+
+        // Tarjeta 2: Desaprobados
+        doc.roundedRect(40 + cardWidth + cardGap, startY, cardWidth, cardHeight, 6).fillColor('#FEE2E2').fill();
+        doc.fillColor('#DC2626').fontSize(14).text(String(desaprobados), 40 + cardWidth + cardGap + 10, startY + 8, { bold: true });
+        doc.fillColor('#991B1B').fontSize(8).text('Desaprobados (<60%)', 40 + cardWidth + cardGap + 10, startY + 24);
+
+        // Tarjeta 3: Total
+        doc.roundedRect(40 + (cardWidth + cardGap) * 2, startY, cardWidth, cardHeight, 6).fillColor('#F3F4F6').fill();
+        doc.fillColor('#1F2937').fontSize(14).text(String(total), 40 + (cardWidth + cardGap) * 2 + 10, startY + 8, { bold: true });
+        doc.fillColor('#374151').fontSize(8).text('Total Asistencias', 40 + (cardWidth + cardGap) * 2 + 10, startY + 24);
+
+        doc.moveDown(3.5);
+
+        // Tabla
+        let currentY = doc.y;
+        doc.rect(40, currentY, 515, 20).fillColor('#1E3A8A').fill();
+        doc.fillColor('#FFFFFF').fontSize(8);
+        doc.text('#', 45, currentY + 6, { bold: true });
+        doc.text('NOMBRE Y APELLIDO', 65, currentY + 6, { bold: true });
+        doc.text('DNI', 240, currentY + 6, { bold: true });
+        doc.text('SECTOR', 320, currentY + 6, { bold: true });
+        doc.text('PUNTAJE', 420, currentY + 6, { bold: true });
+        doc.text('ESTADO', 480, currentY + 6, { bold: true });
+
+        currentY += 20;
+
+        asistencias.forEach((a: any, idx: number) => {
+          if (currentY > 730) {
+            doc.addPage();
+            currentY = 40;
+            doc.rect(40, currentY, 515, 20).fillColor('#1E3A8A').fill();
+            doc.fillColor('#FFFFFF').fontSize(8);
+            doc.text('#', 45, currentY + 6, { bold: true });
+            doc.text('NOMBRE Y APELLIDO', 65, currentY + 6, { bold: true });
+            doc.text('DNI', 240, currentY + 6, { bold: true });
+            doc.text('SECTOR', 320, currentY + 6, { bold: true });
+            doc.text('PUNTAJE', 420, currentY + 6, { bold: true });
+            doc.text('ESTADO', 480, currentY + 6, { bold: true });
+            currentY += 20;
+          }
+
+          if (idx % 2 === 1) {
+            doc.rect(40, currentY, 515, 22).fillColor('#F9FAFB').fill();
+          }
+
+          doc.fillColor('#374151').fontSize(8);
+          doc.text(String(idx + 1), 45, currentY + 7);
+          doc.text(a.nombre_empleado || 'N/A', 65, currentY + 7, { width: 170, ellipsis: true });
+          doc.text(a.documento || 'N/A', 240, currentY + 7);
+          doc.text(a.sector || 'N/A', 320, currentY + 7, { width: 90, ellipsis: true });
+          doc.text(`${a.puntaje}%`, 420, currentY + 7);
+
+          const aprobado = a.puntaje >= 60;
+          doc.fillColor(aprobado ? '#059669' : '#DC2626').text(aprobado ? 'APROBADO' : 'REPROBADO', 480, currentY + 7);
+
+          currentY += 22;
+        });
+
+        doc.end();
+        return;
+      }
+
+      return res.status(400).json({ error: 'Formato no soportado' });
+    } catch (error) {
+      next(error);
+    }
   }
 };

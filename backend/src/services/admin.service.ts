@@ -28,20 +28,42 @@ export const adminService = {
     const { email, password, username, nombre_completo, rol, empresa_id } = userData;
     const consultora_id = consultoraIdToken || "d3b07384-d113-4ec2-a9b6-419dc4040835";
 
-    // 1. Crear usuario en Supabase Auth
+    let finalEmail = email;
+
+    // Si el rol es dueño, obligatoriamente el email en Supabase Auth debe ser el proxy: username@cuit.legajo.local
+    if (rol === "dueno" && empresa_id) {
+      const { data: emp } = await supabaseAdmin
+        .from("empresas")
+        .select("cuit")
+        .eq("id", empresa_id)
+        .single();
+      
+      if (emp?.cuit) {
+        const cleanCuit = emp.cuit.replace(/\D/g, "");
+        finalEmail = `${username}@${cleanCuit}.legajo.local`;
+      }
+    }
+
+    // 1. Crear usuario en Supabase Auth con metadatos completos para el trigger DB
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email,
+      email: finalEmail,
       password,
       email_confirm: true,
-      user_metadata: { username, nombre_completo },
+      user_metadata: {
+        username,
+        nombre_completo,
+        rol,
+        empresa_id: rol === "dueno" ? empresa_id : undefined,
+        consultora_id,
+      },
     });
 
     if (authError) throw authError;
 
-    // 2. Crear fila en perfiles
+    // 2. Insertar o actualizar (upsert) la fila en perfiles (combina con la acción del trigger)
     const { data: perfilData, error: perfilError } = await supabaseAdmin
       .from("perfiles")
-      .insert({
+      .upsert({
         id: authData.user.id,
         consultora_id,
         empresa_id: rol === "dueno" ? empresa_id : null,

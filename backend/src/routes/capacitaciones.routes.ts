@@ -10,6 +10,7 @@ router.post('/', requireAuth, requireRole('preventor', 'admin'), capacitacionesC
 router.get('/:id', requireAuth, capacitacionesController.detalle);
 router.patch('/:id', requireAuth, requireRole('preventor', 'admin'), capacitacionesController.actualizarEstado);
 router.get('/:id/qr', requireAuth, capacitacionesController.generarQR);
+router.get('/:id/exportar', requireAuth, capacitacionesController.exportarAsistencias);
 router.put('/:id', requireAuth, requireRole('preventor', 'admin'), capacitacionesController.actualizar);
 router.delete('/:id', requireAuth, requireRole('preventor', 'admin'), capacitacionesController.eliminar);
 
