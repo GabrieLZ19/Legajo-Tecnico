@@ -484,11 +484,15 @@ export default function EvaluacionPublicaPage() {
               </p>
             </div>
 
-            <div className="border border-slate-200 rounded-2xl overflow-hidden bg-slate-50">
+            <div className="border border-slate-200 rounded-2xl overflow-hidden bg-slate-50 h-44">
               <SignatureCanvas
                 ref={sigRef}
+                penColor="#1e293b"
+                minWidth={0.6}
+                maxWidth={2.2}
                 canvasProps={{
-                  className: "w-full h-44 cursor-crosshair bg-slate-50",
+                  className: "w-full h-full cursor-crosshair bg-slate-50",
+                  style: { width: "100%", height: "176px" },
                 }}
               />
             </div>
