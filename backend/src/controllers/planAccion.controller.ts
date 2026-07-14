@@ -68,9 +68,10 @@ export const planAccionController = {
         // Agregar BOM para Excel en español
         let csvContent = "\uFEFF";
         csvContent +=
-          "N°,Acción de Mejora,Origen / Sector,Fecha Origen,Estado,Fecha Cumplimiento\n";
+          "N°,Acción de Mejora,Origen / Sector,Responsable,Fecha Origen,Estado,Fecha Cumplimiento\n";
         acciones.forEach((a: any, idx: number) => {
           const sector = a.informes_visita?.lugar_visita || "Planta";
+          const responsable = a.responsable || "No asignado";
           const fechaOrigen = a.informes_visita?.fecha_hora_visita
             ? new Date(a.informes_visita.fecha_hora_visita).toLocaleDateString(
                 "es-AR",
@@ -79,7 +80,7 @@ export const planAccionController = {
           const fechaCumplimiento = a.fecha_cumplimiento
             ? new Date(a.fecha_cumplimiento).toLocaleDateString("es-AR")
             : "";
-          csvContent += `"${idx + 1}","${a.descripcion}","${sector}","${fechaOrigen}","${a.estado.toUpperCase()}","${fechaCumplimiento}"\n`;
+          csvContent += `"${idx + 1}","${a.descripcion}","${sector}","${responsable}","${fechaOrigen}","${a.estado.toUpperCase()}","${fechaCumplimiento}"\n`;
         });
 
         return res.send(csvContent);
@@ -91,6 +92,7 @@ export const planAccionController = {
           size: "A4",
           margin: 40,
           bufferPages: true,
+          autoPageBreak: false,
         });
 
         res.setHeader("Content-Type", "application/pdf");
@@ -206,12 +208,13 @@ export const planAccionController = {
         let currentY = doc.y;
 
         // Dibujar Cabecera de Tabla
-        doc.rect(40, currentY, 515, 20).fillColor("#F1F5F9").fill();
-        doc.fillColor("#4B5563").fontSize(8);
+        doc.rect(40, currentY, 515, 20).fillColor("#1E3A8A").fill();
+        doc.fillColor("#FFFFFF").fontSize(8);
         doc.text("#", 48, currentY + 6, { bold: true });
         doc.text("ACCIÓN DE MEJORA", 70, currentY + 6, { bold: true });
-        doc.text("ORIGEN / SECTOR / FECHA", 320, currentY + 6, { bold: true });
-        doc.text("ESTADO", 480, currentY + 6, { bold: true });
+        doc.text("RESPONSABLE", 260, currentY + 6, { bold: true });
+        doc.text("ORIGEN / SECTOR / FECHA", 370, currentY + 6, { bold: true });
+        doc.text("ESTADO", 490, currentY + 6, { bold: true });
 
         currentY += 20;
 
@@ -221,14 +224,15 @@ export const planAccionController = {
             doc.addPage();
             currentY = 40;
             // Redibujar cabecera en la nueva página
-            doc.rect(40, currentY, 515, 20).fillColor("#F1F5F9").fill();
-            doc.fillColor("#4B5563").fontSize(8);
+            doc.rect(40, currentY, 515, 20).fillColor("#1E3A8A").fill();
+            doc.fillColor("#FFFFFF").fontSize(8);
             doc.text("#", 48, currentY + 6, { bold: true });
             doc.text("ACCIÓN DE MEJORA", 70, currentY + 6, { bold: true });
-            doc.text("ORIGEN / SECTOR / FECHA", 320, currentY + 6, {
+            doc.text("RESPONSABLE", 260, currentY + 6, { bold: true });
+            doc.text("ORIGEN / SECTOR / FECHA", 370, currentY + 6, {
               bold: true,
             });
-            doc.text("ESTADO", 480, currentY + 6, { bold: true });
+            doc.text("ESTADO", 490, currentY + 6, { bold: true });
             currentY += 20;
           }
 
@@ -257,16 +261,24 @@ export const planAccionController = {
 
           // Descripción (con ancho máximo para envolver texto)
           doc.text(a.descripcion, 70, currentY + 6, {
-            width: 240,
+            width: 185,
             height: 20,
             ellipsis: true,
           });
 
+          // Responsable
+          doc
+            .fillColor("#4B5563")
+            .text(a.responsable || "No asignado", 260, currentY + 10, {
+              width: 100,
+              ellipsis: true,
+            });
+
           // Origen
           doc
             .fillColor("#6B7280")
-            .text(`${sector} · ${fechaOrigen}`, 320, currentY + 10, {
-              width: 150,
+            .text(`${sector} · ${fechaOrigen}`, 370, currentY + 10, {
+              width: 110,
               ellipsis: true,
             });
 
@@ -281,7 +293,7 @@ export const planAccionController = {
 
           doc
             .fillColor(colorEstado)
-            .text(a.estado.toUpperCase(), 480, currentY + 10, { bold: true });
+            .text(a.estado.toUpperCase(), 490, currentY + 10, { bold: true });
 
           currentY += 28;
         });
@@ -290,10 +302,11 @@ export const planAccionController = {
         const pages = doc.bufferedPageRange();
         for (let i = 0; i < pages.count; i++) {
           doc.switchToPage(i);
+          doc.page.margins.bottom = 0; // Prevenir saltos automáticos al dibujar el pie de página
           doc
             .fillColor("#9CA3AF")
             .fontSize(8)
-            .text(`Página ${i + 1} de ${pages.count}`, 40, 800, {
+            .text(`Página ${i + 1} de ${pages.count}`, 40, 810, {
               align: "center",
               width: 515,
             });
