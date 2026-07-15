@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "../config/supabase";
+import { recalcularCumplimientoEmpresa } from "../utils/compliance";
 import {
   InformeVisita,
   PeligroDetectado,
@@ -148,6 +149,9 @@ export const informeService = {
           data.observaciones,
         );
       }
+
+      // Recalcular el porcentaje de cumplimiento
+      await recalcularCumplimientoEmpresa(data.empresa_id);
 
       return await informeService.obtenerPorId(informe.id);
     } catch (error: any) {
@@ -364,6 +368,9 @@ export const informeService = {
         updateData.observaciones as string | undefined,
       );
     }
+
+    // Recalcular el porcentaje de cumplimiento
+    await recalcularCumplimientoEmpresa(current.empresa_id);
 
     return await informeService.obtenerPorId(id);
   },

@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../config/supabase';
 import { EstadoAccion } from '../types/database';
+import { recalcularCumplimientoEmpresa } from '../utils/compliance';
 
 export const planAccionService = {
   async listarAcciones(empresaId: string, estado?: EstadoAccion) {
@@ -35,6 +36,11 @@ export const planAccionService = {
       .single();
 
     if (error) throw error;
+
+    if (data?.empresa_id) {
+      await recalcularCumplimientoEmpresa(data.empresa_id);
+    }
+
     return data;
   }
 };

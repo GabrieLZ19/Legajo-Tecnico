@@ -211,6 +211,13 @@ export const adminService = {
   ) {
     const { cuit, razon_social, actividad, domicilio, localidad, codigo_postal, telefono, contacto } = empresaData;
 
+    // Obtener CUIT anterior antes de actualizar
+    const { data: oldEmpresa } = await supabaseAdmin
+      .from("empresas")
+      .select("cuit")
+      .eq("id", id)
+      .single();
+
     const { data, error } = await supabaseAdmin
       .from("empresas")
       .update({
@@ -229,6 +236,31 @@ export const adminService = {
       .single();
 
     if (error) throw error;
+
+    // Actualizar emails en Supabase Auth de todos los perfiles asociados al cambiar el CUIT (dueño, preventor, etc)
+    try {
+      const cleanNewCuit = cuit.replace(/\D/g, "");
+      const cleanOldCuit = oldEmpresa?.cuit?.replace(/\D/g, "");
+
+      if (cleanOldCuit && cleanOldCuit !== cleanNewCuit) {
+        const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers({
+          perPage: 1000,
+        });
+        if (authUsers?.users) {
+          for (const user of authUsers.users) {
+            if (user.email && user.email.endsWith(`@${cleanOldCuit}.legajo.local`)) {
+              const username = user.email.split("@")[0];
+              const newEmail = `${username}@${cleanNewCuit}.legajo.local`;
+              await supabaseAdmin.auth.admin.updateUserById(user.id, {
+                email: newEmail,
+              });
+            }
+          }
+        }
+      }
+    } catch (authUpdateErr) {
+      console.error("Error al actualizar emails de usuarios por cambio de CUIT:", authUpdateErr);
+    }
 
     await logService.registrar({
       usuario_id: usuarioEditorId,
@@ -297,6 +329,10 @@ export const adminService = {
 
     if (fechaDesde) {
       informesQuery = informesQuery.gte("fecha_hora_visita", fechaDesde);
+    } else {
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      informesQuery = informesQuery.gte("fecha_hora_visita", startOfMonth);
     }
     if (fechaHasta) {
       informesQuery = informesQuery.lte("fecha_hora_visita", fechaHasta);
