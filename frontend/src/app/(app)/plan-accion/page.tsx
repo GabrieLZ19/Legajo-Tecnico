@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { usePlanAccion } from "@/hooks/usePlanAccion";
 import { EstadoAccion } from "@/types";
@@ -228,7 +229,12 @@ export default function PlanAccionPage() {
                         {/* Acción de Mejora */}
                         <td className="px-6 py-4 text-xs font-black text-slate-900 font-sans max-w-md">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span>{acc.descripcion}</span>
+                            <Link
+                              href={`/informes/${acc.informe_id}?actionId=${acc.id}`}
+                              className="hover:text-blue-600 hover:underline transition-all cursor-pointer"
+                            >
+                              {acc.descripcion}
+                            </Link>
                             {acc.responsable && (
                               <span className="text-[9px] px-1.5 py-0.5 bg-blue-50 text-blue-655 font-bold rounded-md uppercase tracking-wider">
                                 Resp: {acc.responsable}
@@ -292,7 +298,12 @@ export default function PlanAccionPage() {
                       ÍTEM {index + 1}
                     </span>
                     <h3 className="text-sm font-black text-slate-900 font-sans leading-snug flex items-center gap-2 flex-wrap">
-                      <span>{acc.descripcion}</span>
+                      <Link
+                        href={`/informes/${acc.informe_id}?actionId=${acc.id}`}
+                        className="hover:text-blue-600 hover:underline transition-all cursor-pointer"
+                      >
+                        {acc.descripcion}
+                      </Link>
                       {acc.responsable && (
                         <span className="text-[9px] px-1.5 py-0.5 bg-blue-50 text-blue-655 font-bold rounded-md uppercase tracking-wider">
                           Resp: {acc.responsable}

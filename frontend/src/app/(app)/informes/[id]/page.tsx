@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useInformeDetalle } from "@/hooks/useInformes";
 import { api } from "@/lib/api";
@@ -41,6 +41,31 @@ export default function InformeDetallePage() {
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [highlightedActionId, setHighlightedActionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!informe) return;
+    const params = new URLSearchParams(window.location.search);
+    const actionId = params.get("actionId");
+    if (actionId) {
+      setHighlightedActionId(actionId);
+      const timer = setTimeout(() => {
+        const element = document.getElementById(`accion-${actionId}`);
+        if (element) {
+          element.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 500);
+
+      const clearTimer = setTimeout(() => {
+        setHighlightedActionId(null);
+      }, 4000);
+
+      return () => {
+        clearTimeout(timer);
+        clearTimeout(clearTimer);
+      };
+    }
+  }, [informe]);
 
   const handleDescargarPDF = async () => {
     setDownloadingPdf(true);
@@ -418,10 +443,15 @@ export default function InformeDetallePage() {
                             Acciones de Mejora
                           </span>
                           {acciones.map((acc) => (
-                            <div
-                              key={acc.id}
-                              className="flex items-center justify-between text-xs border-t border-slate-50 pt-2 first:border-0 first:pt-0"
-                            >
+                             <div
+                               key={acc.id}
+                               id={`accion-${acc.id}`}
+                               className={`flex items-center justify-between text-xs border-t border-slate-50 pt-2 first:border-0 first:pt-0 transition-all duration-500 rounded-md ${
+                                 highlightedActionId === acc.id
+                                   ? "bg-amber-100 p-2 border border-amber-250 shadow-sm animate-pulse ring-2 ring-amber-400"
+                                   : ""
+                               }`}
+                             >
                               <span className="text-slate-600 font-semibold flex items-center gap-2 flex-wrap">
                                 <span>{acc.descripcion}</span>
                                 {acc.responsable && (

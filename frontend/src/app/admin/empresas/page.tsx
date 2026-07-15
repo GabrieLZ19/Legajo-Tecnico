@@ -426,7 +426,7 @@ export default function AdminEmpresasPage() {
                     CUIT
                   </th>
                   <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-wider w-20 text-center">
-                    Cumpl.
+                    Cumplimiento
                   </th>
                 </tr>
               </thead>
