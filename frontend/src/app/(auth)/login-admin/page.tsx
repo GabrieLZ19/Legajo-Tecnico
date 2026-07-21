@@ -1,38 +1,41 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import { useAuth } from '@/hooks/useAuth';
-import { ShieldCheck, Lock, Mail, Loader2 } from 'lucide-react';
-import Link from 'next/link';
+import React, { useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { ShieldCheck, Lock, Mail, Loader2 } from "lucide-react";
+import Link from "next/link";
 
 export default function LoginAdminPage() {
   const { loginAdmin, loading } = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setError("");
     try {
       await loginAdmin(email, password);
     } catch (err: any) {
-      setError(err.message || 'Error al iniciar sesión');
+      setError(err.message || "Error al iniciar sesión");
     }
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#090d16] relative overflow-hidden p-4">
       {/* Círculo de brillo/gradiente de fondo */}
-      <div className="absolute w-[600px] h-[600px] rounded-full bg-[#111c3a]/40 blur-3xl pointer-events-none -top-40" />
+      <div className="absolute w-150 h-150 rounded-full bg-[#111c3a]/40 blur-3xl pointer-events-none -top-40" />
 
       {/* Tarjeta de Login */}
-      <div className="bg-white rounded-[32px] px-8 py-10 max-w-[420px] w-full shadow-2xl relative z-10 space-y-8">
-        
+      <div className="bg-white rounded-4xl px-8 py-10 max-w-105 w-full shadow-2xl relative z-10 space-y-8">
         {/* Encabezado */}
         <div className="text-center space-y-3">
           <div className="h-14 w-14 rounded-2xl overflow-hidden flex items-center justify-center shadow-lg mx-auto bg-slate-100">
-            <img src="/login.jpg" alt="Logo" className="h-full w-full object-cover" />
+            <img
+              src="/login.jpg"
+              alt="Logo"
+              className="h-full w-full object-cover"
+            />
           </div>
           <div className="space-y-1">
             <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">
@@ -100,7 +103,7 @@ export default function LoginAdminPage() {
             {loading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              'Ingresar al panel'
+              "Ingresar al panel"
             )}
           </button>
         </form>

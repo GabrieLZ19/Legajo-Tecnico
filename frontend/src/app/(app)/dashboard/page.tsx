@@ -66,6 +66,11 @@ export default function DashboardPage() {
       }
     }) || [];
 
+  // Informes pendientes de firma (especialmente prioritarios para el dueño)
+  const informesPendientesFirma = informes?.filter(
+    (inf) => inf.estado_firma === "pendiente_dueno"
+  ) || [];
+
   return (
     <div className="space-y-8">
       {/* Encabezado Bienvenida */}
@@ -98,10 +103,64 @@ export default function DashboardPage() {
         )}
       </div>
 
+      {/* Tareas Pendientes de Firma (Integradas de forma sobria y elegante) */}
+      {informesPendientesFirma.length > 0 && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-2xs space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600 shrink-0">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-slate-900">
+                  {informesPendientesFirma.length === 1
+                    ? "Tienes 1 informe pendiente de tu firma"
+                    : `Tienes ${informesPendientesFirma.length} informes pendientes de tu firma`}
+                </h2>
+                <p className="text-xs font-medium text-slate-500 mt-0.5">
+                  Revisá la constancia de visita y confirmá la conformidad con tu firma digital.
+                </p>
+              </div>
+            </div>
+            <span className="hidden sm:inline-flex text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200/60 px-3 py-1 rounded-full">
+              Requiere acción
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+            {informesPendientesFirma.map((inf) => (
+              <Link
+                key={inf.id}
+                href={`/informes/${inf.id}`}
+                className="bg-slate-50/70 hover:bg-white border border-slate-200 hover:border-amber-400/80 p-4 rounded-xl shadow-2xs hover:shadow-md transition-all flex items-center justify-between group cursor-pointer"
+              >
+                <div className="min-w-0 pr-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-slate-800 group-hover:text-blue-600 transition-colors">
+                      Informe N° {String(inf.numero_informe).padStart(6, "0")}
+                    </span>
+                    <span className="text-[10px] font-bold text-amber-700 bg-amber-100/70 px-2 py-0.5 rounded-md border border-amber-200/50">
+                      Pte. Firma
+                    </span>
+                  </div>
+                  <p className="text-xs font-medium text-slate-500 truncate mt-1">
+                    {inf.lugar_visita || "Planta"} • {new Date(inf.fecha_hora_visita).toLocaleDateString("es-AR")}
+                  </p>
+                </div>
+                <div className="inline-flex items-center gap-1.5 bg-slate-900 group-hover:bg-amber-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-all shrink-0 shadow-2xs">
+                  <span>Ver y Firmar</span>
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Grid de Métricas Principales */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Tarjeta de Cumplimiento Global (2/3 width) */}
-        <div className="lg:col-span-2 bg-[#1e40af] rounded-2xl p-6 text-white shadow-xl relative overflow-hidden flex flex-col justify-between min-h-[220px]">
+        <div className="lg:col-span-2 bg-[#1e40af] rounded-2xl p-6 text-white shadow-xl relative overflow-hidden flex flex-col justify-between min-h-55">
           {/* Fondo decorativo */}
           <div className="absolute right-0 bottom-0 opacity-10 transform translate-x-4 translate-y-4">
             <ShieldCheck className="h-48 w-48" />
@@ -187,7 +246,9 @@ export default function DashboardPage() {
           <span className="text-xs font-bold text-slate-400">Según CUIT</span>
         </div>
 
-        <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${user?.rol !== 'dueno' ? 'lg:grid-cols-4' : ''}`}>
+        <div
+          className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${user?.rol !== "dueno" ? "lg:grid-cols-4" : ""}`}
+        >
           {/* Route to Informes */}
           <Link
             href="/informes"
@@ -207,7 +268,7 @@ export default function DashboardPage() {
           </Link>
 
           {/* Entrega de EPP (Solo para preventor y admin) */}
-          {user?.rol !== 'dueno' && (
+          {user?.rol !== "dueno" && (
             <Link
               href="/epp"
               className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between h-36 cursor-pointer"
@@ -245,7 +306,7 @@ export default function DashboardPage() {
           </Link>
 
           {/* Capacitaciones (Solo para preventor y admin) */}
-          {user?.rol !== 'dueno' && (
+          {user?.rol !== "dueno" && (
             <Link
               href="/capacitaciones"
               className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between h-36 cursor-pointer"

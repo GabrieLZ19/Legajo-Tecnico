@@ -41,7 +41,9 @@ export default function InformeDetallePage() {
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [highlightedActionId, setHighlightedActionId] = useState<string | null>(null);
+  const [highlightedActionId, setHighlightedActionId] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     if (!informe) return;
@@ -77,14 +79,25 @@ export default function InformeDetallePage() {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", `constancia_visita_${informe?.numero_informe || id}.pdf`);
+      link.setAttribute(
+        "download",
+        `constancia_visita_${informe?.numero_informe || id}.pdf`,
+      );
       document.body.appendChild(link);
       link.click();
       link.parentNode?.removeChild(link);
-      showAlert("success", "Descarga exitosa", "El informe PDF se ha descargado correctamente.");
+      showAlert(
+        "success",
+        "Descarga exitosa",
+        "El informe PDF se ha descargado correctamente.",
+      );
     } catch (err) {
       console.error(err);
-      showAlert("error", "Error al descargar", "No se pudo generar o descargar el PDF del informe.");
+      showAlert(
+        "error",
+        "Error al descargar",
+        "No se pudo generar o descargar el PDF del informe.",
+      );
     } finally {
       setDownloadingPdf(false);
     }
@@ -159,11 +172,9 @@ export default function InformeDetallePage() {
     informe.estado_firma === "firmado" ||
     informe.estado_firma === "archivado";
   const duenoFirmado =
-    informe.estado_firma === "firmado" ||
-    informe.estado_firma === "archivado";
+    informe.estado_firma === "firmado" || informe.estado_firma === "archivado";
   const informeCerrado =
-    informe.estado_firma === "firmado" ||
-    informe.estado_firma === "archivado";
+    informe.estado_firma === "firmado" || informe.estado_firma === "archivado";
 
   // Formatear la fecha para los títulos
   const fechaVisita = new Date(informe.fecha_hora_visita);
@@ -203,24 +214,25 @@ export default function InformeDetallePage() {
 
         {/* Acciones Rápidas */}
         <div className="flex gap-2">
-          {!preventorFirmado && (user?.rol === "preventor" || user?.rol === "admin") && (
-            <>
-              <button
-                onClick={() => router.push(`/informes/${id}/editar`)}
-                className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs transition-all border border-slate-200 cursor-pointer"
-              >
-                <PenTool className="h-3.5 w-3.5 text-slate-500" />
-                Editar Informe
-              </button>
-              <button
-                onClick={() => router.push(`/informes/${id}/firma`)}
-                className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-all shadow-md shadow-blue-900/10 cursor-pointer"
-              >
-                <PenTool className="h-3.5 w-3.5" />
-                Firmar Preventor
-              </button>
-            </>
-          )}
+          {!preventorFirmado &&
+            (user?.rol === "preventor" || user?.rol === "admin") && (
+              <>
+                <button
+                  onClick={() => router.push(`/informes/${id}/editar`)}
+                  className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs transition-all border border-slate-200 cursor-pointer"
+                >
+                  <PenTool className="h-3.5 w-3.5 text-slate-500" />
+                  Editar Informe
+                </button>
+                <button
+                  onClick={() => router.push(`/informes/${id}/firma`)}
+                  className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-all shadow-md shadow-blue-900/10 cursor-pointer"
+                >
+                  <PenTool className="h-3.5 w-3.5" />
+                  Firmar Preventor
+                </button>
+              </>
+            )}
           {preventorFirmado && !duenoFirmado && (
             <button
               onClick={() => router.push(`/informes/${id}/firma`)}
@@ -443,15 +455,15 @@ export default function InformeDetallePage() {
                             Acciones de Mejora
                           </span>
                           {acciones.map((acc) => (
-                             <div
-                               key={acc.id}
-                               id={`accion-${acc.id}`}
-                               className={`flex items-center justify-between text-xs border-t border-slate-50 pt-2 first:border-0 first:pt-0 transition-all duration-500 rounded-md ${
-                                 highlightedActionId === acc.id
-                                   ? "bg-amber-100 p-2 border border-amber-250 shadow-sm animate-pulse ring-2 ring-amber-400"
-                                   : ""
-                               }`}
-                             >
+                            <div
+                              key={acc.id}
+                              id={`accion-${acc.id}`}
+                              className={`flex items-center justify-between text-xs border-t border-slate-50 pt-2 first:border-0 first:pt-0 transition-all duration-500 rounded-md ${
+                                highlightedActionId === acc.id
+                                  ? "bg-amber-100 p-2 border border-amber-250 shadow-sm animate-pulse ring-2 ring-amber-400"
+                                  : ""
+                              }`}
+                            >
                               <span className="text-slate-600 font-semibold flex items-center gap-2 flex-wrap">
                                 <span>{acc.descripcion}</span>
                                 {acc.responsable && (
@@ -560,7 +572,7 @@ export default function InformeDetallePage() {
             <div className="relative border-l-2 border-slate-100 pl-5 ml-2 space-y-6 text-xs font-bold">
               {/* Creado */}
               <div className="relative">
-                <div className="absolute left-[-27px] top-0.5 h-3.5 w-3.5 rounded-full bg-emerald-500 border-2 border-white flex items-center justify-center" />
+                <div className="absolute -left-6.75 top-0.5 h-3.5 w-3.5 rounded-full bg-emerald-500 border-2 border-white flex items-center justify-center" />
                 <div>
                   <span className="block text-slate-800">Creado</span>
                   <span className="text-[10px] text-slate-400 font-bold">
@@ -572,7 +584,7 @@ export default function InformeDetallePage() {
               {/* Firmado por empresa */}
               <div className="relative">
                 <div
-                  className={`absolute left-[-27px] top-0.5 h-3.5 w-3.5 rounded-full border-2 border-white flex items-center justify-center ${
+                  className={`absolute -left-6.75 top-0.5 h-3.5 w-3.5 rounded-full border-2 border-white flex items-center justify-center ${
                     duenoFirmado ? "bg-emerald-500" : "bg-slate-200"
                   }`}
                 />
@@ -598,7 +610,7 @@ export default function InformeDetallePage() {
               {/* Firmado por preventor */}
               <div className="relative">
                 <div
-                  className={`absolute left-[-27px] top-0.5 h-3.5 w-3.5 rounded-full border-2 border-white flex items-center justify-center ${
+                  className={`absolute -left-6.75 top-0.5 h-3.5 w-3.5 rounded-full border-2 border-white flex items-center justify-center ${
                     preventorFirmado ? "bg-emerald-500" : "bg-slate-200"
                   }`}
                 />
@@ -624,7 +636,7 @@ export default function InformeDetallePage() {
               {/* Informe Cerrado */}
               <div className="relative">
                 <div
-                  className={`absolute left-[-27px] top-0.5 h-3.5 w-3.5 rounded-full border-2 border-white flex items-center justify-center ${
+                  className={`absolute -left-6.75 top-0.5 h-3.5 w-3.5 rounded-full border-2 border-white flex items-center justify-center ${
                     informeCerrado ? "bg-emerald-500" : "bg-slate-200"
                   }`}
                 />
@@ -758,7 +770,8 @@ export default function InformeDetallePage() {
                 Compartir enlace de firma
               </h3>
               <p className="text-xs text-slate-500 font-bold">
-                Envía este enlace al dueño o responsable de la empresa para que pueda descargar la constancia y firmar el informe de visita.
+                Envía este enlace al dueño o responsable de la empresa para que
+                pueda descargar la constancia y firmar el informe de visita.
               </p>
             </div>
 
@@ -768,12 +781,12 @@ export default function InformeDetallePage() {
               <a
                 href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
                   `Hola, te comparto el link del Informe de Visita N° ${String(
-                    informe.numero_informe
+                    informe.numero_informe,
                   ).padStart(6, "0")} para que puedas descargarlo y firmarlo: ${
                     typeof window !== "undefined"
                       ? `${window.location.origin}/informes/${id}`
                       : ""
-                  }`
+                  }`,
                 )}`}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -789,23 +802,28 @@ export default function InformeDetallePage() {
                   </svg>
                   Compartir por WhatsApp
                 </span>
-                <span className="text-[10px] text-emerald-600 font-black">ABRIR</span>
+                <span className="text-[10px] text-emerald-600 font-black">
+                  ABRIR
+                </span>
               </a>
 
               {/* Email */}
               <a
                 href={`mailto:?subject=${encodeURIComponent(
                   `Firma de Informe de Visita N° ${String(
-                    informe.numero_informe
-                  ).padStart(6, "0")}`
+                    informe.numero_informe,
+                  ).padStart(6, "0")}`,
                 )}&body=${encodeURIComponent(
                   `Hola,\n\nTe comparto el link para acceder al Informe de Visita N° ${String(
-                    informe.numero_informe
-                  ).padStart(6, "0")} de higiene y seguridad.\nDesde allí podrás descargar la constancia de visita y firmar de conformidad:\n\n${
+                    informe.numero_informe,
+                  ).padStart(
+                    6,
+                    "0",
+                  )} de higiene y seguridad.\nDesde allí podrás descargar la constancia de visita y firmar de conformidad:\n\n${
                     typeof window !== "undefined"
                       ? `${window.location.origin}/informes/${id}`
                       : ""
-                  }\n\nSaludos.`
+                  }\n\nSaludos.`,
                 )}`}
                 className="w-full py-3 px-4 bg-blue-50 hover:bg-blue-100 border border-blue-250 rounded-xl flex items-center justify-between text-blue-800 transition-all cursor-pointer font-bold text-xs"
               >
@@ -813,7 +831,9 @@ export default function InformeDetallePage() {
                   <Mail className="h-5 w-5 text-blue-600" />
                   Compartir por Email
                 </span>
-                <span className="text-[10px] text-blue-600 font-black">ABRIR</span>
+                <span className="text-[10px] text-blue-600 font-black">
+                  ABRIR
+                </span>
               </a>
 
               {/* Copiar Enlace */}
@@ -821,7 +841,7 @@ export default function InformeDetallePage() {
                 onClick={() => {
                   if (typeof window !== "undefined") {
                     navigator.clipboard.writeText(
-                      `${window.location.origin}/informes/${id}`
+                      `${window.location.origin}/informes/${id}`,
                     );
                     setCopied(true);
                     setTimeout(() => setCopied(false), 2000);
@@ -835,7 +855,9 @@ export default function InformeDetallePage() {
                   ) : (
                     <Copy className="h-5 w-5 text-slate-600" />
                   )}
-                  {copied ? "¡Enlace copiado!" : "Copiar enlace al portapapeles"}
+                  {copied
+                    ? "¡Enlace copiado!"
+                    : "Copiar enlace al portapapeles"}
                 </span>
                 <span className="text-[10px] text-slate-500 font-black">
                   {copied ? "HECHO" : "COPIAR"}
