@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { ShieldCheck, Lock, Mail, Loader2 } from "lucide-react";
+import { Lock, Mail, Loader2 } from "lucide-react";
 import Link from "next/link";
 
 export default function LoginAdminPage() {

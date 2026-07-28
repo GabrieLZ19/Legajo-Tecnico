@@ -1,6 +1,5 @@
 "use client";
 
-import React from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useDashboard } from "@/hooks/useDashboard";
 import { useInformes } from "@/hooks/useInformes";
@@ -67,9 +66,8 @@ export default function DashboardPage() {
     }) || [];
 
   // Informes pendientes de firma (especialmente prioritarios para el dueño)
-  const informesPendientesFirma = informes?.filter(
-    (inf) => inf.estado_firma === "pendiente_dueno"
-  ) || [];
+  const informesPendientesFirma =
+    informes?.filter((inf) => inf.estado_firma === "pendiente_dueno") || [];
 
   return (
     <div className="space-y-8">
@@ -118,7 +116,8 @@ export default function DashboardPage() {
                     : `Tienes ${informesPendientesFirma.length} informes pendientes de tu firma`}
                 </h2>
                 <p className="text-xs font-medium text-slate-500 mt-0.5">
-                  Revisá la constancia de visita y confirmá la conformidad con tu firma digital.
+                  Revisá la constancia de visita y confirmá la conformidad con
+                  tu firma digital.
                 </p>
               </div>
             </div>
@@ -144,7 +143,10 @@ export default function DashboardPage() {
                     </span>
                   </div>
                   <p className="text-xs font-medium text-slate-500 truncate mt-1">
-                    {inf.lugar_visita || "Planta"} • {new Date(inf.fecha_hora_visita).toLocaleDateString("es-AR")}
+                    {inf.lugar_visita || "Planta"} •{" "}
+                    {new Date(inf.fecha_hora_visita).toLocaleDateString(
+                      "es-AR",
+                    )}
                   </p>
                 </div>
                 <div className="inline-flex items-center gap-1.5 bg-slate-900 group-hover:bg-amber-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-all shrink-0 shadow-2xs">

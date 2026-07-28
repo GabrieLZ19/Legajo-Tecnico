@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import { useAdminDashboard } from "@/hooks/useAdminDashboard";
 import type { EmpresaDetalle } from "@/hooks/useAdminEmpresas";
 import Link from "next/link";

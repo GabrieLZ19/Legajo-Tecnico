@@ -1,8 +1,7 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { api } from "@/lib/api";
 import { Capacitacion } from "@/types";
 import Link from "next/link";
 import {
@@ -30,10 +29,15 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { useAlert } from "@/context/AlertContext";
+import { useCapacitaciones } from "@/hooks/useCapacitaciones";
 
 const esCorrecto = (respuestaCorrecta: any, optIdx: number) => {
-  if (respuestaCorrecta === undefined || respuestaCorrecta === null) return false;
-  if (typeof respuestaCorrecta === "string" && respuestaCorrecta.startsWith("[")) {
+  if (respuestaCorrecta === undefined || respuestaCorrecta === null)
+    return false;
+  if (
+    typeof respuestaCorrecta === "string" &&
+    respuestaCorrecta.startsWith("[")
+  ) {
     try {
       const array = JSON.parse(respuestaCorrecta);
       if (Array.isArray(array)) {
@@ -45,34 +49,44 @@ const esCorrecto = (respuestaCorrecta: any, optIdx: number) => {
 };
 
 export default function DetalleCapacitacionPage() {
-  const { id } = useParams<{ id: string }>();
-  const { user } = useAuth();
+  const params = useParams();
+  const id = params.id as string;
   const router = useRouter();
+  const { user } = useAuth();
   const { showAlert } = useAlert();
+  const {
+    getCapacitacionDetalle,
+    getCapacitacionQr,
+    cambiarEstadoCapacitacion,
+    eliminarCapacitacion: deleteCap,
+    exportarCapacitacion,
+  } = useCapacitaciones();
 
   const [cap, setCap] = useState<Capacitacion | null>(null);
   const [loading, setLoading] = useState(true);
-  const [qrData, setQrData] = useState<{ qr: string; url: string } | null>(null);
+  const [qrData, setQrData] = useState<{ qr: string; url: string } | null>(
+    null,
+  );
   const [loadingQr, setLoadingQr] = useState(false);
   const [updatingEstado, setUpdatingEstado] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+
+  // Modal / Confirmación eliminar
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
-  // Compartir
-  const [showShareModal, setShowShareModal] = useState(false);
-  const [copied, setCopied] = useState(false);
-
-  // Filtros
+  // Filtros y búsqueda de asistencias
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSector, setSelectedSector] = useState("todos");
   const [selectedEstado, setSelectedEstado] = useState("todos");
-
-  // Exportación
   const [exportingExcel, setExportingExcel] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
 
   const canDelete = user?.rol === "preventor" || user?.rol === "admin";
   const canManage = user?.rol === "preventor" || user?.rol === "admin";
+
+  // Compartir
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     fetchCapacitacion();
@@ -81,12 +95,11 @@ export default function DetalleCapacitacionPage() {
   const fetchCapacitacion = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get(`/capacitaciones/${id}`);
+      const data = await getCapacitacionDetalle(id);
       setCap(data);
       if (data) {
-        // Auto-generar / cargar el QR al cargar la capacitación
         setLoadingQr(true);
-        const { data: qr } = await api.get(`/capacitaciones/${id}/qr`);
+        const qr = await getCapacitacionQr(id);
         setQrData(qr);
       }
     } catch (err) {
@@ -100,7 +113,7 @@ export default function DetalleCapacitacionPage() {
   const generarQR = async () => {
     setLoadingQr(true);
     try {
-      const { data } = await api.get(`/capacitaciones/${id}/qr`);
+      const data = await getCapacitacionQr(id);
       setQrData(data);
     } catch (err) {
       console.error("Error generando QR:", err);
@@ -112,7 +125,7 @@ export default function DetalleCapacitacionPage() {
   const cambiarEstado = async (nuevoEstado: string) => {
     setUpdatingEstado(true);
     try {
-      await api.patch(`/capacitaciones/${id}`, { estado: nuevoEstado });
+      await cambiarEstadoCapacitacion(id, nuevoEstado);
       await fetchCapacitacion();
     } catch (err) {
       console.error("Error cambiando estado:", err);
@@ -124,8 +137,12 @@ export default function DetalleCapacitacionPage() {
   const eliminarCapacitacion = async () => {
     setDeleting(true);
     try {
-      await api.delete(`/capacitaciones/${id}`);
-      showAlert("success", "Eliminada", "La capacitación fue eliminada correctamente.");
+      await deleteCap(id);
+      showAlert(
+        "success",
+        "Eliminada",
+        "La capacitación fue eliminada correctamente.",
+      );
       router.push("/capacitaciones");
     } catch (err) {
       console.error("Error eliminando capacitación:", err);
@@ -147,20 +164,30 @@ export default function DetalleCapacitacionPage() {
   const handleExportExcel = async () => {
     setExportingExcel(true);
     try {
-      const response = await api.get(`/capacitaciones/${id}/exportar?format=csv&search=${searchQuery}&sector=${selectedSector !== "todos" ? selectedSector : ""}&estado=${selectedEstado !== "todos" ? selectedEstado : ""}`, {
-        responseType: "blob",
+      const data = await exportarCapacitacion(id, "csv", {
+        search: searchQuery,
+        sector: selectedSector,
+        estado: selectedEstado,
       });
 
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const url = window.URL.createObjectURL(new Blob([data]));
       const link = document.createElement("a");
       link.href = url;
       link.setAttribute("download", `asistencias_capacitacion_${id}.csv`);
       document.body.appendChild(link);
       link.click();
       link.parentNode?.removeChild(link);
-      showAlert("success", "Exportación exitosa", "Las asistencias se han exportado correctamente a Excel.");
+      showAlert(
+        "success",
+        "Exportación exitosa",
+        "Las asistencias se han exportado correctamente a Excel.",
+      );
     } catch (err) {
-      showAlert("error", "Error al exportar", "No se pudo exportar las asistencias a Excel.");
+      showAlert(
+        "error",
+        "Error al exportar",
+        "No se pudo exportar las asistencias a Excel.",
+      );
     } finally {
       setExportingExcel(false);
     }
@@ -169,20 +196,32 @@ export default function DetalleCapacitacionPage() {
   const handleExportPDF = async () => {
     setExportingPdf(true);
     try {
-      const response = await api.get(`/capacitaciones/${id}/exportar?format=pdf&search=${searchQuery}&sector=${selectedSector !== "todos" ? selectedSector : ""}&estado=${selectedEstado !== "todos" ? selectedEstado : ""}`, {
-        responseType: "blob",
+      const data = await exportarCapacitacion(id, "pdf", {
+        search: searchQuery,
+        sector: selectedSector,
+        estado: selectedEstado,
       });
 
-      const url = window.URL.createObjectURL(new Blob([response.data], { type: "application/pdf" }));
+      const url = window.URL.createObjectURL(
+        new Blob([data], { type: "application/pdf" }),
+      );
       const link = document.createElement("a");
       link.href = url;
       link.setAttribute("download", `asistencias_capacitacion_${id}.pdf`);
       document.body.appendChild(link);
       link.click();
       link.parentNode?.removeChild(link);
-      showAlert("success", "Exportación exitosa", "El documento PDF se ha descargado correctamente.");
+      showAlert(
+        "success",
+        "Exportación exitosa",
+        "El documento PDF se ha descargado correctamente.",
+      );
     } catch (err) {
-      showAlert("error", "Error al exportar", "No se pudo exportar las asistencias a PDF.");
+      showAlert(
+        "error",
+        "Error al exportar",
+        "No se pudo exportar las asistencias a PDF.",
+      );
     } finally {
       setExportingPdf(false);
     }
@@ -222,25 +261,27 @@ export default function DetalleCapacitacionPage() {
     new Set(
       (cap?.capacitacion_asistencias || [])
         .map((a) => a.sector)
-        .filter((s): s is string => !!s)
-    )
+        .filter((s): s is string => !!s),
+    ),
   );
 
-  const filteredAsistencias = (cap?.capacitacion_asistencias || []).filter((a) => {
-    const matchesSearch =
-      a.nombre_empleado?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      a.dni_empleado?.includes(searchQuery);
+  const filteredAsistencias = (cap?.capacitacion_asistencias || []).filter(
+    (a) => {
+      const matchesSearch =
+        a.nombre_empleado?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        a.dni_empleado?.includes(searchQuery);
 
-    const matchesSector =
-      selectedSector === "todos" || a.sector === selectedSector;
+      const matchesSector =
+        selectedSector === "todos" || a.sector === selectedSector;
 
-    const matchesEstado =
-      selectedEstado === "todos" ||
-      (selectedEstado === "aprobado" && a.aprobado) ||
-      (selectedEstado === "desaprobado" && !a.aprobado);
+      const matchesEstado =
+        selectedEstado === "todos" ||
+        (selectedEstado === "aprobado" && a.aprobado) ||
+        (selectedEstado === "desaprobado" && !a.aprobado);
 
-    return matchesSearch && matchesSector && matchesEstado;
-  });
+      return matchesSearch && matchesSector && matchesEstado;
+    },
+  );
 
   return (
     <div className="space-y-8 max-w-4xl mx-auto">
@@ -260,11 +301,13 @@ export default function DetalleCapacitacionPage() {
             <div className="flex flex-wrap items-center gap-3 mt-1.5">
               <span className="text-xs text-slate-400 font-semibold flex items-center gap-1 shrink-0">
                 <Calendar className="h-3.5 w-3.5" />
-                {cap.fecha ? cap.fecha.split("T")[0].split("-").reverse().join("/") : ""}
+                {cap.fecha
+                  ? cap.fecha.split("T")[0].split("-").reverse().join("/")
+                  : ""}
               </span>
               <span
                 className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider border shrink-0 ${estadoColor(
-                  cap.estado
+                  cap.estado,
                 )}`}
               >
                 {cap.estado}
@@ -328,15 +371,21 @@ export default function DetalleCapacitacionPage() {
         </div>
       </div>
 
-      {/* Temario */}
+      {/* Temario con soporte para HTML e Imágenes y estilos de listas garantizados */}
       {cap.temario && (
         <div className="bg-white rounded-2xl border border-slate-200 p-6">
           <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-3">
             Temario
           </h2>
-          <p className="text-sm text-slate-600 whitespace-pre-line">
-            {cap.temario}
-          </p>
+          <div
+            className="text-sm text-slate-700 leading-relaxed 
+        [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2 [&_ul]:space-y-1 
+        [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-2 [&_ol]:space-y-1 
+        [&_p]:mb-2 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-slate-900 [&_h2]:mt-3 [&_h2]:mb-1
+        [&_strong]:font-bold [&_em]:italic 
+        [&_img]:rounded-xl [&_img]:max-w-full [&_img]:my-3 [&_img]:shadow-xs"
+            dangerouslySetInnerHTML={{ __html: cap.temario }}
+          />
         </div>
       )}
 
@@ -362,7 +411,9 @@ export default function DetalleCapacitacionPage() {
         {loadingQr ? (
           <div className="flex flex-col items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-600"></div>
-            <p className="text-xs text-slate-400 mt-3 font-semibold">Cargando código QR...</p>
+            <p className="text-xs text-slate-400 mt-3 font-semibold">
+              Cargando código QR...
+            </p>
           </div>
         ) : qrData ? (
           <div className="flex flex-col items-center gap-4 py-4 animate-in fade-in duration-300">
@@ -449,7 +500,8 @@ export default function DetalleCapacitacionPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
             <Users className="h-4 w-4 text-blue-600" />
-            Asistencias y Evaluaciones ({cap.capacitacion_asistencias?.length || 0})
+            Asistencias y Evaluaciones (
+            {cap.capacitacion_asistencias?.length || 0})
           </h2>
 
           <div className="flex gap-2">
@@ -473,52 +525,54 @@ export default function DetalleCapacitacionPage() {
         </div>
 
         {/* Barra de Filtros */}
-        {cap.capacitacion_asistencias && cap.capacitacion_asistencias.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-            {/* Búsqueda */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Buscar por empleado o DNI..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500"
-              />
-            </div>
+        {cap.capacitacion_asistencias &&
+          cap.capacitacion_asistencias.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+              {/* Búsqueda */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar por empleado o DNI..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500"
+                />
+              </div>
 
-            {/* Sector */}
-            <div>
-              <select
-                value={selectedSector}
-                onChange={(e) => setSelectedSector(e.target.value)}
-                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500"
-              >
-                <option value="todos">Todos los sectores</option>
-                {sectors.map((sec) => (
-                  <option key={sec} value={sec}>
-                    {sec}
-                  </option>
-                ))}
-              </select>
-            </div>
+              {/* Sector */}
+              <div>
+                <select
+                  value={selectedSector}
+                  onChange={(e) => setSelectedSector(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500"
+                >
+                  <option value="todos">Todos los sectores</option>
+                  {sectors.map((sec) => (
+                    <option key={sec} value={sec}>
+                      {sec}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            {/* Estado */}
-            <div>
-              <select
-                value={selectedEstado}
-                onChange={(e) => setSelectedEstado(e.target.value)}
-                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500"
-              >
-                <option value="todos">Todos los estados</option>
-                <option value="aprobado">Aprobados</option>
-                <option value="desaprobado">Reprobados</option>
-              </select>
+              {/* Estado */}
+              <div>
+                <select
+                  value={selectedEstado}
+                  onChange={(e) => setSelectedEstado(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500"
+                >
+                  <option value="todos">Todos los estados</option>
+                  <option value="aprobado">Aprobados</option>
+                  <option value="desaprobado">Reprobados</option>
+                </select>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {!cap.capacitacion_asistencias || cap.capacitacion_asistencias.length === 0 ? (
+        {!cap.capacitacion_asistencias ||
+        cap.capacitacion_asistencias.length === 0 ? (
           <div className="text-center py-8">
             <Users className="h-10 w-10 text-slate-300 mx-auto mb-3" />
             <p className="text-sm text-slate-500">
@@ -529,7 +583,8 @@ export default function DetalleCapacitacionPage() {
           <div className="text-center py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
             <Search className="h-8 w-8 text-slate-300 mx-auto mb-2" />
             <p className="text-xs text-slate-500 font-semibold">
-              No se encontraron asistencias que coincidan con los filtros aplicados.
+              No se encontraron asistencias que coincidan con los filtros
+              aplicados.
             </p>
           </div>
         ) : (
@@ -589,7 +644,9 @@ export default function DetalleCapacitacionPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
           <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl border border-slate-100 flex flex-col space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Eliminar Capacitación</h3>
+              <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">
+                Eliminar Capacitación
+              </h3>
               <button
                 type="button"
                 onClick={() => setShowConfirmDelete(false)}
@@ -600,7 +657,9 @@ export default function DetalleCapacitacionPage() {
             </div>
 
             <p className="text-sm text-slate-600 font-medium">
-              ¿Estás seguro de que deseas eliminar esta capacitación? Esta acción no se puede deshacer y borrará permanentemente todas las preguntas y asistencias registradas.
+              ¿Estás seguro de que deseas eliminar esta capacitación? Esta
+              acción no se puede deshacer y borrará permanentemente todas las
+              preguntas y asistencias registradas.
             </p>
 
             <div className="flex gap-2 pt-2">
@@ -641,7 +700,8 @@ export default function DetalleCapacitacionPage() {
             </div>
 
             <p className="text-xs text-slate-500 font-medium">
-              Compartí el enlace de evaluación pública con los empleados que asistieron a la capacitación.
+              Compartí el enlace de evaluación pública con los empleados que
+              asistieron a la capacitación.
             </p>
 
             <div className="space-y-2 pt-2">
@@ -652,7 +712,7 @@ export default function DetalleCapacitacionPage() {
                     typeof window !== "undefined"
                       ? `${window.location.origin}/evaluacion/${id}`
                       : ""
-                  }`
+                  }`,
                 )}`}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -668,13 +728,15 @@ export default function DetalleCapacitacionPage() {
                   </svg>
                   Compartir por WhatsApp
                 </span>
-                <span className="text-[10px] text-emerald-600 font-black">ABRIR</span>
+                <span className="text-[10px] text-emerald-600 font-black">
+                  ABRIR
+                </span>
               </a>
 
               {/* Email */}
               <a
                 href={`mailto:?subject=${encodeURIComponent(
-                  `Evaluación de Capacitación: ${cap.titulo}`
+                  `Evaluación de Capacitación: ${cap.titulo}`,
                 )}&body=${encodeURIComponent(
                   `Hola,\n\nTe comparto el link para completar la evaluación de la capacitación "${
                     cap.titulo
@@ -682,7 +744,7 @@ export default function DetalleCapacitacionPage() {
                     typeof window !== "undefined"
                       ? `${window.location.origin}/evaluacion/${id}`
                       : ""
-                  }\n\nSaludos.`
+                  }\n\nSaludos.`,
                 )}`}
                 className="w-full py-3 px-4 bg-blue-50 hover:bg-blue-100 border border-blue-250 rounded-xl flex items-center justify-between text-blue-800 transition-all cursor-pointer font-bold text-xs"
               >
@@ -690,7 +752,9 @@ export default function DetalleCapacitacionPage() {
                   <Mail className="h-5 w-5 text-blue-600" />
                   Compartir por Email
                 </span>
-                <span className="text-[10px] text-blue-600 font-black">ABRIR</span>
+                <span className="text-[10px] text-blue-600 font-black">
+                  ABRIR
+                </span>
               </a>
 
               {/* Copiar Enlace */}
@@ -698,7 +762,7 @@ export default function DetalleCapacitacionPage() {
                 onClick={() => {
                   if (typeof window !== "undefined") {
                     navigator.clipboard.writeText(
-                      `${window.location.origin}/evaluacion/${id}`
+                      `${window.location.origin}/evaluacion/${id}`,
                     );
                     setCopied(true);
                     setTimeout(() => setCopied(false), 2000);
@@ -712,7 +776,9 @@ export default function DetalleCapacitacionPage() {
                   ) : (
                     <Copy className="h-5 w-5 text-slate-600" />
                   )}
-                  {copied ? "¡Enlace copiado!" : "Copiar enlace al portapapeles"}
+                  {copied
+                    ? "¡Enlace copiado!"
+                    : "Copiar enlace al portapapeles"}
                 </span>
                 <span className="text-[10px] text-slate-500 font-black">
                   {copied ? "HECHO" : "COPIAR"}

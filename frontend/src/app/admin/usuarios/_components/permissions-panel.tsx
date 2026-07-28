@@ -1,15 +1,23 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import type { AdminUsuario } from "@/types";
-import { api } from "@/lib/api";
 import {
   MODULE_PERMISSIONS,
   getAccessBadgeClasses,
   getAccessLabel,
-  AccessLevel
+  AccessLevel,
 } from "@/lib/adminUsuarios";
-import { ClipboardCheck, ListChecks, ShieldCheck, Users, Save, Loader2, CheckCircle2 } from "lucide-react";
+import {
+  ClipboardCheck,
+  ListChecks,
+  ShieldCheck,
+  Users,
+  Save,
+  Loader2,
+  CheckCircle2,
+} from "lucide-react";
+import { useAdminUsuarios } from "@/hooks/useAdminUsuarios";
 
 type PermissionsPanelProps = {
   usuario: AdminUsuario | null;
@@ -26,6 +34,7 @@ const roleIcons = {
 const ACCESS_LEVELS: AccessLevel[] = ["total", "lectura", "oculto"];
 
 export function PermissionsPanel({ usuario, onUpdate }: PermissionsPanelProps) {
+  const { updateUsuario } = useAdminUsuarios();
   const [activeRole, setActiveRole] = useState<AdminUsuario["rol"]>(
     usuario?.rol || "preventor",
   );
@@ -36,8 +45,9 @@ export function PermissionsPanel({ usuario, onUpdate }: PermissionsPanelProps) {
   useEffect(() => {
     if (usuario) {
       setActiveRole(usuario.rol);
-      // Si el usuario ya tiene permisos guardados, usarlos. Si no, usar los defaults del rol.
-      setCustomPermissions(usuario.permisos_personalizados || MODULE_PERMISSIONS[usuario.rol]);
+      setCustomPermissions(
+        usuario.permisos_personalizados || MODULE_PERMISSIONS[usuario.rol],
+      );
     } else {
       setCustomPermissions([]);
       setSaved(false);
@@ -46,26 +56,31 @@ export function PermissionsPanel({ usuario, onUpdate }: PermissionsPanelProps) {
 
   const handleToggleAccess = (moduleName: string) => {
     if (!usuario) return;
-    
-    setCustomPermissions(prev => prev.map(m => {
-      if (m.module === moduleName) {
-        const currentIndex = ACCESS_LEVELS.indexOf(m.access);
-        const nextIndex = (currentIndex + 1) % ACCESS_LEVELS.length;
-        return { ...m, access: ACCESS_LEVELS[nextIndex] };
-      }
-      return m;
-    }));
+
+    setCustomPermissions((prev) =>
+      prev.map((m) => {
+        if (m.module === moduleName) {
+          const currentIndex = ACCESS_LEVELS.indexOf(m.access);
+          const nextIndex = (currentIndex + 1) % ACCESS_LEVELS.length;
+          return { ...m, access: ACCESS_LEVELS[nextIndex] };
+        }
+        return m;
+      }),
+    );
     setSaved(false);
   };
 
   const handleSave = async () => {
     if (!usuario) return;
-    
+
     try {
       setSaving(true);
-      await api.put(`/admin/usuarios/${usuario.id}`, {
-        ...usuario,
-        permisos_personalizados: customPermissions
+      await updateUsuario({
+        id: usuario.id,
+        payload: {
+          ...usuario,
+          permisos_personalizados: customPermissions,
+        } as any,
       });
       setSaved(true);
       if (onUpdate) onUpdate();
@@ -106,7 +121,7 @@ export function PermissionsPanel({ usuario, onUpdate }: PermissionsPanelProps) {
             <span>Módulo</span>
             <span>Acceso (Click para cambiar)</span>
           </div>
-          <div className="divide-y divide-blue-100/80 max-h-[400px] overflow-y-auto custom-scrollbar">
+          <div className="divide-y divide-blue-100/80 max-h-100 overflow-y-auto custom-scrollbar">
             {customPermissions.length > 0 ? (
               customPermissions.map((module) => (
                 <div
@@ -138,13 +153,13 @@ export function PermissionsPanel({ usuario, onUpdate }: PermissionsPanelProps) {
         </div>
 
         {usuario && (
-          <button 
+          <button
             onClick={handleSave}
             disabled={saving}
             className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-black transition-all active:scale-95 ${
-              saved 
-                ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' 
-                : 'bg-blue-700 hover:bg-blue-800 text-white shadow-lg shadow-blue-700/20'
+              saved
+                ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"
+                : "bg-blue-700 hover:bg-blue-800 text-white shadow-lg shadow-blue-700/20"
             }`}
           >
             {saving ? (
@@ -154,7 +169,11 @@ export function PermissionsPanel({ usuario, onUpdate }: PermissionsPanelProps) {
             ) : (
               <Save className="h-4 w-4" />
             )}
-            {saving ? 'Guardando...' : saved ? 'Permisos Guardados' : 'Guardar Permisos Personalizados'}
+            {saving
+              ? "Guardando..."
+              : saved
+                ? "Permisos Guardados"
+                : "Guardar Permisos Personalizados"}
           </button>
         )}
 
@@ -163,7 +182,8 @@ export function PermissionsPanel({ usuario, onUpdate }: PermissionsPanelProps) {
             <span className="h-2.5 w-2.5 rounded-full bg-blue-500" /> Total
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-sky-500" /> Solo lectura
+            <span className="h-2.5 w-2.5 rounded-full bg-sky-500" /> Solo
+            lectura
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded-full bg-slate-300" /> Oculto

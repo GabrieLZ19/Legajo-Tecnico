@@ -54,3 +54,21 @@ export const useInformeDetalle = (id: string) => {
     enabled: !!id,
   });
 };
+
+export const descargarInformePdf = async (id: string) => {
+  const response = await api.get(`/informes/${id}/pdf`, { responseType: 'blob' });
+  return response.data;
+};
+
+export const subirEvidenciaInforme = async (id: string, formData: FormData) => {
+  const { data } = await api.post(`/informes/${id}/evidencia`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+};
+
+export const firmarInforme = async (endpoint: string, payload: { firma_persona?: string; aclaracion_persona?: string }) => {
+  const { data } = await api.post(endpoint, payload);
+  return data;
+};
+

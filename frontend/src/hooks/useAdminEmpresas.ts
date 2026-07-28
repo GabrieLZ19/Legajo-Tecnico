@@ -23,7 +23,13 @@ export type EmpresaDetalle = Empresa & {
 
 export type PreventorActivo = Perfil;
 
+export const getEmpresaDetalle = async (id: string) => {
+  const { data } = await api.get(`/empresas/${id}`);
+  return data;
+};
+
 export function useAdminEmpresas() {
+
   const queryClient = useQueryClient();
 
   // Query: list of all companies

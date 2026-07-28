@@ -3,9 +3,13 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
-import { useInformeDetalle } from "@/hooks/useInformes";
+import {
+  useInformeDetalle,
+  useInformes,
+  subirEvidenciaInforme,
+} from "@/hooks/useInformes";
+
 import { usePlantillas } from "@/hooks/usePlantillas";
-import { api } from "@/lib/api";
 import {
   Calendar,
   Clock,
@@ -19,21 +23,19 @@ import {
   Building2,
   ArrowLeft,
   ChevronDown,
-  Save,
   FileText,
   AlertCircle,
 } from "lucide-react";
 import { useAlert } from "@/context/AlertContext";
 
 export default function EditarInformePage() {
-  const { empresa } = useAuth();
   const router = useRouter();
-  const { id } = useParams();
+  const params = useParams();
+  const id = params.id as string;
   const { showAlert } = useAlert();
-
-  const { data: informe, isLoading: loadingInforme } = useInformeDetalle(
-    id as string,
-  );
+  const { user, empresa } = useAuth();
+  const { editarInforme } = useInformes(empresa?.id);
+  const { data: informe, isLoading: loadingInforme } = useInformeDetalle(id);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,7 +70,9 @@ export default function EditarInformePage() {
   const [showObsModal, setShowObsModal] = useState(false);
   const [editingObs, setEditingObs] = useState<ObservacionLocal | null>(null);
   const [obsDetalle, setObsDetalle] = useState("");
-  const [obsAcciones, setObsAcciones] = useState<AccionLocal[]>([{ descripcion: "", responsable: "" }]);
+  const [obsAcciones, setObsAcciones] = useState<AccionLocal[]>([
+    { descripcion: "", responsable: "" },
+  ]);
   const [obsImagenFile, setObsImagenFile] = useState<File | null>(null);
   const [obsPreviewUrl, setObsPreviewUrl] = useState<string | null>(null);
   const [obsEvidenciaUrl, setObsEvidenciaUrl] = useState<string | null>(null);
@@ -202,9 +206,10 @@ export default function EditarInformePage() {
       // Inicializar observaciones cargadas estructuradas
       if (informe.puntos_mejora) {
         const loadedObs = informe.puntos_mejora.map((pm: any) => {
-          const matchingAccs = informe.acciones_mejora?.filter(
-            (acc: any) => acc.punto_mejora_id === pm.id,
-          ) || [];
+          const matchingAccs =
+            informe.acciones_mejora?.filter(
+              (acc: any) => acc.punto_mejora_id === pm.id,
+            ) || [];
           return {
             id_temp: pm.id,
             id: pm.id,
@@ -295,7 +300,7 @@ export default function EditarInformePage() {
     setObsAcciones(
       obs.acciones && obs.acciones.length > 0
         ? obs.acciones.map((a) => ({ ...a }))
-        : [{ descripcion: "", responsable: "" }]
+        : [{ descripcion: "", responsable: "" }],
     );
     setObsImagenFile(obs.imagenFile || null);
     setObsPreviewUrl(obs.previewUrl || null);
@@ -317,7 +322,9 @@ export default function EditarInformePage() {
     if (!obsDetalle.trim()) return;
 
     // Filtrar acciones vacías
-    const filteredAcciones = obsAcciones.filter((a) => a.descripcion.trim().length > 0);
+    const filteredAcciones = obsAcciones.filter(
+      (a) => a.descripcion.trim().length > 0,
+    );
 
     if (editingObs) {
       setObservacionesCargadas((prev) =>
@@ -391,10 +398,7 @@ export default function EditarInformePage() {
       };
 
       // 3. Guardar cambios
-      const { data: updatedInforme } = await api.patch(
-        `/informes/${id}`,
-        payload,
-      );
+      const updatedInforme = await editarInforme({ id, data: payload as any });
 
       // 4. Si hay imágenes nuevas seleccionadas durante la edición, subirlas
       const obsConImagenNueva = observacionesCargadas.filter(
@@ -409,9 +413,7 @@ export default function EditarInformePage() {
           formData.append("evidencia", obs.imagenFile!);
           formData.append("punto_mejora_id", pmCreado.id);
 
-          await api.post(`/informes/${id}/evidencia`, formData, {
-            headers: { "Content-Type": "multipart/form-data" },
-          });
+          await subirEvidenciaInforme(id, formData);
         }
       }
 
@@ -718,7 +720,7 @@ export default function EditarInformePage() {
                 onMouseUp={updateToolbarState}
                 onFocus={updateToolbarState}
                 onClick={updateToolbarState}
-                className="block w-full p-4 text-sm text-slate-700 bg-slate-50/40 border-0 focus:ring-0 focus:outline-hidden min-h-[120px] font-medium leading-relaxed overflow-y-auto rounded-b-xl"
+                className="block w-full p-4 text-sm text-slate-700 bg-slate-50/40 border-0 focus:ring-0 focus:outline-hidden min-h-30 font-medium leading-relaxed overflow-y-auto rounded-b-xl"
               />
             </div>
           </div>
@@ -797,10 +799,17 @@ export default function EditarInformePage() {
                       {obs.acciones && obs.acciones.length > 0 && (
                         <div className="space-y-1.5 mt-1.5">
                           {obs.acciones.map((acc, accIdx) => (
-                            <div key={accIdx} className="text-xs text-slate-500 font-semibold bg-white border border-slate-100 rounded-lg p-2 leading-relaxed flex items-center justify-between">
+                            <div
+                              key={accIdx}
+                              className="text-xs text-slate-500 font-semibold bg-white border border-slate-100 rounded-lg p-2 leading-relaxed flex items-center justify-between"
+                            >
                               <span>
                                 <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide mr-1.5">
-                                  Acción {obs.acciones.length > 1 ? `#${accIdx + 1}` : ""}:
+                                  Acción{" "}
+                                  {obs.acciones.length > 1
+                                    ? `#${accIdx + 1}`
+                                    : ""}
+                                  :
                                 </span>{" "}
                                 {acc.descripcion}
                               </span>
@@ -950,16 +959,24 @@ export default function EditarInformePage() {
                   </label>
                   <button
                     type="button"
-                    onClick={() => setObsAcciones(prev => [...prev, { descripcion: "", responsable: "" }])}
+                    onClick={() =>
+                      setObsAcciones((prev) => [
+                        ...prev,
+                        { descripcion: "", responsable: "" },
+                      ])
+                    }
                     className="inline-flex items-center text-[10px] font-bold text-blue-655 hover:underline cursor-pointer"
                   >
                     + Nueva acción
                   </button>
                 </div>
-                
+
                 <div className="space-y-3 max-h-52 overflow-y-auto pr-1">
                   {obsAcciones.map((acc, index) => (
-                    <div key={index} className="space-y-2 p-3 bg-slate-50/50 rounded-xl border border-slate-100 relative">
+                    <div
+                      key={index}
+                      className="space-y-2 p-3 bg-slate-50/50 rounded-xl border border-slate-100 relative"
+                    >
                       <div className="flex items-center justify-between">
                         <span className="text-[9px] font-black text-slate-400 uppercase tracking-wide">
                           Acción #{index + 1}
@@ -967,14 +984,18 @@ export default function EditarInformePage() {
                         {obsAcciones.length > 1 && (
                           <button
                             type="button"
-                            onClick={() => setObsAcciones(prev => prev.filter((_, i) => i !== index))}
+                            onClick={() =>
+                              setObsAcciones((prev) =>
+                                prev.filter((_, i) => i !== index),
+                              )
+                            }
                             className="text-[9px] font-bold text-red-500 hover:underline cursor-pointer"
                           >
                             Eliminar
                           </button>
                         )}
                       </div>
-                      
+
                       <div className="grid grid-cols-1 gap-2">
                         <div>
                           <input
@@ -984,7 +1005,13 @@ export default function EditarInformePage() {
                             required
                             onChange={(e) => {
                               const newDesc = e.target.value;
-                              setObsAcciones(prev => prev.map((item, i) => i === index ? { ...item, descripcion: newDesc } : item));
+                              setObsAcciones((prev) =>
+                                prev.map((item, i) =>
+                                  i === index
+                                    ? { ...item, descripcion: newDesc }
+                                    : item,
+                                ),
+                              );
                             }}
                             className="block w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-hidden focus:ring-2 focus:ring-blue-600/25 focus:border-blue-600 transition-all font-bold text-slate-700 bg-white"
                           />
@@ -996,7 +1023,13 @@ export default function EditarInformePage() {
                             value={acc.responsable}
                             onChange={(e) => {
                               const newResp = e.target.value;
-                              setObsAcciones(prev => prev.map((item, i) => i === index ? { ...item, responsable: newResp } : item));
+                              setObsAcciones((prev) =>
+                                prev.map((item, i) =>
+                                  i === index
+                                    ? { ...item, responsable: newResp }
+                                    : item,
+                                ),
+                              );
                             }}
                             className="block w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-hidden focus:ring-2 focus:ring-blue-600/25 focus:border-blue-600 transition-all font-bold text-slate-700 bg-white"
                           />
@@ -1022,7 +1055,10 @@ export default function EditarInformePage() {
               <button
                 type="button"
                 onClick={handleSaveObservacion}
-                disabled={!obsDetalle.trim() || obsAcciones.some(a => !a.descripcion.trim())}
+                disabled={
+                  !obsDetalle.trim() ||
+                  obsAcciones.some((a) => !a.descripcion.trim())
+                }
                 className="px-4 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {editingObs ? "Guardar Cambios" : "Guardar Observación"}

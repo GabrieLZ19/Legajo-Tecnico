@@ -1,8 +1,7 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { api } from "@/lib/api";
 import { Capacitacion } from "@/types";
 import Link from "next/link";
 import {
@@ -14,8 +13,11 @@ import {
   Calendar,
 } from "lucide-react";
 
+import { useCapacitaciones } from "@/hooks/useCapacitaciones";
+
 export default function CapacitacionesPage() {
   const { user, empresa } = useAuth();
+  const { getCapacitaciones } = useCapacitaciones();
   const [capacitaciones, setCapacitaciones] = useState<Capacitacion[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtroEstado, setFiltroEstado] = useState<string>("todas");
@@ -31,8 +33,8 @@ export default function CapacitacionesPage() {
   const fetchCapacitaciones = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get(`/capacitaciones?empresa_id=${empresa!.id}`);
-      setCapacitaciones(data.capacitaciones || []);
+      const data = await getCapacitaciones(empresa!.id);
+      setCapacitaciones(data || []);
     } catch (err) {
       console.error("Error cargando capacitaciones:", err);
     } finally {
@@ -53,9 +55,10 @@ export default function CapacitacionesPage() {
     }
   };
 
-  const filtered = filtroEstado === "todas"
-    ? capacitaciones
-    : capacitaciones.filter((c) => c.estado === filtroEstado);
+  const filtered =
+    filtroEstado === "todas"
+      ? capacitaciones
+      : capacitaciones.filter((c) => c.estado === filtroEstado);
 
   return (
     <div className="space-y-8">
@@ -106,7 +109,10 @@ export default function CapacitacionesPage() {
       {loading ? (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-20 bg-white border border-slate-200 rounded-2xl animate-pulse" />
+            <div
+              key={i}
+              className="h-20 bg-white border border-slate-200 rounded-2xl animate-pulse"
+            />
           ))}
         </div>
       ) : filtered.length === 0 ? (
@@ -144,7 +150,9 @@ export default function CapacitacionesPage() {
                   <div className="flex flex-wrap items-center gap-y-1.5 gap-x-3 mt-1.5">
                     <span className="text-[11px] text-slate-400 font-semibold flex items-center gap-1 shrink-0">
                       <Calendar className="h-3.5 w-3.5" />
-                      {cap.fecha ? cap.fecha.split("T")[0].split("-").reverse().join("/") : ""}
+                      {cap.fecha
+                        ? cap.fecha.split("T")[0].split("-").reverse().join("/")
+                        : ""}
                     </span>
                     <span className="text-[11px] text-slate-400 font-semibold flex items-center gap-1 shrink-0">
                       <HelpCircle className="h-3.5 w-3.5" />
@@ -160,7 +168,7 @@ export default function CapacitacionesPage() {
               <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 border-t border-slate-100 sm:border-t-0 pt-3 sm:pt-0">
                 <span
                   className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider border ${estadoColor(
-                    cap.estado
+                    cap.estado,
                   )}`}
                 >
                   {cap.estado}

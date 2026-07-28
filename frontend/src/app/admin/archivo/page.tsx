@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { api } from "@/lib/api";
+import { useArchivo } from "@/hooks/useAdminExtra";
 import type { AdminEmpresaOption, InformeVisita } from "@/types";
 import {
   ArrowLeft,
@@ -56,7 +56,9 @@ const FILTERS: Array<{ value: ArchiveFilter; label: string }> = [
 ];
 
 export default function AdminArchivoPage() {
+  const { getArchivoData, descargarPdfArchivo } = useArchivo();
   const [empresas, setEmpresas] = useState<AdminEmpresaOption[]>([]);
+
   const [informes, setInformes] = useState<InformeVisita[]>([]);
   const [selectedEmpresaId, setSelectedEmpresaId] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
@@ -70,34 +72,34 @@ export default function AdminArchivoPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
-  const loadArchive = useCallback(async (silent = false) => {
-    try {
-      if (silent) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
+  const loadArchive = useCallback(
+    async (silent = false) => {
+      try {
+        if (silent) {
+          setRefreshing(true);
+        } else {
+          setLoading(true);
+        }
+
+        const res = await getArchivoData();
+
+        setEmpresas(res.empresas as AdminEmpresaOption[]);
+        setInformes(res.informes as InformeVisita[]);
+        setErrorMessage(null);
+      } catch (error) {
+        console.error("Error loading archive data:", error);
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "No se pudo cargar el archivo histórico.",
+        );
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-
-      const [empresasResponse, informesResponse] = await Promise.all([
-        api.get("/admin/empresas"),
-        api.get("/informes"),
-      ]);
-
-      setEmpresas(empresasResponse.data as AdminEmpresaOption[]);
-      setInformes(informesResponse.data as InformeVisita[]);
-      setErrorMessage(null);
-    } catch (error) {
-      console.error("Error loading archive data:", error);
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "No se pudo cargar el archivo histórico.",
-      );
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
+    },
+    [getArchivoData],
+  );
 
   useEffect(() => {
     void loadArchive();
@@ -273,12 +275,11 @@ export default function AdminArchivoPage() {
     setDownloadingId(documento.id);
 
     try {
-      const response = await api.get(`/informes/${documento.id}/pdf`, {
-        responseType: "blob",
-      });
+      const pdfBlob = await descargarPdfArchivo(documento.id);
 
-      const blob = new Blob([response.data], { type: "application/pdf" });
+      const blob = new Blob([pdfBlob], { type: "application/pdf" });
       const url = window.URL.createObjectURL(blob);
+
       const link = document.createElement("a");
       link.href = url;
       link.download = `constancia_visita_${String(

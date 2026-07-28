@@ -40,8 +40,8 @@ export default function InformesPage() {
     new Set(
       informes
         ?.map((inf) => inf.lugar_visita)
-        .filter((l): l is string => !!l) || []
-    )
+        .filter((l): l is string => !!l) || [],
+    ),
   ).sort();
 
   // Formateador de fecha para la tabla (ej: "12 May")
@@ -70,20 +70,37 @@ export default function InformesPage() {
   const getEstadoBadge = (estado: string) => {
     switch (estado) {
       case "borrador":
-        return { label: "Borrador", classes: "bg-slate-100 text-slate-700 border border-slate-200" };
+        return {
+          label: "Borrador",
+          classes: "bg-slate-100 text-slate-700 border border-slate-200",
+        };
       case "pendiente_preventor":
-        return { label: "Pte. Preventor", classes: "bg-blue-50 text-blue-700 border border-blue-100" };
+        return {
+          label: "Pte. Preventor",
+          classes: "bg-blue-50 text-blue-700 border border-blue-100",
+        };
       case "pendiente_dueno":
-        return { label: "Pte. Dueño", classes: "bg-amber-50 text-amber-700 border border-amber-100" };
+        return {
+          label: "Pte. Dueño",
+          classes: "bg-amber-50 text-amber-700 border border-amber-100",
+        };
       case "firmado":
-        return { label: "Cerrado", classes: "bg-emerald-50 text-emerald-700 border border-emerald-100" };
+        return {
+          label: "Cerrado",
+          classes: "bg-emerald-50 text-emerald-700 border border-emerald-100",
+        };
       case "archivado":
-        return { label: "Archivado", classes: "bg-indigo-50 text-indigo-700 border border-indigo-100" };
+        return {
+          label: "Archivado",
+          classes: "bg-indigo-50 text-indigo-700 border border-indigo-100",
+        };
       default:
-        return { label: estado, classes: "bg-slate-100 text-slate-700 border border-slate-200" };
+        return {
+          label: estado,
+          classes: "bg-slate-100 text-slate-700 border border-slate-200",
+        };
     }
   };
-
 
   // Aplicar filtros al hacer clic en el botón o enviar el formulario
   const handleFiltrar = (e?: React.FormEvent) => {
@@ -121,12 +138,20 @@ export default function InformesPage() {
     const matchesHasta = !endDate || visitDate <= endDate;
 
     // Filtro por estado de firma
-    const matchesEstado = appliedEstado === "todos" || inf.estado_firma === appliedEstado;
+    const matchesEstado =
+      appliedEstado === "todos" || inf.estado_firma === appliedEstado;
 
     // Filtro por lugar / planta
-    const matchesLugar = appliedLugar === "todos" || inf.lugar_visita === appliedLugar;
+    const matchesLugar =
+      appliedLugar === "todos" || inf.lugar_visita === appliedLugar;
 
-    return matchesText && matchesDesde && matchesHasta && matchesEstado && matchesLugar;
+    return (
+      matchesText &&
+      matchesDesde &&
+      matchesHasta &&
+      matchesEstado &&
+      matchesLugar
+    );
   });
 
   return (
@@ -183,7 +208,7 @@ export default function InformesPage() {
         </div>
 
         {/* Filtro Estado */}
-        <div className="flex items-center gap-2 border border-slate-200 rounded-xl bg-white px-3 py-2 min-w-[150px] hover:border-slate-300 transition-colors">
+        <div className="flex items-center gap-2 border border-slate-200 rounded-xl bg-white px-3 py-2 min-w-37.5 hover:border-slate-300 transition-colors">
           <div className="flex flex-col flex-1 min-w-0">
             <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider leading-none">
               Estado
@@ -204,7 +229,7 @@ export default function InformesPage() {
         </div>
 
         {/* Filtro Lugar / Planta */}
-        <div className="flex items-center gap-2 border border-slate-200 rounded-xl bg-white px-3 py-2 min-w-[150px] hover:border-slate-300 transition-colors">
+        <div className="flex items-center gap-2 border border-slate-200 rounded-xl bg-white px-3 py-2 min-w-37.5 hover:border-slate-300 transition-colors">
           <div className="flex flex-col flex-1 min-w-0">
             <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider leading-none">
               Lugar / Planta
@@ -234,7 +259,7 @@ export default function InformesPage() {
               } catch (err) {}
             }
           }}
-          className="flex items-center gap-2 border border-slate-200 rounded-xl bg-white px-3 py-2 min-w-[165px] cursor-pointer hover:border-slate-300 transition-colors"
+          className="flex items-center gap-2 border border-slate-200 rounded-xl bg-white px-3 py-2 min-w-41.25 cursor-pointer hover:border-slate-300 transition-colors"
         >
           <Calendar className="h-4 w-4 text-blue-600 shrink-0" />
           <div className="flex flex-col flex-1 min-w-0">
@@ -266,7 +291,7 @@ export default function InformesPage() {
               } catch (err) {}
             }
           }}
-          className="flex items-center gap-2 border border-slate-200 rounded-xl bg-white px-3 py-2 min-w-[165px] cursor-pointer hover:border-slate-300 transition-colors"
+          className="flex items-center gap-2 border border-slate-200 rounded-xl bg-white px-3 py-2 min-w-41.25 cursor-pointer hover:border-slate-300 transition-colors"
         >
           <Calendar className="h-4 w-4 text-blue-600 shrink-0" />
           <div className="flex flex-col flex-1 min-w-0">
@@ -313,16 +338,28 @@ export default function InformesPage() {
               <table className="min-w-full divide-y divide-slate-100 text-left text-sm">
                 <thead className="bg-slate-50">
                   <tr>
-                    <th scope="col" className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32">
+                    <th
+                      scope="col"
+                      className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32"
+                    >
                       Fecha
                     </th>
-                    <th scope="col" className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    <th
+                      scope="col"
+                      className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider"
+                    >
                       Empresa — Área
                     </th>
-                    <th scope="col" className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    <th
+                      scope="col"
+                      className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider"
+                    >
                       Resumen
                     </th>
-                    <th scope="col" className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32">
+                    <th
+                      scope="col"
+                      className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32"
+                    >
                       Estado
                     </th>
                     <th scope="col" className="relative px-6 py-4 w-28">
@@ -332,30 +369,40 @@ export default function InformesPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
                   {filteredInformes.map((inf) => (
-                    <tr key={inf.id} className="hover:bg-slate-50/50 transition-colors">
+                    <tr
+                      key={inf.id}
+                      className="hover:bg-slate-50/50 transition-colors"
+                    >
                       <td className="whitespace-nowrap px-6 py-4.5 font-bold text-slate-700">
                         {formatTableDate(inf.fecha_hora_visita)}
                       </td>
                       <td className="whitespace-nowrap px-6 py-4.5 font-bold text-slate-900">
-                        {empresa?.razon_social || "Empresa"} — {inf.lugar_visita || "Planta 1"}
+                        {empresa?.razon_social || "Empresa"} —{" "}
+                        {inf.lugar_visita || "Planta 1"}
                       </td>
                       <td className="px-6 py-4.5 text-slate-500 font-medium">
                         <span className="line-clamp-1">
-                          {inf.actividad || "Relevamiento general de condiciones de higiene y seguridad."}
+                          {inf.actividad ||
+                            "Relevamiento general de condiciones de higiene y seguridad."}
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-6 py-4.5">
                         {(() => {
                           const badge = getEstadoBadge(inf.estado_firma);
                           return (
-                            <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold ${badge.classes}`}>
+                            <span
+                              className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold ${badge.classes}`}
+                            >
                               {badge.label}
                             </span>
                           );
                         })()}
                       </td>
                       <td className="whitespace-nowrap px-6 py-4.5 text-right text-sm font-bold">
-                        <Link href={`/informes/${inf.id}`} className="text-brand-primary hover:text-blue-600 transition-colors">
+                        <Link
+                          href={`/informes/${inf.id}`}
+                          className="text-brand-primary hover:text-blue-600 transition-colors"
+                        >
                           Ver detalle
                         </Link>
                       </td>
@@ -371,7 +418,10 @@ export default function InformesPage() {
             {filteredInformes.map((inf) => {
               const isFirmado = inf.estado_firma === "firmado";
               return (
-                <div key={inf.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs space-y-4">
+                <div
+                  key={inf.id}
+                  className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs space-y-4"
+                >
                   <div className="flex justify-between items-start gap-4">
                     <div>
                       <span className="text-xs font-black text-slate-400 font-sans block">
@@ -381,13 +431,16 @@ export default function InformesPage() {
                         {inf.actividad || "Relevamiento general"}
                       </span>
                       <span className="text-xs font-bold text-slate-500 font-sans block mt-1.5">
-                        {empresa?.razon_social} · {inf.lugar_visita || "Planta 1"}
+                        {empresa?.razon_social} ·{" "}
+                        {inf.lugar_visita || "Planta 1"}
                       </span>
                     </div>
                     {(() => {
                       const badge = getEstadoBadge(inf.estado_firma);
                       return (
-                        <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shrink-0 ${badge.classes}`}>
+                        <span
+                          className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shrink-0 ${badge.classes}`}
+                        >
                           {badge.label}
                         </span>
                       );
@@ -396,7 +449,9 @@ export default function InformesPage() {
 
                   <div className="flex items-center justify-between pt-3.5 border-t border-slate-100">
                     <span className="text-xs font-bold text-slate-400">
-                      {new Date(inf.fecha_hora_visita).toLocaleDateString("es-AR")}
+                      {new Date(inf.fecha_hora_visita).toLocaleDateString(
+                        "es-AR",
+                      )}
                     </span>
                     <Link
                       href={`/informes/${inf.id}`}

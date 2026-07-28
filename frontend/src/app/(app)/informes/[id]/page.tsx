@@ -2,8 +2,12 @@
 
 import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useInformeDetalle } from "@/hooks/useInformes";
-import { api } from "@/lib/api";
+import {
+  useInformeDetalle,
+  descargarInformePdf,
+  subirEvidenciaInforme,
+} from "@/hooks/useInformes";
+import { actualizarEstadoPlanAccion } from "@/hooks/usePlanAccion";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAlert } from "@/context/AlertContext";
 import { useAuth } from "@/hooks/useAuth";
@@ -13,14 +17,11 @@ import {
   MapPin,
   ShieldAlert,
   FileDown,
-  CheckCircle2,
-  Upload,
   PenTool,
   Scale,
   ArrowLeft,
-  Building2,
-  Clock,
   Camera,
+  Loader2,
   X,
   Share2,
   Copy,
@@ -29,7 +30,8 @@ import {
 } from "lucide-react";
 
 export default function InformeDetallePage() {
-  const { id } = useParams();
+  const params = useParams();
+  const id = params.id as string;
   const router = useRouter();
   const queryClient = useQueryClient();
   const { showAlert } = useAlert();
@@ -72,10 +74,8 @@ export default function InformeDetallePage() {
   const handleDescargarPDF = async () => {
     setDownloadingPdf(true);
     try {
-      const response = await api.get(`/informes/${id}/pdf`, {
-        responseType: "blob",
-      });
-      const blob = new Blob([response.data], { type: "application/pdf" });
+      const pdfData = await descargarInformePdf(id);
+      const blob = new Blob([pdfData], { type: "application/pdf" });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -93,6 +93,7 @@ export default function InformeDetallePage() {
       );
     } catch (err) {
       console.error(err);
+
       showAlert(
         "error",
         "Error al descargar",
@@ -152,9 +153,7 @@ export default function InformeDetallePage() {
     formData.append("punto_mejora_id", puntoMejoraId);
 
     try {
-      await api.post(`/informes/${id}/evidencia`, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      await subirEvidenciaInforme(id, formData);
       queryClient.invalidateQueries({ queryKey: ["informe", id] });
     } catch (err: any) {
       showAlert(
@@ -435,18 +434,50 @@ export default function InformeDetallePage() {
                         </span>
                       </div>
 
-                      {/* Imagen de evidencia del desvío si existe */}
-                      {pm.evidencia_url && (
-                        <div className="max-w-xs">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={pm.evidencia_url}
-                            alt="Evidencia desvío"
-                            onClick={() => setSelectedImage(pm.evidencia_url!)}
-                            className="h-20 rounded-lg object-cover border border-slate-200 cursor-pointer hover:opacity-90 transition-opacity"
-                          />
-                        </div>
-                      )}
+                      {/* Imagen de evidencia del desvío si existe o botón para subir si es preventor/admin */}
+                      <div className="flex items-center gap-3 pt-1">
+                        {pm.evidencia_url && (
+                          <div className="max-w-xs">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={pm.evidencia_url}
+                              alt="Evidencia desvío"
+                              onClick={() =>
+                                setSelectedImage(pm.evidencia_url!)
+                              }
+                              className="h-20 rounded-lg object-cover border border-slate-200 cursor-pointer hover:opacity-90 transition-opacity"
+                            />
+                          </div>
+                        )}
+
+                        {(user?.rol === "preventor" ||
+                          user?.rol === "admin") && (
+                          <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg transition-colors border border-slate-200">
+                            {uploadingId === pm.id ? (
+                              <>
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                <span>Subiendo...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Camera className="h-3.5 w-3.5" />
+                                <span>
+                                  {pm.evidencia_url
+                                    ? "Cambiar Evidencia"
+                                    : "Adjuntar Evidencia"}
+                                </span>
+                              </>
+                            )}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              disabled={uploadingId === pm.id}
+                              onChange={(e) => handleFileChange(pm.id, e)}
+                            />
+                          </label>
+                        )}
+                      </div>
 
                       {/* Acciones */}
                       {acciones.length > 0 && (
@@ -477,9 +508,10 @@ export default function InformeDetallePage() {
                                 onChange={async (e) => {
                                   const nuevoEstado = e.target.value as any;
                                   try {
-                                    await api.patch(`/plan-accion/${acc.id}`, {
-                                      estado: nuevoEstado,
-                                    });
+                                    await actualizarEstadoPlanAccion(
+                                      acc.id,
+                                      nuevoEstado,
+                                    );
                                     queryClient.invalidateQueries({
                                       queryKey: ["informe", id],
                                     });

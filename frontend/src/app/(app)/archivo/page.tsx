@@ -12,7 +12,6 @@ import {
   Clock,
   ArrowLeft,
   ChevronRight,
-  Calendar,
   X,
   Building2,
 } from "lucide-react";
@@ -47,7 +46,8 @@ export default function ArchivoPage() {
   const [fechaHasta, setFechaHasta] = useState("");
 
   // Determinar si hay alguna búsqueda o filtro de fecha activo
-  const isFilteringActive = searchQuery !== "" || fechaDesde !== "" || fechaHasta !== "";
+  const isFilteringActive =
+    searchQuery !== "" || fechaDesde !== "" || fechaHasta !== "";
 
   // Filtrar los informes de acuerdo a la búsqueda y fechas
   const filteredInformes = informes?.filter((inf) => {
@@ -105,7 +105,9 @@ export default function ArchivoPage() {
     if (!informes || currentYear === null || currentMonth === null) return [];
     return informes.filter((inf) => {
       const date = new Date(inf.fecha_hora_visita);
-      return date.getFullYear() === currentYear && date.getMonth() === currentMonth;
+      return (
+        date.getFullYear() === currentYear && date.getMonth() === currentMonth
+      );
     });
   }, [informes, currentYear, currentMonth]);
 
@@ -210,7 +212,9 @@ export default function ArchivoPage() {
           {currentYear !== null && currentMonth !== null && (
             <>
               <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
-              <span className="text-slate-800 font-black">{MESES[currentMonth]}</span>
+              <span className="text-slate-800 font-black">
+                {MESES[currentMonth]}
+              </span>
             </>
           )}
         </div>
@@ -227,7 +231,9 @@ export default function ArchivoPage() {
         /* VISTA PLANA DE BÚSQUEDA */
         <div className="space-y-3">
           <div className="flex items-center justify-between text-xs font-bold text-slate-400 select-none px-1">
-            <span>RESULTADOS DE LA BÚSQUEDA ({filteredInformes?.length || 0})</span>
+            <span>
+              RESULTADOS DE LA BÚSQUEDA ({filteredInformes?.length || 0})
+            </span>
             <button
               onClick={handleClearFilters}
               className="text-blue-600 hover:underline cursor-pointer"
@@ -383,7 +389,9 @@ function FileRow({ informe }: { informe: any }) {
     informe.firmas_informe?.some((f: any) => f.tipo === "preventor") &&
     informe.firmas_informe?.some((f: any) => f.tipo === "dueno");
 
-  const fechaFormateada = new Date(informe.fecha_hora_visita).toLocaleDateString("es-AR");
+  const fechaFormateada = new Date(
+    informe.fecha_hora_visita,
+  ).toLocaleDateString("es-AR");
 
   return (
     <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 gap-3 hover:bg-slate-50/40 transition-colors">
@@ -396,7 +404,9 @@ function FileRow({ informe }: { informe: any }) {
             Informe N° {String(informe.numero_informe).padStart(6, "0")}
           </span>
           <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold text-slate-400 mt-0.5 select-none">
-            <span className="truncate max-w-[120px] sm:max-w-none">{informe.actividad || "Relevamiento técnico"}</span>
+            <span className="truncate max-w-30 sm:max-w-none">
+              {informe.actividad || "Relevamiento técnico"}
+            </span>
             <span>·</span>
             <div className="flex items-center gap-1 shrink-0 text-slate-450">
               <Building2 className="h-3 w-3" />

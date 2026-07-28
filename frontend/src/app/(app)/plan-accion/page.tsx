@@ -1,18 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
-import { usePlanAccion } from "@/hooks/usePlanAccion";
+import { usePlanAccion, exportarPlanAccion } from "@/hooks/usePlanAccion";
+
 import { EstadoAccion } from "@/types";
-import { api } from "@/lib/api";
-import {
-  CheckCircle2,
-  FileSpreadsheet,
-  FileText,
-  Loader,
-  Calendar,
-} from "lucide-react";
+import { FileSpreadsheet, FileText, Loader } from "lucide-react";
 import { useAlert } from "@/context/AlertContext";
 
 export default function PlanAccionPage() {
@@ -54,14 +48,9 @@ export default function PlanAccionPage() {
     if (!empresa) return;
     setExportingExcel(true);
     try {
-      const response = await api.get(
-        `/plan-accion/export?empresaId=${empresa.id}&format=csv`,
-        {
-          responseType: "blob",
-        },
-      );
+      const data = await exportarPlanAccion(empresa.id, "csv");
 
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const url = window.URL.createObjectURL(new Blob([data]));
       const link = document.createElement("a");
       link.href = url;
       link.setAttribute("download", `plan_de_accion_${empresa.cuit}.csv`);
@@ -88,16 +77,12 @@ export default function PlanAccionPage() {
     if (!empresa) return;
     setExportingPdf(true);
     try {
-      const response = await api.get(
-        `/plan-accion/export?empresaId=${empresa.id}&format=pdf`,
-        {
-          responseType: "blob",
-        },
-      );
+      const data = await exportarPlanAccion(empresa.id, "pdf");
 
       const url = window.URL.createObjectURL(
-        new Blob([response.data], { type: "application/pdf" }),
+        new Blob([data], { type: "application/pdf" }),
       );
+
       const link = document.createElement("a");
       link.href = url;
       link.setAttribute("download", `plan_de_accion_${empresa.cuit}.pdf`);

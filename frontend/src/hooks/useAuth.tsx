@@ -118,3 +118,9 @@ export const useAuth = () => {
   }
   return context;
 };
+
+export const getMisEmpresas = async () => {
+  const { data } = await api.get('/auth/mis-empresas');
+  return data.empresas || [];
+};
+

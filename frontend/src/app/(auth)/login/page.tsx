@@ -3,16 +3,7 @@
 import React, { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
-import {
-  ShieldCheck,
-  Lock,
-  User,
-  Briefcase,
-  Eye,
-  EyeOff,
-  Check,
-  AlertCircle,
-} from "lucide-react";
+import { Lock, User, Briefcase, Eye, EyeOff, AlertCircle } from "lucide-react";
 
 export default function LoginPage() {
   const { login, loading } = useAuth();

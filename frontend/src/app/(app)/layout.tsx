@@ -1,22 +1,13 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth, getMisEmpresas } from "@/hooks/useAuth";
+import { getEmpresaDetalle } from "@/hooks/useAdminEmpresas";
 import { useRouter, usePathname } from "next/navigation";
 import BottomNav from "@/components/BottomNav.FC";
 import Link from "next/link";
-import { api } from "@/lib/api";
 import { Empresa } from "@/types";
-import {
-  LogOut,
-  User,
-  Briefcase,
-  Bell,
-  ShieldCheck,
-  Building2,
-  Home,
-  ChevronDown,
-} from "lucide-react";
+import { LogOut, Building2, ChevronDown } from "lucide-react";
 import { NotificationBell } from "@/components/notification-bell";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -24,7 +15,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
-  const [localEmpresa, setLocalEmpresa] = useState<any>(null);
+  const [localEmpresa, setLocalEmpresa] = useState<Empresa | null>(empresa);
   const [misEmpresas, setMisEmpresas] = useState<Empresa[]>([]);
   const [showEmpresaSelector, setShowEmpresaSelector] = useState(false);
 
@@ -34,17 +25,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [user, loading, router]);
 
-  // Middleware/Guardia de ruta en cliente: redirecciona si un dueño intenta entrar a vistas administrativas
+  // Protección de rutas según el rol
   useEffect(() => {
-    if (!loading && user && pathname) {
-      const isDueno = user.rol === "dueno";
-      if (isDueno) {
+    if (!loading && user) {
+      if (user.rol === "ente_regulador") {
         const isEppRoute = pathname.startsWith("/epp");
         const isCapacitacionesRoute = pathname.startsWith("/capacitaciones");
-        const isInformeNuevoRoute = pathname === "/informes/nuevo";
+        const isInformeNuevoRoute = pathname.endsWith("/informes/nuevo");
         const isInformeEditarRoute = pathname.endsWith("/editar");
 
-        if (isEppRoute || isCapacitacionesRoute || isInformeNuevoRoute || isInformeEditarRoute) {
+        if (
+          isEppRoute ||
+          isCapacitacionesRoute ||
+          isInformeNuevoRoute ||
+          isInformeEditarRoute
+        ) {
           router.replace("/dashboard");
         }
       }
@@ -56,7 +51,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       if (!empresa.razon_social) {
         const fetchEmpresa = async () => {
           try {
-            const { data } = await api.get(`/empresas/${empresa.id}`);
+            const data = await getEmpresaDetalle(empresa.id);
             setLocalEmpresa(data);
           } catch (err) {
             console.error("Error loading company details in layout:", err);
@@ -71,11 +66,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Cargar las empresas del usuario para el selector
   useEffect(() => {
-    if (user && (user.rol === 'preventor' || user.rol === 'admin')) {
+    if (user && (user.rol === "preventor" || user.rol === "admin")) {
       const fetchEmpresas = async () => {
         try {
-          const { data } = await api.get('/auth/mis-empresas');
-          setMisEmpresas(data.empresas || []);
+          const empresas = await getMisEmpresas();
+          setMisEmpresas(empresas);
         } catch (err) {
           console.error("Error loading mis-empresas:", err);
         }
@@ -136,7 +131,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             className="flex items-center gap-2 shrink-0 hover:opacity-90 transition-opacity cursor-pointer select-none"
           >
             <div className="h-9 w-9 rounded-lg overflow-hidden flex items-center justify-center shadow-xs bg-slate-100">
-              <img src="/login.jpg" alt="Logo" className="h-full w-full object-cover" />
+              <img
+                src="/login.jpg"
+                alt="Logo"
+                className="h-full w-full object-cover"
+              />
             </div>
             <span className="font-bold text-[#1e3a8a] text-sm sm:text-md md:text-lg block">
               Legajo Técnico
@@ -146,7 +145,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {/* Navigation Links (Desktop) */}
           <nav className="hidden md:flex items-center space-x-1 ml-6">
             {navItems.map((item) => {
-              const isActive = pathname ? (pathname === item.href || pathname.startsWith(item.href + '/')) : false;
+              const isActive = pathname
+                ? pathname === item.href || pathname.startsWith(item.href + "/")
+                : false;
               return (
                 <Link
                   key={item.name}
@@ -172,7 +173,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {localEmpresa && (
               <div className="hidden lg:flex relative">
                 <button
-                  onClick={() => puedeSeleccionarEmpresa && setShowEmpresaSelector(!showEmpresaSelector)}
+                  onClick={() =>
+                    puedeSeleccionarEmpresa &&
+                    setShowEmpresaSelector(!showEmpresaSelector)
+                  }
                   className={`flex items-center gap-2 bg-slate-100 border border-slate-200 px-3.5 py-1.5 rounded-full text-xs font-semibold text-slate-700 transition-all ${
                     puedeSeleccionarEmpresa
                       ? "hover:bg-slate-200 hover:border-slate-300 cursor-pointer"
@@ -184,7 +188,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <span className="text-slate-300">•</span>
                   <span className="text-slate-500">{localEmpresa.cuit}</span>
                   {puedeSeleccionarEmpresa && (
-                    <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform ${showEmpresaSelector ? 'rotate-180' : ''}`} />
+                    <ChevronDown
+                      className={`h-3.5 w-3.5 text-slate-400 transition-transform ${showEmpresaSelector ? "rotate-180" : ""}`}
+                    />
                   )}
                 </button>
 
@@ -209,7 +215,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                           key={emp.id}
                           onClick={() => handleSeleccionarEmpresa(emp)}
                           className={`w-full text-left px-3 py-2.5 flex items-center gap-3 hover:bg-blue-50 transition-colors cursor-pointer ${
-                            empresa?.id === emp.id ? "bg-blue-50 border-l-2 border-blue-600" : ""
+                            empresa?.id === emp.id
+                              ? "bg-blue-50 border-l-2 border-blue-600"
+                              : ""
                           }`}
                         >
                           <div className="h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">

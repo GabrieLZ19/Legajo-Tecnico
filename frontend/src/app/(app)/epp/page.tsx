@@ -1,8 +1,7 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { api } from "@/lib/api";
 import { EppEntrega, EppTipo } from "@/types";
 import Link from "next/link";
 import {
@@ -13,15 +12,16 @@ import {
   FileText,
   Layers,
   Calendar,
-  ChevronRight,
   User,
 } from "lucide-react";
+import { useEpp } from "@/hooks/useEpp";
 
 type Tab = "entregas" | "catalogo" | "licitaciones";
 
 const formatLocalDate = (dateStr: string | Date | null | undefined): string => {
   if (!dateStr) return "";
-  const isoStr = typeof dateStr === "string" ? dateStr : new Date(dateStr).toISOString();
+  const isoStr =
+    typeof dateStr === "string" ? dateStr : new Date(dateStr).toISOString();
   const datePart = isoStr.split("T")[0];
   const parts = datePart.split("-");
   if (parts.length === 3) {
@@ -33,6 +33,7 @@ const formatLocalDate = (dateStr: string | Date | null | undefined): string => {
 
 export default function EppPage() {
   const { user, empresa } = useAuth();
+  const { getEntregas, getTiposEpp, descargarPdfEntrega } = useEpp();
   const [tab, setTab] = useState<Tab>("entregas");
   const [entregas, setEntregas] = useState<EppEntrega[]>([]);
   const [tipos, setTipos] = useState<EppTipo[]>([]);
@@ -51,11 +52,11 @@ export default function EppPage() {
     setLoading(true);
     try {
       const [entregasRes, tiposRes] = await Promise.all([
-        api.get(`/epp/entregas?empresa_id=${empresa!.id}`),
-        api.get("/epp/tipos"),
+        getEntregas(empresa!.id),
+        getTiposEpp(),
       ]);
-      setEntregas(entregasRes.data.entregas || []);
-      setTipos(tiposRes.data.tipos || []);
+      setEntregas(entregasRes.entregas || []);
+      setTipos(tiposRes.tipos || []);
     } catch (err) {
       console.error("Error cargando datos:", err);
     } finally {
@@ -66,8 +67,8 @@ export default function EppPage() {
   const handleDownloadPdf = async (id: string, dni: string) => {
     setDownloadingId(id);
     try {
-      const res = await api.get(`/epp/entregas/${id}/pdf`, { responseType: "blob" });
-      const blob = new Blob([res.data], { type: "application/pdf" });
+      const pdfBlob = await descargarPdfEntrega(id);
+      const blob = new Blob([pdfBlob], { type: "application/pdf" });
       const link = document.createElement("a");
       link.href = window.URL.createObjectURL(blob);
       link.download = `Constancia_SRT_299_${dni}.pdf`;
@@ -148,15 +149,21 @@ export default function EppPage() {
           {loading ? (
             <div className="flex flex-col items-center justify-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-600"></div>
-              <p className="text-xs text-slate-400 mt-2 font-semibold">Cargando constancias...</p>
+              <p className="text-xs text-slate-400 mt-2 font-semibold">
+                Cargando constancias...
+              </p>
             </div>
           ) : entregas.length === 0 ? (
             <div className="text-center py-12">
               <div className="h-12 w-12 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-4">
                 <FileText className="h-6 w-6 text-slate-400" />
               </div>
-              <p className="text-slate-500 font-bold text-sm">No hay entregas registradas</p>
-              <p className="text-slate-400 text-xs mt-1">Registrá la entrega de EPP para generar la constancia legal.</p>
+              <p className="text-slate-500 font-bold text-sm">
+                No hay entregas registradas
+              </p>
+              <p className="text-slate-400 text-xs mt-1">
+                Registrá la entrega de EPP para generar la constancia legal.
+              </p>
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
@@ -218,7 +225,9 @@ export default function EppPage() {
           </div>
 
           {tipos.length === 0 ? (
-            <p className="text-sm text-slate-400 font-semibold">No hay tipos de EPP cargados.</p>
+            <p className="text-sm text-slate-400 font-semibold">
+              No hay tipos de EPP cargados.
+            </p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {tipos.map((tipo) => (
@@ -250,9 +259,12 @@ export default function EppPage() {
           <div className="h-12 w-12 rounded-2xl bg-amber-50 flex items-center justify-center mx-auto mb-4">
             <Layers className="h-6 w-6 text-amber-500" />
           </div>
-          <h3 className="text-slate-800 font-bold text-sm">Licitaciones de Compra</h3>
+          <h3 className="text-slate-800 font-bold text-sm">
+            Licitaciones de Compra
+          </h3>
           <p className="text-slate-400 text-xs max-w-sm mx-auto mt-2 leading-relaxed">
-            Módulo para solicitar presupuestos de EPP a proveedores homologados según consumos proyectados.
+            Módulo para solicitar presupuestos de EPP a proveedores homologados
+            según consumos proyectados.
           </p>
           <div className="mt-6 flex justify-center">
             <span className="px-4 py-1.5 bg-amber-50 border border-amber-100 rounded-full text-xs font-bold text-amber-800 uppercase tracking-wider">

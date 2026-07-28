@@ -5,9 +5,9 @@ export interface PlantillaDeclaracion {
   id: string;
   nombre: string;
   contenido: string;
-  creado_por: string;
-  consultora_id: string;
-  created_at: string;
+  creado_por?: string;
+  consultora_id?: string;
+  created_at?: string;
 }
 
 export const usePlantillas = () => {
@@ -16,15 +16,25 @@ export const usePlantillas = () => {
   const query = useQuery<PlantillaDeclaracion[]>({
     queryKey: ['plantillas'],
     queryFn: async () => {
-      const { data } = await api.get('/plantillas-declaracion');
+      const { data } = await api.get('/plantillas');
       return data;
     },
   });
 
   const crearMutation = useMutation({
     mutationFn: async (nueva: { nombre: string; contenido: string }) => {
-      const { data } = await api.post('/plantillas-declaracion', nueva);
+      const { data } = await api.post('/plantillas', nueva);
       return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['plantillas'] });
+    },
+  });
+
+  const editarMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: { nombre: string; contenido: string } }) => {
+      const { data: resData } = await api.put(`/plantillas/${id}`, data);
+      return resData;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['plantillas'] });
@@ -33,7 +43,7 @@ export const usePlantillas = () => {
 
   const eliminarMutation = useMutation({
     mutationFn: async (id: string) => {
-      await api.delete(`/plantillas-declaracion/${id}`);
+      await api.delete(`/plantillas/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['plantillas'] });
@@ -43,9 +53,12 @@ export const usePlantillas = () => {
   return {
     ...query,
     plantillas: query.data || [],
+    refetchPlantillas: query.refetch,
     crearPlantilla: crearMutation.mutateAsync,
+    editarPlantilla: editarMutation.mutateAsync,
     isCreating: crearMutation.isPending,
     eliminarPlantilla: eliminarMutation.mutateAsync,
     isDeleting: eliminarMutation.isPending,
   };
 };
+

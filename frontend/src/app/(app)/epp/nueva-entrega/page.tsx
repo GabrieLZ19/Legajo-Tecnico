@@ -3,7 +3,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
-import { api } from "@/lib/api";
 import { EppTipo } from "@/types";
 import Link from "next/link";
 import SignatureCanvas from "react-signature-canvas";
@@ -18,6 +17,7 @@ import {
   Hash,
   Calendar,
 } from "lucide-react";
+import { useEpp } from "@/hooks/useEpp";
 
 interface ItemEntrega {
   epp_tipo_id: string;
@@ -28,19 +28,20 @@ interface ItemEntrega {
 }
 
 export default function NuevaEntregaEppPage() {
-  const { empresa } = useAuth();
   const router = useRouter();
-  const sigRef = useRef<SignatureCanvas>(null);
+  const { empresa } = useAuth();
+  const { getTiposEpp, crearTipoEpp, crearEntregaEpp } = useEpp();
 
-  const [tipos, setTipos] = useState<EppTipo[]>([]);
   const [nombreEmpleado, setNombreEmpleado] = useState("");
   const [dniEmpleado, setDniEmpleado] = useState("");
   const [fechaEntrega, setFechaEntrega] = useState(
-    new Date().toISOString().split("T")[0]
+    new Date().toISOString().split("T")[0],
   );
   const [items, setItems] = useState<ItemEntrega[]>([
     { epp_tipo_id: "", cantidad: 1, marca: "", modelo: "", certificacion: "" },
   ]);
+
+  const [tipos, setTipos] = useState<EppTipo[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,13 +50,16 @@ export default function NuevaEntregaEppPage() {
   const [nuevoEppNombre, setNuevoEppNombre] = useState("");
   const [nuevoEppDescripcion, setNuevoEppDescripcion] = useState("");
   const [guardandoNuevoEpp, setGuardandoNuevoEpp] = useState(false);
-  const [creandoEppParaIndex, setCreandoEppParaIndex] = useState<number | null>(null);
+  const [creandoEppParaIndex, setCreandoEppParaIndex] = useState<number | null>(
+    null,
+  );
 
   // Estados para lector QR
   const [showQrScanner, setShowQrScanner] = useState(false);
   const [escaneadoPorQr, setEscaneadoPorQr] = useState(false);
   const [qrScanningError, setQrScanningError] = useState<string | null>(null);
   const qrInstanceRef = useRef<any>(null);
+  const sigRef = useRef<SignatureCanvas>(null);
 
   useEffect(() => {
     fetchTipos();
@@ -63,7 +67,7 @@ export default function NuevaEntregaEppPage() {
 
   const fetchTipos = async () => {
     try {
-      const { data } = await api.get("/epp/tipos");
+      const data = await getTiposEpp();
       setTipos(data.tipos || []);
     } catch (err) {
       console.error("Error cargando tipos:", err);
@@ -73,7 +77,13 @@ export default function NuevaEntregaEppPage() {
   const agregarItem = () => {
     setItems([
       ...items,
-      { epp_tipo_id: "", cantidad: 1, marca: "", modelo: "", certificacion: "" },
+      {
+        epp_tipo_id: "",
+        cantidad: 1,
+        marca: "",
+        modelo: "",
+        certificacion: "",
+      },
     ]);
   };
 
@@ -82,7 +92,11 @@ export default function NuevaEntregaEppPage() {
     setItems(items.filter((_, i) => i !== idx));
   };
 
-  const actualizarItem = (idx: number, field: keyof ItemEntrega, value: any) => {
+  const actualizarItem = (
+    idx: number,
+    field: keyof ItemEntrega,
+    value: any,
+  ) => {
     const updated = [...items];
     (updated[idx] as any)[field] = value;
     setItems(updated);
@@ -94,13 +108,15 @@ export default function NuevaEntregaEppPage() {
 
     setGuardandoNuevoEpp(true);
     try {
-      const { data } = await api.post("/epp/tipos", {
+      const data = await crearTipoEpp({
         nombre: nuevoEppNombre,
         descripcion: nuevoEppDescripcion,
       });
 
       const nuevoTipo: EppTipo = data;
-      setTipos((prev) => [...prev, nuevoTipo].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+      setTipos((prev) =>
+        [...prev, nuevoTipo].sort((a, b) => a.nombre.localeCompare(b.nombre)),
+      );
 
       if (creandoEppParaIndex !== null) {
         const updated = [...items];
@@ -126,7 +142,7 @@ export default function NuevaEntregaEppPage() {
         try {
           const html5QrCode = new Html5Qrcode("qr-reader");
           qrInstanceRef.current = html5QrCode;
-          
+
           await html5QrCode.start(
             { facingMode: "environment" },
             {
@@ -138,11 +154,13 @@ export default function NuevaEntregaEppPage() {
             },
             (errorMessage) => {
               // Ignorar escaneos fallidos continuos
-            }
+            },
           );
         } catch (err: any) {
           console.error("Error al iniciar scanner:", err);
-          setQrScanningError("No se pudo acceder a la cámara. Verifique los permisos.");
+          setQrScanningError(
+            "No se pudo acceder a la cámara. Verifique los permisos.",
+          );
         }
       }, 300);
     } catch (err: any) {
@@ -232,7 +250,7 @@ export default function NuevaEntregaEppPage() {
         .getTrimmedCanvas()
         .toDataURL("image/png");
 
-      await api.post("/epp/entregas", {
+      await crearEntregaEpp({
         empresa_id: empresa!.id,
         nombre_empleado: nombreEmpleado,
         dni_empleado: dniEmpleado,
@@ -296,8 +314,18 @@ export default function NuevaEntregaEppPage() {
                 }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold rounded-lg text-xs transition-colors cursor-pointer"
               >
-                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" strokeLinecap="round" strokeLinejoin="round"/>
+                <svg
+                  className="h-3.5 w-3.5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                >
+                  <path
+                    d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                   <rect x="7" y="7" width="3" height="3" />
                   <rect x="14" y="7" width="3" height="3" />
                   <rect x="7" y="14" width="3" height="3" />
@@ -316,7 +344,11 @@ export default function NuevaEntregaEppPage() {
               <input
                 type="text"
                 value={nombreEmpleado}
-                onChange={(e) => setNombreEmpleado(e.target.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/g, ""))}
+                onChange={(e) =>
+                  setNombreEmpleado(
+                    e.target.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/g, ""),
+                  )
+                }
                 placeholder="Juan Pérez"
                 className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 transition-all"
               />
@@ -331,7 +363,9 @@ export default function NuevaEntregaEppPage() {
                 pattern="[0-9]*"
                 maxLength={8}
                 value={dniEmpleado}
-                onChange={(e) => setDniEmpleado(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                onChange={(e) =>
+                  setDniEmpleado(e.target.value.replace(/\D/g, "").slice(0, 8))
+                }
                 placeholder="12345678"
                 className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 transition-all"
               />
@@ -342,9 +376,10 @@ export default function NuevaEntregaEppPage() {
             <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
               <Calendar className="h-3 w-3" /> Fecha de Entrega
             </label>
-            <div 
+            <div
               onClick={(e) => {
-                const input = e.currentTarget.querySelector('input[type="date"]');
+                const input =
+                  e.currentTarget.querySelector('input[type="date"]');
                 if (input) {
                   try {
                     (input as any).showPicker();
@@ -430,7 +465,10 @@ export default function NuevaEntregaEppPage() {
                         {t.descripcion ? ` (${t.descripcion})` : ""}
                       </option>
                     ))}
-                    <option value="crear_nuevo_epp" className="font-bold text-blue-600 bg-blue-50">
+                    <option
+                      value="crear_nuevo_epp"
+                      className="font-bold text-blue-600 bg-blue-50"
+                    >
                       + Agregar nuevo EPP...
                     </option>
                   </select>
@@ -445,7 +483,11 @@ export default function NuevaEntregaEppPage() {
                     min={1}
                     value={item.cantidad}
                     onChange={(e) =>
-                      actualizarItem(idx, "cantidad", parseInt(e.target.value) || 1)
+                      actualizarItem(
+                        idx,
+                        "cantidad",
+                        parseInt(e.target.value) || 1,
+                      )
                     }
                     className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500"
                   />
@@ -541,13 +583,15 @@ export default function NuevaEntregaEppPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
           <div className="bg-white w-full max-w-md rounded-2xl border border-slate-200 p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-lg font-black text-slate-800">Agregar Nuevo EPP</h3>
-              <button 
-                type="button" 
+              <h3 className="text-lg font-black text-slate-800">
+                Agregar Nuevo EPP
+              </h3>
+              <button
+                type="button"
                 onClick={() => {
                   setShowModalEpp(false);
                   setCreandoEppParaIndex(null);
-                }} 
+                }}
                 className="text-slate-400 hover:text-slate-600 font-bold text-xl cursor-pointer"
               >
                 &times;
@@ -610,7 +654,9 @@ export default function NuevaEntregaEppPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
           <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-slate-100 flex flex-col space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Escanear QR del Trabajador</h3>
+              <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">
+                Escanear QR del Trabajador
+              </h3>
               <button
                 type="button"
                 onClick={() => {
@@ -625,7 +671,9 @@ export default function NuevaEntregaEppPage() {
 
             <div className="relative bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl overflow-hidden aspect-square flex flex-col items-center justify-center">
               {qrScanningError ? (
-                <p className="text-xs text-red-600 font-semibold p-4 text-center">{qrScanningError}</p>
+                <p className="text-xs text-red-600 font-semibold p-4 text-center">
+                  {qrScanningError}
+                </p>
               ) : (
                 <div id="qr-reader" className="w-full h-full" />
               )}
@@ -640,7 +688,8 @@ export default function NuevaEntregaEppPage() {
                 Simular Escaneo (Juan Pérez - DNI 28456789)
               </button>
               <p className="text-[10px] text-slate-400 text-center">
-                Permita el acceso a la cámara o use la simulación rápida para pruebas de demostración.
+                Permita el acceso a la cámara o use la simulación rápida para
+                pruebas de demostración.
               </p>
             </div>
           </div>

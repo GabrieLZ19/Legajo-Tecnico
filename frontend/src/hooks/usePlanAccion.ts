@@ -34,3 +34,17 @@ export const usePlanAccion = (empresaId?: string, estado?: EstadoAccion) => {
     isUpdating: actualizarMutation.isPending,
   };
 };
+
+export const actualizarEstadoPlanAccion = async (id: string, estado: EstadoAccion) => {
+  const { data } = await api.patch(`/plan-accion/${id}`, { estado });
+  return data;
+};
+
+export const exportarPlanAccion = async (empresaId: string, format: 'csv' | 'pdf') => {
+
+  const response = await api.get(`/plan-accion/export?empresaId=${empresaId}&format=${format}`, {
+    responseType: 'blob',
+  });
+  return response.data;
+};
+
