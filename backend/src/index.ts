@@ -13,6 +13,7 @@ import eppRoutes from "./routes/epp.routes";
 import adminRoutes from "./routes/admin.routes";
 import dashboardRoutes from "./routes/dashboard.routes";
 import plantillasRoutes from "./routes/plantillas.routes";
+import capacitacionPlantillasRoutes from "./routes/capacitacion-plantillas.routes";
 
 const app = express();
 
@@ -40,6 +41,7 @@ app.use("/api/epp", eppRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/plantillas-declaracion", plantillasRoutes);
+app.use("/api/capacitacion-plantillas", capacitacionPlantillasRoutes);
 
 // Middleware de manejo de errores
 app.use(errorHandler);

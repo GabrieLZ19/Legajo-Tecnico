@@ -16,7 +16,10 @@ consultoras ──┬── empresas ──┬── informes_visita ──┬�
               │              ├── capacitaciones ──┬── capacitacion_preguntas
               │              │                    ├── capacitacion_asistencias
               │              │                    └── capacitacion_materiales
+              │              ├── capacitacion_plantillas (ambito=empresa) ── capacitacion_plantilla_preguntas
               │              └── epp_entregas
+              │
+              ├── capacitacion_plantillas (ambito=global, biblioteca LT)
               │
 perfiles ─────┴── preventor_empresas (N:M)
               └── ente_regulador_empresas (N:M, solo lectura)
@@ -32,6 +35,7 @@ CREATE TYPE estado_firma_informe AS ENUM ('borrador', 'pendiente_preventor', 'pe
 CREATE TYPE estado_accion AS ENUM ('pendiente', 'cumplida', 'atendida');
 CREATE TYPE tipo_firma AS ENUM ('preventor', 'dueno', 'asistente_capacitacion');
 CREATE TYPE estado_capacitacion AS ENUM ('borrador', 'activa', 'cerrada');
+CREATE TYPE ambito_capacitacion_plantilla AS ENUM ('empresa', 'global');
 CREATE TYPE estado_entrega_epp AS ENUM ('registrada', 'firmada', 'anulada');
 ```
 
@@ -210,6 +214,31 @@ Enlaces de difusión vía WhatsApp (feature 16.0).
 | `url_enlace` | TEXT |
 | `requiere_firma` | BOOLEAN DEFAULT true |
 
+### `capacitacion_plantillas`
+Catálogo de plantillas de capacitación (biblioteca). Separado de las sesiones reales en `capacitaciones`.
+| Columna | Tipo |
+|---------|------|
+| `id` | UUID PK |
+| `ambito` | ambito_capacitacion_plantilla | `empresa` \| `global` |
+| `empresa_id` | UUID FK → empresas | NULL si `ambito=global`; obligatorio si `ambito=empresa` |
+| `titulo` | TEXT |
+| `temario` | TEXT |
+| `created_by` | UUID FK → perfiles |
+| `created_at` | TIMESTAMPTZ |
+| `updated_at` | TIMESTAMPTZ |
+
+CHECK: `(ambito = 'global' AND empresa_id IS NULL) OR (ambito = 'empresa' AND empresa_id IS NOT NULL)`.
+
+### `capacitacion_plantilla_preguntas`
+| Columna | Tipo |
+|---------|------|
+| `id` | UUID PK |
+| `plantilla_id` | UUID FK → capacitacion_plantillas |
+| `enunciado` | TEXT |
+| `opciones` | JSONB |
+| `respuesta_correcta` | TEXT |
+| `orden` | SMALLINT |
+
 ---
 
 ## 7. Tablas — Módulo 3: EPP (esquema Fase 3)
@@ -240,6 +269,9 @@ Registro Res. SRT 299/11.
 | `firma_empleado_url` | TEXT |
 | `url_registro_oficial` | TEXT | PDF generado |
 | `entregado_at` | TIMESTAMPTZ |
+| `marca` | TEXT | Marca del EPP |
+| `modelo` | TEXT | Modelo del EPP |
+| `certificacion` | TEXT | Certificación (por ejemplo, norma IRAM) |
 
 ### `epp_licitaciones` / `epp_licitacion_cotizaciones`
 Stub para feature 21.0 (proveedores, cotizaciones, comisión configurable en `consultoras.config`).
@@ -301,6 +333,8 @@ $$;
 | `informes_visita` | preventor (sus empresas), dueño (su empresa), admin | preventor crea; dueño solo firma |
 | `acciones_mejora` | misma lógica que informes | preventor/dueno según estado |
 | `capacitaciones` | misma lógica (Fase 2) | preventor |
+| `capacitacion_plantillas` (empresa) | preventor/admin de esa empresa | preventor/admin |
+| `capacitacion_plantillas` (global) | autenticados (lectura) | admin (panel LT) |
 
 ---
 
@@ -326,16 +360,17 @@ CREATE VIEW v_dashboard_empresa AS
 SELECT
   e.id AS empresa_id,
   e.razon_social,
-  COUNT(DISTINCT iv.id) FILTER (WHERE iv.fecha_hora_visita >= date_trunc('month', now())) AS informes_mes,
-  COUNT(am.id) FILTER (WHERE am.estado = 'pendiente') AS observaciones_abiertas,
-  ROUND(
-    100.0 * COUNT(am.id) FILTER (WHERE am.estado IN ('cumplida','atendida'))
-    / NULLIF(COUNT(am.id), 0), 1
+  e.cuit,
+  (SELECT COUNT(DISTINCT iv.id) FROM informes_visita iv WHERE iv.empresa_id = e.id AND iv.fecha_hora_visita >= date_trunc('month', now()))::bigint AS informes_mes,
+  (SELECT COUNT(*) FROM acciones_mejora am WHERE am.empresa_id = e.id AND am.estado != 'cumplida')::bigint AS observaciones_abiertas,
+  COALESCE(
+    (
+      SELECT ROUND((100.0 * COUNT(*) FILTER (WHERE am.estado IN ('cumplida', 'atendida'))) / NULLIF(COUNT(*), 0), 1)
+      FROM acciones_mejora am
+      WHERE am.empresa_id = e.id
+    )::numeric, 0.0
   ) AS porcentaje_cumplimiento
-FROM empresas e
-LEFT JOIN informes_visita iv ON iv.empresa_id = e.id
-LEFT JOIN acciones_mejora am ON am.empresa_id = e.id
-GROUP BY e.id, e.razon_social;
+FROM empresas e;
 ```
 
 ---

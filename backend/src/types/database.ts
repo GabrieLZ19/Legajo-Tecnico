@@ -3,7 +3,29 @@ export type EstadoFirmaInforme = 'borrador' | 'pendiente_preventor' | 'pendiente
 export type EstadoAccion = 'pendiente' | 'cumplida' | 'atendida';
 export type TipoFirma = 'preventor' | 'dueno' | 'asistente_capacitacion';
 export type EstadoCapacitacion = 'borrador' | 'activa' | 'cerrada';
+export type AmbitoCapacitacionPlantilla = 'empresa' | 'global';
 export type EstadoEntregaEpp = 'registrada' | 'firmada' | 'anulada';
+
+export interface CapacitacionPlantilla {
+  id: string;
+  ambito: AmbitoCapacitacionPlantilla;
+  empresa_id?: string | null;
+  titulo: string;
+  temario?: string | null;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+  total_preguntas?: number;
+}
+
+export interface CapacitacionPlantillaPregunta {
+  id: string;
+  plantilla_id: string;
+  enunciado: string;
+  opciones: string[];
+  respuesta_correcta: string;
+  orden: number;
+}
 
 export interface Empresa {
   id: string;

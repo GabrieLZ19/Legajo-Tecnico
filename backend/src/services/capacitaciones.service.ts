@@ -39,12 +39,53 @@ export const capacitacionesService = {
     temario?: string;
     fecha?: string;
     preguntas?: any[];
-    copiar_de_id?: string; // Si se clona desde la biblioteca
+    copiar_de_id?: string; // Clonar desde sesión previa (compat)
+    copiar_de_plantilla_id?: string; // Clonar desde biblioteca de plantillas
   }) {
     let preguntasAInsertar = params.preguntas || [];
 
-    // Si viene desde una capacitación existente en la biblioteca, traemos sus preguntas
-    if (params.copiar_de_id) {
+    // Clonar desde plantilla (biblioteca empresa o LT)
+    if (params.copiar_de_plantilla_id) {
+      const { data: plantillaOrigen } = await supabaseAdmin
+        .from("capacitacion_plantillas")
+        .select(
+          `
+          titulo, temario, ambito, empresa_id,
+          capacitacion_plantilla_preguntas(enunciado, opciones, respuesta_correcta, orden)
+        `,
+        )
+        .eq("id", params.copiar_de_plantilla_id)
+        .single();
+
+      if (plantillaOrigen) {
+        if (
+          plantillaOrigen.ambito === "empresa" &&
+          plantillaOrigen.empresa_id !== params.empresa_id
+        ) {
+          throw new Error(
+            "No se puede usar una plantilla de otra empresa",
+          );
+        }
+        if (!params.titulo) params.titulo = plantillaOrigen.titulo;
+        if (!params.temario) params.temario = plantillaOrigen.temario || undefined;
+        if (
+          plantillaOrigen.capacitacion_plantilla_preguntas &&
+          preguntasAInsertar.length === 0
+        ) {
+          const sorted = [
+            ...plantillaOrigen.capacitacion_plantilla_preguntas,
+          ].sort((a: any, b: any) => a.orden - b.orden);
+          preguntasAInsertar = sorted.map((p: any) => ({
+            pregunta: p.enunciado,
+            opciones: p.opciones,
+            respuesta_correcta: p.respuesta_correcta,
+          }));
+        }
+      }
+    }
+
+    // Si viene desde una capacitación existente (compatibilidad), traemos sus preguntas
+    if (params.copiar_de_id && !params.copiar_de_plantilla_id) {
       const { data: capOrigen } = await supabaseAdmin
         .from("capacitaciones")
         .select(
