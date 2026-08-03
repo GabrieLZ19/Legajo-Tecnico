@@ -17,14 +17,16 @@ import capacitacionPlantillasRoutes from "./routes/capacitacion-plantillas.route
 
 const app = express();
 
-// Middlewares globales
-app.use(express.json());
+// Middlewares globales — CORS primero para que errores de body/parse no pierdan headers
 app.use(
   cors({
     origin: env.FRONTEND_URL,
     credentials: true,
   }),
 );
+// Límite alto: diapositivas con imágenes embebidas (base64) pueden superar 100kb
+app.use(express.json({ limit: "15mb" }));
+app.use(express.urlencoded({ extended: true, limit: "15mb" }));
 
 // Endpoints de salud
 app.get("/api/health", (req, res) => {

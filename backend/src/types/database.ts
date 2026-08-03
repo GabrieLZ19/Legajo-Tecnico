@@ -6,12 +6,17 @@ export type EstadoCapacitacion = 'borrador' | 'activa' | 'cerrada';
 export type AmbitoCapacitacionPlantilla = 'empresa' | 'global';
 export type EstadoEntregaEpp = 'registrada' | 'firmada' | 'anulada';
 
+export interface CapacitacionDiapositiva {
+  contenido: string;
+}
+
 export interface CapacitacionPlantilla {
   id: string;
   ambito: AmbitoCapacitacionPlantilla;
   empresa_id?: string | null;
   titulo: string;
   temario?: string | null;
+  diapositivas?: CapacitacionDiapositiva[];
   created_by?: string | null;
   created_at: string;
   updated_at: string;

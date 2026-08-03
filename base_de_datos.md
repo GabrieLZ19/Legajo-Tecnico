@@ -176,7 +176,8 @@ Trazabilidad de firmas electrónicas (reutilizable en capacitaciones).
 | `empresa_id` | UUID FK |
 | `preventor_id` | UUID FK → perfiles |
 | `titulo` | TEXT |
-| `temario` | TEXT |
+| `temario` | TEXT | HTML concatenado (compatibilidad; se sincroniza desde `diapositivas`) |
+| `diapositivas` | JSONB | Array `[{ contenido: html }, …]`; default `[]` |
 | `fecha` | TIMESTAMPTZ |
 | `qr_token` | TEXT UNIQUE | Token del QR de asistencia |
 | `estado` | estado_capacitacion |
@@ -222,7 +223,8 @@ Catálogo de plantillas de capacitación (biblioteca). Separado de las sesiones 
 | `ambito` | ambito_capacitacion_plantilla | `empresa` \| `global` |
 | `empresa_id` | UUID FK → empresas | NULL si `ambito=global`; obligatorio si `ambito=empresa` |
 | `titulo` | TEXT |
-| `temario` | TEXT |
+| `temario` | TEXT | HTML concatenado (compatibilidad; se sincroniza desde `diapositivas`) |
+| `diapositivas` | JSONB | Array `[{ contenido: html }, …]`; default `[]` |
 | `created_by` | UUID FK → perfiles |
 | `created_at` | TIMESTAMPTZ |
 | `updated_at` | TIMESTAMPTZ |

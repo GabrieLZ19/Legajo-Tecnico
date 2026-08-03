@@ -1,4 +1,9 @@
 import { supabaseAdmin } from "../config/supabase";
+import {
+  CapacitacionDiapositiva,
+  ensureDiapositivas,
+  resolveDiapositivasAndTemario,
+} from "../utils/cap-diapositivas";
 
 export type AmbitoPlantilla = "empresa" | "global";
 
@@ -31,7 +36,7 @@ export const capacitacionPlantillasService = {
       .from("capacitacion_plantillas")
       .select(
         `
-        id, ambito, empresa_id, titulo, temario, created_by, created_at, updated_at,
+        id, ambito, empresa_id, titulo, temario, diapositivas, created_by, created_at, updated_at,
         capacitacion_plantilla_preguntas(id)
       `,
       )
@@ -56,6 +61,7 @@ export const capacitacionPlantillasService = {
       empresa_id: p.empresa_id,
       titulo: p.titulo,
       temario: p.temario,
+      diapositivas: ensureDiapositivas(p.diapositivas, p.temario),
       created_by: p.created_by,
       created_at: p.created_at,
       updated_at: p.updated_at,
@@ -97,6 +103,7 @@ export const capacitacionPlantillasService = {
 
     return {
       ...data,
+      diapositivas: ensureDiapositivas(data.diapositivas, data.temario),
       capacitacion_plantilla_preguntas: preguntas,
       total_preguntas: preguntas.length,
     };
@@ -107,6 +114,7 @@ export const capacitacionPlantillasService = {
     empresa_id?: string | null;
     titulo: string;
     temario?: string;
+    diapositivas?: CapacitacionDiapositiva[];
     created_by: string;
     preguntas?: PreguntaPlantillaInput[];
   }) {
@@ -117,13 +125,19 @@ export const capacitacionPlantillasService = {
       throw new Error("empresa_id es requerido para plantillas de empresa");
     }
 
+    const { diapositivas, temario } = resolveDiapositivasAndTemario({
+      diapositivas: params.diapositivas,
+      temario: params.temario,
+    });
+
     const { data: plantilla, error } = await supabaseAdmin
       .from("capacitacion_plantillas")
       .insert({
         ambito: params.ambito,
         empresa_id: params.ambito === "empresa" ? params.empresa_id : null,
         titulo: params.titulo,
-        temario: params.temario || null,
+        temario,
+        diapositivas,
         created_by: params.created_by,
       })
       .select()
@@ -147,6 +161,7 @@ export const capacitacionPlantillasService = {
     params: {
       titulo?: string;
       temario?: string;
+      diapositivas?: CapacitacionDiapositiva[];
       preguntas?: PreguntaPlantillaInput[];
     },
   ) {
@@ -154,7 +169,14 @@ export const capacitacionPlantillasService = {
       updated_at: new Date().toISOString(),
     };
     if (params.titulo !== undefined) updatePayload.titulo = params.titulo;
-    if (params.temario !== undefined) updatePayload.temario = params.temario;
+    if (params.diapositivas !== undefined || params.temario !== undefined) {
+      const resolved = resolveDiapositivasAndTemario({
+        diapositivas: params.diapositivas,
+        temario: params.temario,
+      });
+      updatePayload.temario = resolved.temario;
+      updatePayload.diapositivas = resolved.diapositivas;
+    }
 
     const { error } = await supabaseAdmin
       .from("capacitacion_plantillas")

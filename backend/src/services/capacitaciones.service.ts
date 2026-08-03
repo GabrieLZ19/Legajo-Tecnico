@@ -1,5 +1,10 @@
 import { supabaseAdmin } from "../config/supabase";
 import QRCode from "qrcode";
+import {
+  CapacitacionDiapositiva,
+  ensureDiapositivas,
+  resolveDiapositivasAndTemario,
+} from "../utils/cap-diapositivas";
 
 export const capacitacionesService = {
   /**
@@ -37,12 +42,14 @@ export const capacitacionesService = {
     preventor_id: string;
     titulo: string;
     temario?: string;
+    diapositivas?: CapacitacionDiapositiva[];
     fecha?: string;
     preguntas?: any[];
     copiar_de_id?: string; // Clonar desde sesión previa (compat)
     copiar_de_plantilla_id?: string; // Clonar desde biblioteca de plantillas
   }) {
     let preguntasAInsertar = params.preguntas || [];
+    let diapositivasClonadas: CapacitacionDiapositiva[] | undefined;
 
     // Clonar desde plantilla (biblioteca empresa o LT)
     if (params.copiar_de_plantilla_id) {
@@ -50,7 +57,7 @@ export const capacitacionesService = {
         .from("capacitacion_plantillas")
         .select(
           `
-          titulo, temario, ambito, empresa_id,
+          titulo, temario, diapositivas, ambito, empresa_id,
           capacitacion_plantilla_preguntas(enunciado, opciones, respuesta_correcta, orden)
         `,
         )
@@ -68,6 +75,12 @@ export const capacitacionesService = {
         }
         if (!params.titulo) params.titulo = plantillaOrigen.titulo;
         if (!params.temario) params.temario = plantillaOrigen.temario || undefined;
+        if (
+          (!params.diapositivas || params.diapositivas.length === 0) &&
+          plantillaOrigen.diapositivas
+        ) {
+          diapositivasClonadas = plantillaOrigen.diapositivas;
+        }
         if (
           plantillaOrigen.capacitacion_plantilla_preguntas &&
           preguntasAInsertar.length === 0
@@ -90,7 +103,7 @@ export const capacitacionesService = {
         .from("capacitaciones")
         .select(
           `
-          titulo, temario,
+          titulo, temario, diapositivas,
           capacitacion_preguntas(enunciado, opciones, respuesta_correcta, orden)
         `,
         )
@@ -100,6 +113,12 @@ export const capacitacionesService = {
       if (capOrigen) {
         if (!params.titulo) params.titulo = capOrigen.titulo;
         if (!params.temario) params.temario = capOrigen.temario;
+        if (
+          (!params.diapositivas || params.diapositivas.length === 0) &&
+          capOrigen.diapositivas
+        ) {
+          diapositivasClonadas = capOrigen.diapositivas;
+        }
         if (
           capOrigen.capacitacion_preguntas &&
           preguntasAInsertar.length === 0
@@ -115,6 +134,13 @@ export const capacitacionesService = {
       }
     }
 
+    const { diapositivas, temario } = resolveDiapositivasAndTemario({
+      diapositivas: params.diapositivas?.length
+        ? params.diapositivas
+        : diapositivasClonadas,
+      temario: params.temario,
+    });
+
     // Insertar en la tabla 'capacitaciones' sin columnas inexistentes
     const { data: cap, error: capError } = await supabaseAdmin
       .from("capacitaciones")
@@ -122,7 +148,8 @@ export const capacitacionesService = {
         empresa_id: params.empresa_id,
         preventor_id: params.preventor_id,
         titulo: params.titulo,
-        temario: params.temario || null,
+        temario,
+        diapositivas,
         fecha: params.fecha || new Date().toISOString(),
         estado: "borrador",
       })
@@ -187,6 +214,8 @@ export const capacitacionesService = {
         }),
       );
     }
+
+    data.diapositivas = ensureDiapositivas(data.diapositivas, data.temario);
 
     return data;
   },
@@ -390,7 +419,7 @@ export const capacitacionesService = {
    * Actualizar capacitación
    */
   async actualizar(id: string, body: any) {
-    const { titulo, temario, fecha, preguntas } = body;
+    const { titulo, temario, diapositivas, fecha, preguntas } = body;
 
     const { data: cap, error: capError } = await supabaseAdmin
       .from("capacitaciones")
@@ -406,13 +435,23 @@ export const capacitacionesService = {
         code: 400,
       };
 
+    const updatePayload: Record<string, unknown> = {
+      titulo: titulo || undefined,
+      fecha: fecha || undefined,
+    };
+
+    if (diapositivas !== undefined || temario !== undefined) {
+      const resolved = resolveDiapositivasAndTemario({
+        diapositivas,
+        temario,
+      });
+      updatePayload.temario = resolved.temario;
+      updatePayload.diapositivas = resolved.diapositivas;
+    }
+
     const { error: updateError } = await supabaseAdmin
       .from("capacitaciones")
-      .update({
-        titulo: titulo || undefined,
-        temario: temario !== undefined ? temario : null,
-        fecha: fecha || undefined,
-      })
+      .update(updatePayload)
       .eq("id", id);
 
     if (updateError) throw updateError;

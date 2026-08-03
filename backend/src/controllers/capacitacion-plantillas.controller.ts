@@ -53,7 +53,8 @@ export const capacitacionPlantillasController = {
 
   async crear(req: Request, res: Response, next: NextFunction) {
     try {
-      const { ambito, empresa_id, titulo, temario, preguntas } = req.body;
+      const { ambito, empresa_id, titulo, temario, diapositivas, preguntas } =
+        req.body;
       const user = req.user!;
 
       if (ambito !== "empresa" && ambito !== "global") {
@@ -94,6 +95,7 @@ export const capacitacionPlantillasController = {
         empresa_id: ambito === "empresa" ? empresa_id : null,
         titulo: titulo.trim(),
         temario,
+        diapositivas,
         created_by: user.id,
         preguntas,
       });
@@ -116,7 +118,7 @@ export const capacitacionPlantillasController = {
     try {
       const id = String(req.params.id);
       const user = req.user!;
-      const { titulo, temario, preguntas } = req.body;
+      const { titulo, temario, diapositivas, preguntas } = req.body;
 
       const existente = await capacitacionPlantillasService.obtenerPorId(id);
       if (!existente) {
@@ -145,6 +147,7 @@ export const capacitacionPlantillasController = {
       const actualizada = await capacitacionPlantillasService.actualizar(id, {
         titulo: titulo?.trim(),
         temario,
+        diapositivas,
         preguntas,
       });
       res.json(actualizada);
