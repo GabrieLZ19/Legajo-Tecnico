@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useRouter, useParams } from "next/navigation";
-import { Capacitacion } from "@/types";
+import { CapacitacionPlantilla } from "@/types";
 import {
   GraduationCap,
   ArrowLeft,
@@ -18,6 +18,10 @@ import Link from "next/link";
 import { useAlert } from "@/context/AlertContext";
 import RichTextEditor from "@/components/RichTextEditor";
 import { useCapacitaciones } from "@/hooks/useCapacitaciones";
+import {
+  mapPlantillaPreguntasToForm,
+  useCapacitacionPlantillas,
+} from "@/hooks/useCapacitacionPlantillas";
 
 interface PreguntaForm {
   pregunta: string;
@@ -32,8 +36,9 @@ export default function EditarCapacitacionPage() {
   const router = useRouter();
   const { empresa } = useAuth();
   const { showAlert } = useAlert();
-  const { getCapacitaciones, getCapacitacionDetalle, actualizarCapacitacion } =
+  const { getCapacitacionDetalle, actualizarCapacitacion } =
     useCapacitaciones();
+  const { listarPlantillas, getPlantillaDetalle } = useCapacitacionPlantillas();
 
   const [titulo, setTitulo] = useState("");
   const [temario, setTemario] = useState("");
@@ -43,25 +48,23 @@ export default function EditarCapacitacionPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Biblioteca de capacitaciones
-  const [bibliotecaCapacitaciones, setBibliotecaCapacitaciones] = useState<
-    Capacitacion[]
+  const [plantillasEmpresa, setPlantillasEmpresa] = useState<
+    CapacitacionPlantilla[]
   >([]);
-  const [selectedCapacitacionId, setSelectedCapacitacionId] =
-    useState<string>("");
+  const [plantillasLt, setPlantillasLt] = useState<CapacitacionPlantilla[]>([]);
+  const [selectedPlantillaId, setSelectedPlantillaId] = useState("");
 
   useEffect(() => {
     fetchCapacitacion();
     if (empresa?.id) {
-      getCapacitaciones(empresa.id)
-        .then((data) => {
-          setBibliotecaCapacitaciones(
-            (data || []).filter((c: any) => c.id !== id),
-          );
-        })
+      listarPlantillas("empresa", empresa.id)
+        .then((data) => setPlantillasEmpresa(data || []))
+        .catch(console.error);
+      listarPlantillas("global")
+        .then((data) => setPlantillasLt(data || []))
         .catch(console.error);
     }
-  }, [id, empresa?.id, getCapacitaciones]);
+  }, [id, empresa?.id, listarPlantillas]);
 
   const fetchCapacitacion = async () => {
     setLoading(true);
@@ -106,45 +109,28 @@ export default function EditarCapacitacionPage() {
     }
   };
 
-  const handleImportarDeBiblioteca = async (capId: string) => {
-    setSelectedCapacitacionId(capId);
-    if (!capId) return;
+  const handleImportarDeBiblioteca = async (plantillaId: string) => {
+    setSelectedPlantillaId(plantillaId);
+    if (!plantillaId) return;
 
     try {
-      const data = await getCapacitacionDetalle(capId);
+      const data = await getPlantillaDetalle(plantillaId);
       if (data) {
         setTitulo(data.titulo || "");
-        setTemario(data.temario || ""); // <--- Carga el temario rico desde la biblioteca
-        if (data.capacitacion_preguntas) {
-          const nuevasPreguntas = data.capacitacion_preguntas.map((p: any) => {
-            const esMult =
-              typeof p.respuesta_correcta === "string" &&
-              p.respuesta_correcta.startsWith("[");
-            let resp;
-            try {
-              resp = esMult
-                ? JSON.parse(p.respuesta_correcta)
-                : Number(p.respuesta_correcta);
-            } catch (e) {
-              resp = p.respuesta_correcta;
-            }
-            return {
-              pregunta: p.pregunta || p.enunciado,
-              opciones: p.opciones,
-              respuesta_correcta: resp,
-              es_multiple: esMult,
-            };
-          });
-          setPreguntas(nuevasPreguntas);
-        }
+        setTemario(data.temario || "");
+        setPreguntas(
+          mapPlantillaPreguntasToForm(
+            data.capacitacion_plantilla_preguntas || [],
+          ),
+        );
         showAlert(
           "success",
           "Importado",
-          "Capacitación y temario cargados desde la biblioteca.",
+          "Contenido cargado desde la biblioteca de plantillas.",
         );
       }
     } catch (err) {
-      showAlert("error", "Error", "No se pudo importar la capacitación.");
+      showAlert("error", "Error", "No se pudo importar la plantilla.");
     }
   };
 
@@ -284,26 +270,36 @@ export default function EditarCapacitacionPage() {
       </div>
 
       {/* Selector de Biblioteca en Edición */}
-      {bibliotecaCapacitaciones.length > 0 && (
+      {(plantillasEmpresa.length > 0 || plantillasLt.length > 0) && (
         <div className="bg-blue-50 border border-blue-100 p-5 rounded-2xl space-y-2">
           <label className="text-xs font-bold text-blue-900 uppercase tracking-wider flex items-center gap-1.5">
-            <BookOpen className="h-4 w-4 text-blue-600" /> Cargar temario y
-            preguntas desde otra capacitación guardada:
+            <BookOpen className="h-4 w-4 text-blue-600" /> Importar desde
+            biblioteca
           </label>
           <select
-            value={selectedCapacitacionId}
+            value={selectedPlantillaId}
             onChange={(e) => handleImportarDeBiblioteca(e.target.value)}
             className="w-full px-4 py-2.5 bg-white border border-blue-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
           >
-            <option value="">
-              -- Seleccionar capacitación de la biblioteca --
-            </option>
-            {bibliotecaCapacitaciones.map((cap) => (
-              <option key={cap.id} value={cap.id}>
-                {cap.titulo} (
-                {cap.fecha ? cap.fecha.split("T")[0] : "Sin fecha"})
-              </option>
-            ))}
+            <option value="">-- Seleccionar plantilla --</option>
+            {plantillasEmpresa.length > 0 && (
+              <optgroup label="Biblioteca de la empresa">
+                {plantillasEmpresa.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.titulo} ({p.total_preguntas || 0} preguntas)
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {plantillasLt.length > 0 && (
+              <optgroup label="Biblioteca Legajo Técnico">
+                {plantillasLt.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.titulo} ({p.total_preguntas || 0} preguntas)
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
         </div>
       )}

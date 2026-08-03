@@ -131,6 +131,7 @@ export interface MetricasDashboard {
 
 // ── Capacitaciones ──
 export type EstadoCapacitacion = 'borrador' | 'activa' | 'cerrada';
+export type AmbitoCapacitacionPlantilla = 'empresa' | 'global';
 
 export interface Capacitacion {
   id: string;
@@ -166,6 +167,29 @@ export interface CapacitacionAsistencia {
   aprobado: boolean;
   firma_url?: string;
   created_at: string;
+}
+
+export interface CapacitacionPlantilla {
+  id: string;
+  ambito: AmbitoCapacitacionPlantilla;
+  empresa_id?: string | null;
+  titulo: string;
+  temario?: string | null;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+  total_preguntas?: number;
+  capacitacion_plantilla_preguntas?: CapacitacionPlantillaPregunta[];
+}
+
+export interface CapacitacionPlantillaPregunta {
+  id: string;
+  plantilla_id: string;
+  enunciado: string;
+  pregunta?: string;
+  opciones: string[];
+  respuesta_correcta: string;
+  orden: number;
 }
 
 // ── EPP ──

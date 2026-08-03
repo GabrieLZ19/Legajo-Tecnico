@@ -11,6 +11,7 @@ import {
   HelpCircle,
   ChevronRight,
   Calendar,
+  BookOpen,
 } from "lucide-react";
 
 import { useCapacitaciones } from "@/hooks/useCapacitaciones";
@@ -73,13 +74,22 @@ export default function CapacitacionesPage() {
           </h1>
         </div>
         {canCreate && (
-          <Link
-            href="/capacitaciones/nuevo"
-            className="inline-flex items-center justify-center gap-2 bg-brand-primary hover:bg-brand-primary/95 text-white font-bold px-5 py-3 rounded-xl shadow-md shadow-blue-900/10 hover:shadow-lg transition-all text-sm cursor-pointer"
-          >
-            <Plus className="h-4 w-4 stroke-3" />
-            Nueva Capacitación
-          </Link>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Link
+              href="/capacitaciones/biblioteca"
+              className="inline-flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold px-5 py-3 rounded-xl text-sm cursor-pointer"
+            >
+              <BookOpen className="h-4 w-4" />
+              Biblioteca
+            </Link>
+            <Link
+              href="/capacitaciones/nuevo"
+              className="inline-flex items-center justify-center gap-2 bg-brand-primary hover:bg-brand-primary/95 text-white font-bold px-5 py-3 rounded-xl shadow-md shadow-blue-900/10 hover:shadow-lg transition-all text-sm cursor-pointer"
+            >
+              <Plus className="h-4 w-4 stroke-3" />
+              Nueva Capacitación
+            </Link>
+          </div>
         )}
       </div>
 

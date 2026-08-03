@@ -17,6 +17,7 @@ import {
   FileText,
   Settings,
   History,
+  GraduationCap,
 } from "lucide-react";
 import { NotificationBell } from "@/components/notification-bell";
 
@@ -56,6 +57,11 @@ export default function AdminLayout({
     { name: "Empresas", href: "/admin/empresas", icon: Building2 },
     { name: "Usuarios", href: "/admin/usuarios", icon: Users },
     { name: "Plantillas", href: "/admin/plantillas", icon: FileText },
+    {
+      name: "Biblioteca Capacitaciones",
+      href: "/admin/capacitaciones-biblioteca",
+      icon: GraduationCap,
+    },
     { name: "Auditoría", href: "/admin/auditoria", icon: History },
     { name: "Archivo Histórico", href: "/admin/archivo", icon: Archive },
     { name: "Métricas", href: "/admin/metricas", icon: BarChart3 },
@@ -98,7 +104,10 @@ export default function AdminLayout({
         {/* Navigation Links */}
         <nav className="flex-1 px-4 py-6 space-y-1">
           {menuItems.map((item) => {
-            const isActive = pathname === item.href;
+            const isActive =
+              pathname === item.href ||
+              (item.href !== "/admin/dashboard" &&
+                pathname.startsWith(item.href));
             const Icon = item.icon;
             return (
               <Link
@@ -201,7 +210,10 @@ export default function AdminLayout({
 
         <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto h-[calc(100vh-140px)]">
           {menuItems.map((item) => {
-            const isActive = pathname === item.href;
+            const isActive =
+              pathname === item.href ||
+              (item.href !== "/admin/dashboard" &&
+                pathname.startsWith(item.href));
             const Icon = item.icon;
             return (
               <Link
