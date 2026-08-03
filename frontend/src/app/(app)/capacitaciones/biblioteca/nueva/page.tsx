@@ -9,6 +9,8 @@ import {
   PreguntaPlantillaForm,
   useCapacitacionPlantillas,
 } from "@/hooks/useCapacitacionPlantillas";
+import { CapacitacionDiapositiva } from "@/types";
+import { deriveTemario } from "@/lib/cap-diapositivas";
 import { useAuth } from "@/hooks/useAuth";
 import { useAlert } from "@/context/AlertContext";
 
@@ -18,7 +20,9 @@ export default function NuevaPlantillaEmpresaPage() {
   const { showAlert } = useAlert();
   const { crearPlantilla } = useCapacitacionPlantillas();
   const [titulo, setTitulo] = useState("");
-  const [temario, setTemario] = useState("");
+  const [diapositivas, setDiapositivas] = useState<CapacitacionDiapositiva[]>([
+    { contenido: "" },
+  ]);
   const [preguntas, setPreguntas] = useState<PreguntaPlantillaForm[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +44,8 @@ export default function NuevaPlantillaEmpresaPage() {
         ambito: "empresa",
         empresa_id: empresa.id,
         titulo: titulo.trim(),
-        temario,
+        temario: deriveTemario(diapositivas),
+        diapositivas,
         preguntas,
       });
       showAlert("success", "Éxito", "Plantilla guardada en la biblioteca.");
@@ -74,10 +79,10 @@ export default function NuevaPlantillaEmpresaPage() {
       <form onSubmit={handleSubmit} className="space-y-6">
         <CapacitacionPlantillaForm
           titulo={titulo}
-          temario={temario}
+          diapositivas={diapositivas}
           preguntas={preguntas}
           onTituloChange={setTitulo}
-          onTemarioChange={setTemario}
+          onDiapositivasChange={setDiapositivas}
           onPreguntasChange={setPreguntas}
           error={error}
         />

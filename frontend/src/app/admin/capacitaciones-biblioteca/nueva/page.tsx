@@ -9,6 +9,8 @@ import {
   PreguntaPlantillaForm,
   useCapacitacionPlantillas,
 } from "@/hooks/useCapacitacionPlantillas";
+import { CapacitacionDiapositiva } from "@/types";
+import { deriveTemario } from "@/lib/cap-diapositivas";
 import { useAlert } from "@/context/AlertContext";
 
 export default function NuevaPlantillaGlobalPage() {
@@ -16,7 +18,9 @@ export default function NuevaPlantillaGlobalPage() {
   const { showAlert } = useAlert();
   const { crearPlantilla } = useCapacitacionPlantillas();
   const [titulo, setTitulo] = useState("");
-  const [temario, setTemario] = useState("");
+  const [diapositivas, setDiapositivas] = useState<CapacitacionDiapositiva[]>([
+    { contenido: "" },
+  ]);
   const [preguntas, setPreguntas] = useState<PreguntaPlantillaForm[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +37,8 @@ export default function NuevaPlantillaGlobalPage() {
       await crearPlantilla({
         ambito: "global",
         titulo: titulo.trim(),
-        temario,
+        temario: deriveTemario(diapositivas),
+        diapositivas,
         preguntas,
       });
       showAlert("success", "Éxito", "Plantilla agregada a la biblioteca LT.");
@@ -70,10 +75,10 @@ export default function NuevaPlantillaGlobalPage() {
       <form onSubmit={handleSubmit} className="space-y-6">
         <CapacitacionPlantillaForm
           titulo={titulo}
-          temario={temario}
+          diapositivas={diapositivas}
           preguntas={preguntas}
           onTituloChange={setTitulo}
-          onTemarioChange={setTemario}
+          onDiapositivasChange={setDiapositivas}
           onPreguntasChange={setPreguntas}
           error={error}
         />

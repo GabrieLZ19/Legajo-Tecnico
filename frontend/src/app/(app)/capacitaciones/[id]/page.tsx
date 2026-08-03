@@ -25,6 +25,7 @@ import {
   FileSpreadsheet,
   FileText,
   Search,
+  Presentation,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
@@ -318,6 +319,13 @@ export default function DetalleCapacitacionPage() {
 
         {/* Botones de acción */}
         <div className="flex flex-wrap gap-2 w-full sm:w-auto items-center">
+          <Link
+            href={`/capacitaciones/${id}/presentar`}
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-xl text-sm transition-all cursor-pointer"
+          >
+            <Presentation className="h-4 w-4" />
+            Proyectar presentación
+          </Link>
           {cap.estado === "borrador" && canManage && (
             <>
               <button

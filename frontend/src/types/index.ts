@@ -133,12 +133,17 @@ export interface MetricasDashboard {
 export type EstadoCapacitacion = 'borrador' | 'activa' | 'cerrada';
 export type AmbitoCapacitacionPlantilla = 'empresa' | 'global';
 
+export interface CapacitacionDiapositiva {
+  contenido: string;
+}
+
 export interface Capacitacion {
   id: string;
   empresa_id: string;
   preventor_id: string;
   titulo: string;
   temario?: string;
+  diapositivas?: CapacitacionDiapositiva[];
   fecha: string;
   estado: EstadoCapacitacion;
   created_at: string;
@@ -175,6 +180,7 @@ export interface CapacitacionPlantilla {
   empresa_id?: string | null;
   titulo: string;
   temario?: string | null;
+  diapositivas?: CapacitacionDiapositiva[];
   created_by?: string | null;
   created_at: string;
   updated_at: string;

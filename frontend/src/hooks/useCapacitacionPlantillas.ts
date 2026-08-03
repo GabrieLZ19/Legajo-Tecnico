@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { api } from "@/lib/api";
 import {
   AmbitoCapacitacionPlantilla,
+  CapacitacionDiapositiva,
   CapacitacionPlantilla,
 } from "@/types";
 
@@ -100,6 +101,7 @@ export function useCapacitacionPlantillas() {
       empresa_id?: string;
       titulo: string;
       temario?: string;
+      diapositivas?: CapacitacionDiapositiva[];
       preguntas?: PreguntaPlantillaForm[];
     }) => {
       setLoading(true);
@@ -110,6 +112,7 @@ export function useCapacitacionPlantillas() {
           empresa_id: payload.empresa_id,
           titulo: payload.titulo,
           temario: payload.temario,
+          diapositivas: payload.diapositivas,
           preguntas: payload.preguntas
             ? mapPreguntasPayload(payload.preguntas)
             : [],
@@ -133,6 +136,7 @@ export function useCapacitacionPlantillas() {
       payload: {
         titulo: string;
         temario?: string;
+        diapositivas?: CapacitacionDiapositiva[];
         preguntas?: PreguntaPlantillaForm[];
       },
     ) => {
@@ -142,6 +146,7 @@ export function useCapacitacionPlantillas() {
         const { data } = await api.put(`/capacitacion-plantillas/${id}`, {
           titulo: payload.titulo,
           temario: payload.temario,
+          diapositivas: payload.diapositivas,
           preguntas: payload.preguntas
             ? mapPreguntasPayload(payload.preguntas)
             : [],

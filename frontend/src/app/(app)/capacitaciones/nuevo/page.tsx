@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
-import { CapacitacionPlantilla } from "@/types";
+import { CapacitacionDiapositiva, CapacitacionPlantilla } from "@/types";
 import {
   GraduationCap,
   ArrowLeft,
@@ -22,6 +22,10 @@ import {
   mapPlantillaPreguntasToForm,
   useCapacitacionPlantillas,
 } from "@/hooks/useCapacitacionPlantillas";
+import {
+  deriveTemario,
+  normalizeDiapositivas,
+} from "@/lib/cap-diapositivas";
 
 type ModoOrigen = "cero" | "empresa" | "lt";
 
@@ -42,7 +46,9 @@ export default function NuevaCapacitacionPage() {
   const [guardarEnBiblioteca, setGuardarEnBiblioteca] = useState(false);
 
   const [titulo, setTitulo] = useState("");
-  const [temario, setTemario] = useState("");
+  const [diapositivas, setDiapositivas] = useState<CapacitacionDiapositiva[]>([
+    { contenido: "" },
+  ]);
   const [fecha, setFecha] = useState(new Date().toISOString().split("T")[0]);
   const [preguntas, setPreguntas] = useState<PreguntaPlantillaForm[]>([]);
   const [saving, setSaving] = useState(false);
@@ -61,7 +67,7 @@ export default function NuevaCapacitacionPage() {
   const resetFormContent = () => {
     setSelectedPlantillaId("");
     setTitulo("");
-    setTemario("");
+    setDiapositivas([{ contenido: "" }]);
     setPreguntas([]);
   };
 
@@ -72,7 +78,9 @@ export default function NuevaCapacitacionPage() {
     try {
       const data = await getPlantillaDetalle(plantillaId);
       setTitulo(data.titulo || "");
-      setTemario(data.temario || "");
+      setDiapositivas(
+        normalizeDiapositivas(data.diapositivas, data.temario),
+      );
       setPreguntas(
         mapPlantillaPreguntasToForm(
           data.capacitacion_plantilla_preguntas || [],
@@ -81,7 +89,7 @@ export default function NuevaCapacitacionPage() {
       showAlert(
         "success",
         "Cargada",
-        "Plantilla importada. Podés ajustar título, temario y preguntas antes de guardar la sesión.",
+        "Plantilla importada. Podés ajustar título, diapositivas y preguntas antes de guardar la sesión.",
       );
     } catch {
       showAlert("error", "Error", "No se pudo cargar la plantilla elegida.");
@@ -99,6 +107,7 @@ export default function NuevaCapacitacionPage() {
 
     setSaving(true);
     try {
+      const temario = deriveTemario(diapositivas);
       const preguntasPayload = preguntas.map((p) => ({
         pregunta: p.pregunta,
         opciones: p.opciones,
@@ -111,6 +120,7 @@ export default function NuevaCapacitacionPage() {
         empresa_id: empresa!.id,
         titulo,
         temario,
+        diapositivas,
         fecha,
         preguntas: preguntasPayload,
         ...(selectedPlantillaId
@@ -124,6 +134,7 @@ export default function NuevaCapacitacionPage() {
           empresa_id: empresa.id,
           titulo: titulo.trim(),
           temario,
+          diapositivas,
           preguntas,
         });
       }
@@ -270,10 +281,10 @@ export default function NuevaCapacitacionPage() {
       <form onSubmit={handleSubmit} className="space-y-6">
         <CapacitacionPlantillaForm
           titulo={titulo}
-          temario={temario}
+          diapositivas={diapositivas}
           preguntas={preguntas}
           onTituloChange={setTitulo}
-          onTemarioChange={setTemario}
+          onDiapositivasChange={setDiapositivas}
           onPreguntasChange={setPreguntas}
           error={error}
         />

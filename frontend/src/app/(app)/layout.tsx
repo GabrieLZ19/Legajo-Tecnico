@@ -119,6 +119,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   };
 
   const puedeSeleccionarEmpresa = misEmpresas.length > 1;
+  const isPresentacion =
+    !!pathname && pathname.includes("/capacitaciones/") && pathname.endsWith("/presentar");
+
+  if (isPresentacion) {
+    return <>{children}</>;
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">

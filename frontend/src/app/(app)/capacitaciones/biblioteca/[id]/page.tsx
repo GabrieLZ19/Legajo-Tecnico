@@ -10,6 +10,11 @@ import {
   mapPlantillaPreguntasToForm,
   useCapacitacionPlantillas,
 } from "@/hooks/useCapacitacionPlantillas";
+import { CapacitacionDiapositiva } from "@/types";
+import {
+  deriveTemario,
+  normalizeDiapositivas,
+} from "@/lib/cap-diapositivas";
 import { useAlert } from "@/context/AlertContext";
 
 export default function EditarPlantillaEmpresaPage() {
@@ -21,7 +26,9 @@ export default function EditarPlantillaEmpresaPage() {
     useCapacitacionPlantillas();
 
   const [titulo, setTitulo] = useState("");
-  const [temario, setTemario] = useState("");
+  const [diapositivas, setDiapositivas] = useState<CapacitacionDiapositiva[]>([
+    { contenido: "" },
+  ]);
   const [preguntas, setPreguntas] = useState<PreguntaPlantillaForm[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -31,7 +38,9 @@ export default function EditarPlantillaEmpresaPage() {
     getPlantillaDetalle(id)
       .then((data) => {
         setTitulo(data.titulo || "");
-        setTemario(data.temario || "");
+        setDiapositivas(
+          normalizeDiapositivas(data.diapositivas, data.temario),
+        );
         setPreguntas(
           mapPlantillaPreguntasToForm(
             data.capacitacion_plantilla_preguntas || [],
@@ -53,7 +62,8 @@ export default function EditarPlantillaEmpresaPage() {
     try {
       await actualizarPlantilla(id, {
         titulo: titulo.trim(),
-        temario,
+        temario: deriveTemario(diapositivas),
+        diapositivas,
         preguntas,
       });
       showAlert("success", "Éxito", "Plantilla actualizada.");
@@ -96,10 +106,10 @@ export default function EditarPlantillaEmpresaPage() {
       <form onSubmit={handleSubmit} className="space-y-6">
         <CapacitacionPlantillaForm
           titulo={titulo}
-          temario={temario}
+          diapositivas={diapositivas}
           preguntas={preguntas}
           onTituloChange={setTitulo}
-          onTemarioChange={setTemario}
+          onDiapositivasChange={setDiapositivas}
           onPreguntasChange={setPreguntas}
           error={error}
         />

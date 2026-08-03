@@ -2,25 +2,26 @@
 
 import React from "react";
 import { Plus, Trash2, X } from "lucide-react";
-import RichTextEditor from "@/components/RichTextEditor";
+import DiapositivasEditor from "@/components/DiapositivasEditor";
 import { PreguntaPlantillaForm } from "@/hooks/useCapacitacionPlantillas";
+import { CapacitacionDiapositiva } from "@/types";
 
 interface CapacitacionPlantillaFormProps {
   titulo: string;
-  temario: string;
+  diapositivas: CapacitacionDiapositiva[];
   preguntas: PreguntaPlantillaForm[];
   onTituloChange: (v: string) => void;
-  onTemarioChange: (v: string) => void;
+  onDiapositivasChange: (diapositivas: CapacitacionDiapositiva[]) => void;
   onPreguntasChange: (preguntas: PreguntaPlantillaForm[]) => void;
   error?: string | null;
 }
 
 export default function CapacitacionPlantillaForm({
   titulo,
-  temario,
+  diapositivas,
   preguntas,
   onTituloChange,
-  onTemarioChange,
+  onDiapositivasChange,
   onPreguntasChange,
   error,
 }: CapacitacionPlantillaFormProps) {
@@ -120,16 +121,10 @@ export default function CapacitacionPlantillaForm({
           />
         </div>
 
-        <div className="space-y-2">
-          <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
-            Temario / Descripción
-          </label>
-          <RichTextEditor
-            value={temario}
-            onChange={onTemarioChange}
-            placeholder="Temario completo con imágenes y diagramas..."
-          />
-        </div>
+        <DiapositivasEditor
+          diapositivas={diapositivas}
+          onChange={onDiapositivasChange}
+        />
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 space-y-5">

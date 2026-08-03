@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useRouter, useParams } from "next/navigation";
-import { CapacitacionPlantilla } from "@/types";
+import { CapacitacionDiapositiva, CapacitacionPlantilla } from "@/types";
 import {
   GraduationCap,
   ArrowLeft,
@@ -16,12 +16,16 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useAlert } from "@/context/AlertContext";
-import RichTextEditor from "@/components/RichTextEditor";
+import DiapositivasEditor from "@/components/DiapositivasEditor";
 import { useCapacitaciones } from "@/hooks/useCapacitaciones";
 import {
   mapPlantillaPreguntasToForm,
   useCapacitacionPlantillas,
 } from "@/hooks/useCapacitacionPlantillas";
+import {
+  deriveTemario,
+  normalizeDiapositivas,
+} from "@/lib/cap-diapositivas";
 
 interface PreguntaForm {
   pregunta: string;
@@ -41,7 +45,9 @@ export default function EditarCapacitacionPage() {
   const { listarPlantillas, getPlantillaDetalle } = useCapacitacionPlantillas();
 
   const [titulo, setTitulo] = useState("");
-  const [temario, setTemario] = useState("");
+  const [diapositivas, setDiapositivas] = useState<CapacitacionDiapositiva[]>([
+    { contenido: "" },
+  ]);
   const [fecha, setFecha] = useState("");
   const [preguntas, setPreguntas] = useState<PreguntaForm[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,8 +81,9 @@ export default function EditarCapacitacionPage() {
         return;
       }
       setTitulo(data.titulo);
-
-      setTemario(data.temario || "");
+      setDiapositivas(
+        normalizeDiapositivas(data.diapositivas, data.temario),
+      );
       setFecha(data.fecha ? data.fecha.split("T")[0] : "");
 
       if (data.capacitacion_preguntas) {
@@ -117,7 +124,9 @@ export default function EditarCapacitacionPage() {
       const data = await getPlantillaDetalle(plantillaId);
       if (data) {
         setTitulo(data.titulo || "");
-        setTemario(data.temario || "");
+        setDiapositivas(
+          normalizeDiapositivas(data.diapositivas, data.temario),
+        );
         setPreguntas(
           mapPlantillaPreguntasToForm(
             data.capacitacion_plantilla_preguntas || [],
@@ -213,7 +222,8 @@ export default function EditarCapacitacionPage() {
     try {
       await actualizarCapacitacion(id, {
         titulo,
-        temario,
+        temario: deriveTemario(diapositivas),
+        diapositivas,
         fecha,
         preguntas: preguntas.map((p) => ({
           pregunta: p.pregunta,
@@ -329,16 +339,11 @@ export default function EditarCapacitacionPage() {
             />
           </div>
 
-          <div className="space-y-2">
-            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
-              Temario / Descripción (soporta formato e imágenes)
-            </label>
-            <RichTextEditor
-              value={temario}
-              onChange={(content) => setTemario(content)}
-              placeholder="Modificá o pegá el temario..."
-            />
-          </div>
+          <DiapositivasEditor
+            diapositivas={diapositivas}
+            onChange={setDiapositivas}
+            placeholder="Modificá o pegá el contenido de la diapositiva..."
+          />
 
           <div className="space-y-2">
             <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
