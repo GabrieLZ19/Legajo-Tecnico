@@ -13,6 +13,7 @@ interface CapacitacionPlantillaFormProps {
   onTituloChange: (v: string) => void;
   onDiapositivasChange: (diapositivas: CapacitacionDiapositiva[]) => void;
   onPreguntasChange: (preguntas: PreguntaPlantillaForm[]) => void;
+  showPreguntas?: boolean;
   error?: string | null;
 }
 
@@ -23,6 +24,7 @@ export default function CapacitacionPlantillaForm({
   onTituloChange,
   onDiapositivasChange,
   onPreguntasChange,
+  showPreguntas = true,
   error,
 }: CapacitacionPlantillaFormProps) {
   const actualizarPregunta = (
@@ -127,6 +129,7 @@ export default function CapacitacionPlantillaForm({
         />
       </div>
 
+      {showPreguntas && (
       <div className="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 space-y-5">
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
           <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
@@ -250,6 +253,7 @@ export default function CapacitacionPlantillaForm({
           AGREGAR PREGUNTA
         </button>
       </div>
+      )}
     </div>
   );
 }

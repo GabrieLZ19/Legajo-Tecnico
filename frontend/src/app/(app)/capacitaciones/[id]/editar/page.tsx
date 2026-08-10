@@ -26,6 +26,16 @@ import {
   deriveTemario,
   normalizeDiapositivas,
 } from "@/lib/cap-diapositivas";
+import CapacitacionAgendaFields from "@/components/CapacitacionAgendaFields";
+import {
+  CapAgendaErrors,
+  CapAgendaValue,
+  agendaFromStored,
+  buildFechasHorario,
+  emptyAgenda,
+  hasAgendaErrors,
+  validateAgenda,
+} from "@/lib/cap-agenda";
 
 interface PreguntaForm {
   pregunta: string;
@@ -48,7 +58,10 @@ export default function EditarCapacitacionPage() {
   const [diapositivas, setDiapositivas] = useState<CapacitacionDiapositiva[]>([
     { contenido: "" },
   ]);
-  const [fecha, setFecha] = useState("");
+  const [agenda, setAgenda] = useState<CapAgendaValue>(emptyAgenda());
+  const [agendaErrors, setAgendaErrors] = useState<CapAgendaErrors>({});
+  const [instructor, setInstructor] = useState("");
+  const [conEvaluacion, setConEvaluacion] = useState(true);
   const [preguntas, setPreguntas] = useState<PreguntaForm[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -84,7 +97,15 @@ export default function EditarCapacitacionPage() {
       setDiapositivas(
         normalizeDiapositivas(data.diapositivas, data.temario),
       );
-      setFecha(data.fecha ? data.fecha.split("T")[0] : "");
+      setAgenda(
+        agendaFromStored({
+          fecha: data.fecha,
+          fechas_horario: data.fechas_horario,
+          cantidad_horas: data.cantidad_horas,
+        }),
+      );
+      setInstructor(data.instructor || "");
+      setConEvaluacion(data.con_evaluacion !== false);
 
       if (data.capacitacion_preguntas) {
         setPreguntas(
@@ -108,6 +129,8 @@ export default function EditarCapacitacionPage() {
             };
           }),
         );
+      } else {
+        setPreguntas([]);
       }
     } catch (err) {
       setError("Error al cargar los datos de la capacitación.");
@@ -132,6 +155,9 @@ export default function EditarCapacitacionPage() {
             data.capacitacion_plantilla_preguntas || [],
           ),
         );
+        if ((data.capacitacion_plantilla_preguntas || []).length > 0) {
+          setConEvaluacion(true);
+        }
         showAlert(
           "success",
           "Importado",
@@ -218,20 +244,43 @@ export default function EditarCapacitacionPage() {
       return;
     }
 
+    const nextAgendaErrors = validateAgenda(agenda, {
+      requireFecha: true,
+      requireHorario: true,
+    });
+    setAgendaErrors(nextAgendaErrors);
+    if (hasAgendaErrors(nextAgendaErrors)) {
+      setError("Revisá la fecha, el horario y la cantidad de horas.");
+      return;
+    }
+
+    if (conEvaluacion && preguntas.length === 0) {
+      setError(
+        "Agregá al menos una pregunta, o elegí “Sin evaluación (solo firmar)”.",
+      );
+      return;
+    }
+
     setSaving(true);
     try {
       await actualizarCapacitacion(id, {
         titulo,
         temario: deriveTemario(diapositivas),
         diapositivas,
-        fecha,
-        preguntas: preguntas.map((p) => ({
-          pregunta: p.pregunta,
-          opciones: p.opciones,
-          respuesta_correcta: Array.isArray(p.respuesta_correcta)
-            ? JSON.stringify(p.respuesta_correcta)
-            : String(p.respuesta_correcta),
-        })),
+        fecha: agenda.fecha,
+        instructor: instructor.trim() || null,
+        fechas_horario: buildFechasHorario(agenda),
+        cantidad_horas: agenda.cantidadHoras.trim(),
+        con_evaluacion: conEvaluacion,
+        preguntas: conEvaluacion
+          ? preguntas.map((p) => ({
+              pregunta: p.pregunta,
+              opciones: p.opciones,
+              respuesta_correcta: Array.isArray(p.respuesta_correcta)
+                ? JSON.stringify(p.respuesta_correcta)
+                : String(p.respuesta_correcta),
+            }))
+          : [],
       });
 
       showAlert(
@@ -345,20 +394,82 @@ export default function EditarCapacitacionPage() {
             placeholder="Modificá o pegá el contenido de la diapositiva..."
           />
 
-          <div className="space-y-2">
-            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-              <Calendar className="h-3 w-3" /> Fecha de Capacitación
+          <div className="space-y-3">
+            <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+              <Calendar className="h-3 w-3" /> Fecha y horario
+            </h3>
+            <CapacitacionAgendaFields
+              value={agenda}
+              onChange={(next) => {
+                setAgenda(next);
+                setAgendaErrors({});
+              }}
+              errors={agendaErrors}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              Instructor
             </label>
             <input
-              type="date"
-              required
-              value={fecha}
-              onChange={(e) => setFecha(e.target.value)}
-              className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 bg-white"
+              type="text"
+              value={instructor}
+              onChange={(e) => setInstructor(e.target.value)}
+              placeholder="Nombre del capacitador"
+              className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-semibold"
             />
           </div>
         </div>
 
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3">
+          <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+            Al finalizar la presentación
+          </h2>
+          <p className="text-xs text-slate-500 font-semibold">
+            El QR puede llevar a una evaluación con preguntas, o solo a firmar
+            la asistencia.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setConEvaluacion(true)}
+              className={`px-4 py-3 rounded-xl text-left border transition-all cursor-pointer ${
+                conEvaluacion
+                  ? "border-blue-500 bg-blue-50 text-blue-800"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              <span className="block text-xs font-black uppercase tracking-wide">
+                Con evaluación
+              </span>
+              <span className="block text-[11px] font-semibold mt-1 opacity-80">
+                Datos → preguntas → firma
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setConEvaluacion(false);
+                setPreguntas([]);
+              }}
+              className={`px-4 py-3 rounded-xl text-left border transition-all cursor-pointer ${
+                !conEvaluacion
+                  ? "border-blue-500 bg-blue-50 text-blue-800"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              <span className="block text-xs font-black uppercase tracking-wide">
+                Sin evaluación
+              </span>
+              <span className="block text-[11px] font-semibold mt-1 opacity-80">
+                Solo datos y firma de asistencia
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {conEvaluacion && (
         <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-5">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
@@ -484,6 +595,7 @@ export default function EditarCapacitacionPage() {
             AGREGAR PREGUNTA
           </button>
         </div>
+        )}
 
         <button
           type="submit"

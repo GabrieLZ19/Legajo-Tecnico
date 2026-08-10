@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useRef } from 'react';
-import SignatureCanvas from 'react-signature-canvas';
+import type SignatureCanvas from 'react-signature-canvas';
 import { RotateCcw, Check } from 'lucide-react';
+import SignaturePad, { readSignatureOrThrow } from '@/components/SignaturePad';
 
 interface FirmaCanvasProps {
   onSave: (base64: string) => void;
@@ -18,12 +19,16 @@ export const FirmaCanvas: React.FC<FirmaCanvasProps> = ({ onSave, onCancel, titl
   };
 
   const handleSave = () => {
-    if (sigCanvas.current?.isEmpty()) {
-      alert('Por favor, dibuja tu firma antes de guardar.');
-      return;
+    try {
+      const base64 = readSignatureOrThrow(sigCanvas.current);
+      onSave(base64);
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Por favor, dibujá tu firma antes de guardar.';
+      alert(message);
     }
-    const base64 = sigCanvas.current?.getTrimmedCanvas().toDataURL('image/png') || '';
-    onSave(base64);
   };
 
   return (
@@ -33,15 +38,7 @@ export const FirmaCanvas: React.FC<FirmaCanvasProps> = ({ onSave, onCancel, titl
         <p className="text-xs text-slate-500 mt-1">Dibuja tu firma sobre el recuadro blanco utilizando tu dedo o un lápiz táctil.</p>
       </div>
 
-      <div className="border-2 border-dashed border-slate-200 rounded-lg bg-slate-50 overflow-hidden h-48 relative">
-        <SignatureCanvas
-          ref={sigCanvas}
-          penColor="black"
-          canvasProps={{
-            className: 'w-full h-full cursor-crosshair'
-          }}
-        />
-      </div>
+      <SignaturePad ref={sigCanvas} heightClassName="h-48" className="border-2 border-dashed rounded-lg" />
 
       <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
         <div className="flex justify-between items-center gap-2 w-full sm:w-auto">

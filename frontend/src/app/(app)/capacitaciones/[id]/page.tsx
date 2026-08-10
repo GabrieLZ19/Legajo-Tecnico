@@ -31,6 +31,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { useAlert } from "@/context/AlertContext";
 import { useCapacitaciones } from "@/hooks/useCapacitaciones";
+import CapacitacionRegistroFirmas from "@/components/CapacitacionRegistroFirmas";
 
 const esCorrecto = (respuestaCorrecta: any, optIdx: number) => {
   if (respuestaCorrecta === undefined || respuestaCorrecta === null)
@@ -61,6 +62,7 @@ export default function DetalleCapacitacionPage() {
     cambiarEstadoCapacitacion,
     eliminarCapacitacion: deleteCap,
     exportarCapacitacion,
+    actualizarRegistroCapacitacion,
   } = useCapacitaciones();
 
   const [cap, setCap] = useState<Capacitacion | null>(null);
@@ -165,29 +167,33 @@ export default function DetalleCapacitacionPage() {
   const handleExportExcel = async () => {
     setExportingExcel(true);
     try {
-      const data = await exportarCapacitacion(id, "csv", {
+      const data = await exportarCapacitacion(id, "xlsx", {
         search: searchQuery,
         sector: selectedSector,
         estado: selectedEstado,
       });
 
-      const url = window.URL.createObjectURL(new Blob([data]));
+      const url = window.URL.createObjectURL(
+        new Blob([data], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        }),
+      );
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", `asistencias_capacitacion_${id}.csv`);
+      link.setAttribute("download", `registro_capacitacion_${id}.xlsx`);
       document.body.appendChild(link);
       link.click();
       link.parentNode?.removeChild(link);
       showAlert(
         "success",
         "Exportación exitosa",
-        "Las asistencias se han exportado correctamente a Excel.",
+        "El registro de capacitación se descargó en Excel.",
       );
     } catch (err) {
       showAlert(
         "error",
         "Error al exportar",
-        "No se pudo exportar las asistencias a Excel.",
+        "No se pudo exportar el registro a Excel.",
       );
     } finally {
       setExportingExcel(false);
@@ -208,20 +214,20 @@ export default function DetalleCapacitacionPage() {
       );
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", `asistencias_capacitacion_${id}.pdf`);
+      link.setAttribute("download", `registro_capacitacion_${id}.pdf`);
       document.body.appendChild(link);
       link.click();
       link.parentNode?.removeChild(link);
       showAlert(
         "success",
         "Exportación exitosa",
-        "El documento PDF se ha descargado correctamente.",
+        "El registro de capacitación se descargó en PDF.",
       );
     } catch (err) {
       showAlert(
         "error",
         "Error al exportar",
-        "No se pudo exportar las asistencias a PDF.",
+        "No se pudo exportar el registro a PDF.",
       );
     } finally {
       setExportingPdf(false);
@@ -386,12 +392,13 @@ export default function DetalleCapacitacionPage() {
             Temario
           </h2>
           <div
-            className="text-sm text-slate-700 leading-relaxed 
+            className="cap-html-content text-sm text-slate-700 leading-relaxed 
         [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2 [&_ul]:space-y-1 
         [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-2 [&_ol]:space-y-1 
         [&_p]:mb-2 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-slate-900 [&_h2]:mt-3 [&_h2]:mb-1
         [&_strong]:font-bold [&_em]:italic 
-        [&_img]:rounded-xl [&_img]:max-w-full [&_img]:my-3 [&_img]:shadow-xs"
+        [&_img]:rounded-xl [&_img]:max-w-full [&_img]:my-3 [&_img]:shadow-xs
+        overflow-x-auto"
             dangerouslySetInnerHTML={{ __html: cap.temario }}
           />
         </div>
@@ -402,7 +409,9 @@ export default function DetalleCapacitacionPage() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
             <QrCode className="h-4 w-4 text-blue-600" />
-            Código QR de Evaluación
+            {cap.con_evaluacion === false
+              ? "Código QR de Asistencia"
+              : "Código QR de Evaluación"}
           </h2>
           {!qrData && (
             <button
@@ -428,13 +437,18 @@ export default function DetalleCapacitacionPage() {
             <div className="bg-white p-4 rounded-2xl border-2 border-blue-100 shadow-lg animate-in zoom-in-95 duration-200">
               <img
                 src={qrData.qr}
-                alt="QR de evaluación"
+                alt={
+                  cap.con_evaluacion === false
+                    ? "QR de asistencia"
+                    : "QR de evaluación"
+                }
                 className="w-64 h-64"
               />
             </div>
             <p className="text-xs text-slate-500 font-medium text-center max-w-sm">
-              Los empleados deben escanear este código QR con su teléfono para
-              completar la evaluación y registrar su asistencia.
+              {cap.con_evaluacion === false
+                ? "Los empleados deben escanear este código QR con su teléfono para firmar y registrar su asistencia."
+                : "Los empleados deben escanear este código QR con su teléfono para completar la evaluación y registrar su asistencia."}
             </p>
             <div className="flex gap-2">
               <button
@@ -515,15 +529,15 @@ export default function DetalleCapacitacionPage() {
           <div className="flex gap-2">
             <button
               onClick={handleExportExcel}
-              disabled={exportingExcel || filteredAsistencias.length === 0}
+              disabled={exportingExcel}
               className="inline-flex items-center justify-center gap-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold px-3 py-2 rounded-xl text-xs transition-all cursor-pointer border border-slate-200 disabled:opacity-50"
             >
               <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
-              {exportingExcel ? "Exportando..." : "Excel (CSV)"}
+              {exportingExcel ? "Exportando..." : "Excel"}
             </button>
             <button
               onClick={handleExportPDF}
-              disabled={exportingPdf || filteredAsistencias.length === 0}
+              disabled={exportingPdf}
               className="inline-flex items-center justify-center gap-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold px-3 py-2 rounded-xl text-xs transition-all cursor-pointer border border-slate-200 disabled:opacity-50"
             >
               <FileText className="h-3.5 w-3.5 text-blue-600" />
@@ -647,6 +661,17 @@ export default function DetalleCapacitacionPage() {
         )}
       </div>
 
+      <CapacitacionRegistroFirmas
+        cap={cap}
+        canEdit={!!canManage || user?.rol === "dueno"}
+        onSaved={setCap}
+        onSave={async (payload) => {
+          const updated = await actualizarRegistroCapacitacion(id, payload);
+          return updated as Capacitacion;
+        }}
+        onAlert={showAlert}
+      />
+
       {/* Modal de confirmación de eliminación */}
       {showConfirmDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
@@ -696,7 +721,9 @@ export default function DetalleCapacitacionPage() {
           <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl border border-slate-100 flex flex-col space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
               <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">
-                Compartir Evaluación
+                {cap.con_evaluacion === false
+                  ? "Compartir Asistencia"
+                  : "Compartir Evaluación"}
               </h3>
               <button
                 type="button"
@@ -708,19 +735,26 @@ export default function DetalleCapacitacionPage() {
             </div>
 
             <p className="text-xs text-slate-500 font-medium">
-              Compartí el enlace de evaluación pública con los empleados que
-              asistieron a la capacitación.
+              {cap.con_evaluacion === false
+                ? "Compartí el enlace público para que los empleados firmen y registren su asistencia."
+                : "Compartí el enlace de evaluación pública con los empleados que asistieron a la capacitación."}
             </p>
 
             <div className="space-y-2 pt-2">
               {/* WhatsApp */}
               <a
                 href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
-                  `Hola, te comparto el link para completar la evaluación de la capacitación "${cap.titulo}":\n\n${
-                    typeof window !== "undefined"
-                      ? `${window.location.origin}/evaluacion/${id}`
-                      : ""
-                  }`,
+                  cap.con_evaluacion === false
+                    ? `Hola, te comparto el link para firmar la asistencia de la capacitación "${cap.titulo}":\n\n${
+                        typeof window !== "undefined"
+                          ? `${window.location.origin}/evaluacion/${id}`
+                          : ""
+                      }`
+                    : `Hola, te comparto el link para completar la evaluación de la capacitación "${cap.titulo}":\n\n${
+                        typeof window !== "undefined"
+                          ? `${window.location.origin}/evaluacion/${id}`
+                          : ""
+                      }`,
                 )}`}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -744,15 +778,25 @@ export default function DetalleCapacitacionPage() {
               {/* Email */}
               <a
                 href={`mailto:?subject=${encodeURIComponent(
-                  `Evaluación de Capacitación: ${cap.titulo}`,
+                  cap.con_evaluacion === false
+                    ? `Asistencia de Capacitación: ${cap.titulo}`
+                    : `Evaluación de Capacitación: ${cap.titulo}`,
                 )}&body=${encodeURIComponent(
-                  `Hola,\n\nTe comparto el link para completar la evaluación de la capacitación "${
-                    cap.titulo
-                  }":\n\n${
-                    typeof window !== "undefined"
-                      ? `${window.location.origin}/evaluacion/${id}`
-                      : ""
-                  }\n\nSaludos.`,
+                  cap.con_evaluacion === false
+                    ? `Hola,\n\nTe comparto el link para firmar la asistencia de la capacitación "${
+                        cap.titulo
+                      }":\n\n${
+                        typeof window !== "undefined"
+                          ? `${window.location.origin}/evaluacion/${id}`
+                          : ""
+                      }\n\nSaludos.`
+                    : `Hola,\n\nTe comparto el link para completar la evaluación de la capacitación "${
+                        cap.titulo
+                      }":\n\n${
+                        typeof window !== "undefined"
+                          ? `${window.location.origin}/evaluacion/${id}`
+                          : ""
+                      }\n\nSaludos.`,
                 )}`}
                 className="w-full py-3 px-4 bg-blue-50 hover:bg-blue-100 border border-blue-250 rounded-xl flex items-center justify-between text-blue-800 transition-all cursor-pointer font-bold text-xs"
               >

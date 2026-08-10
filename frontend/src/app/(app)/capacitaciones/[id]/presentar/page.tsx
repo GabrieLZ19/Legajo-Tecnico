@@ -13,7 +13,7 @@ import { useCapacitaciones } from "@/hooks/useCapacitaciones";
 import { normalizeDiapositivas } from "@/lib/cap-diapositivas";
 
 const slideHtmlClass =
-  "prose prose-invert max-w-4xl mx-auto text-left " +
+  "cap-html-content-invert prose prose-invert max-w-4xl mx-auto text-left " +
   "[&_ul]:list-disc [&_ul]:pl-6 [&_ul]:my-3 [&_ul]:space-y-2 " +
   "[&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:my-3 [&_ol]:space-y-2 " +
   "[&_p]:mb-3 [&_h1]:text-4xl [&_h1]:font-black [&_h1]:mb-4 " +
@@ -21,6 +21,7 @@ const slideHtmlClass =
   "[&_h3]:text-2xl [&_h3]:font-bold [&_h3]:mb-2 " +
   "[&_strong]:font-bold [&_em]:italic " +
   "[&_img]:rounded-2xl [&_img]:max-w-full [&_img]:my-4 [&_img]:mx-auto [&_img]:shadow-lg " +
+  "[&_table]:my-4 [&_table]:w-full " +
   "text-xl md:text-2xl leading-relaxed text-slate-100";
 
 export default function PresentarCapacitacionPage() {
@@ -159,15 +160,21 @@ export default function PresentarCapacitacionPage() {
         {isQrSlide ? (
           <div className="flex flex-col items-center gap-6 text-center max-w-lg">
             <h2 className="text-3xl sm:text-4xl font-black tracking-tight">
-              Evaluación
+              {cap?.con_evaluacion === false ? "Firma de asistencia" : "Evaluación"}
             </h2>
             <p className="text-slate-300 text-base sm:text-lg font-medium">
-              Escaneá el código QR para completar la evaluación
+              {cap?.con_evaluacion === false
+                ? "Escaneá el código QR para firmar y registrar la asistencia"
+                : "Escaneá el código QR para completar la evaluación"}
             </p>
             {qrData?.qr ? (
               <img
                 src={qrData.qr}
-                alt="QR de evaluación"
+                alt={
+                  cap?.con_evaluacion === false
+                    ? "QR de asistencia"
+                    : "QR de evaluación"
+                }
                 className="w-64 h-64 sm:w-80 sm:h-80 rounded-2xl bg-white p-4 shadow-2xl"
               />
             ) : (

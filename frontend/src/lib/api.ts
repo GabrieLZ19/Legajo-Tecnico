@@ -29,12 +29,21 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
-      // Si la petición falla por no estar autorizado, removemos la cookie y redirigimos
-      Cookies.remove('token');
-      Cookies.remove('perfil');
-      Cookies.remove('empresa');
-      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
-        window.location.href = '/login';
+      const path =
+        typeof window !== "undefined" ? window.location.pathname : "";
+      const isPublicRoute =
+        path.includes("/login") ||
+        path.startsWith("/evaluacion") ||
+        path.startsWith("/firmar");
+
+      // No expulsar al login en flujos públicos (QR de evaluación, etc.)
+      if (!isPublicRoute) {
+        Cookies.remove("token");
+        Cookies.remove("perfil");
+        Cookies.remove("empresa");
+        if (typeof window !== "undefined") {
+          window.location.href = "/login";
+        }
       }
     }
     return Promise.reject(error);

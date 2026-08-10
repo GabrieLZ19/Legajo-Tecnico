@@ -145,7 +145,15 @@ export interface Capacitacion {
   temario?: string;
   diapositivas?: CapacitacionDiapositiva[];
   fecha: string;
+  instructor?: string | null;
+  fechas_horario?: string | null;
+  cantidad_horas?: string | null;
+  firma_capacitador_url?: string | null;
+  aclaracion_capacitador?: string | null;
+  firma_empresa_url?: string | null;
+  aclaracion_empresa?: string | null;
   estado: EstadoCapacitacion;
+  con_evaluacion?: boolean;
   created_at: string;
   total_preguntas?: number;
   total_asistencias?: number;

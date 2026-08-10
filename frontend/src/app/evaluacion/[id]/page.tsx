@@ -15,7 +15,9 @@ import {
   ChevronRight,
   AlertCircle,
 } from "lucide-react";
-import SignatureCanvas from "react-signature-canvas";
+import type SignatureCanvas from "react-signature-canvas";
+import SignaturePad, { readSignatureOrThrow } from "@/components/SignaturePad";
+import { isSignatureEmpty } from "@/lib/signature";
 
 interface Pregunta {
   id: string;
@@ -39,6 +41,7 @@ interface CapData {
   titulo: string;
   temario?: string;
   estado: string;
+  con_evaluacion?: boolean;
   capacitacion_preguntas: Pregunta[];
 }
 
@@ -156,6 +159,7 @@ export default function EvaluacionPublicaPage() {
       setError(null);
 
       if (
+        cap?.con_evaluacion !== false &&
         cap?.capacitacion_preguntas &&
         cap.capacitacion_preguntas.length > 0
       ) {
@@ -180,7 +184,7 @@ export default function EvaluacionPublicaPage() {
   };
 
   const handleEnviar = async () => {
-    if (!sigRef.current || sigRef.current.isEmpty()) {
+    if (isSignatureEmpty(sigRef.current)) {
       setError("Por favor, firmá en el recuadro para confirmar tu asistencia.");
       return;
     }
@@ -188,9 +192,7 @@ export default function EvaluacionPublicaPage() {
     setError(null);
     setEnviando(true);
     try {
-      const firmaBase64 = sigRef.current
-        .getTrimmedCanvas()
-        .toDataURL("image/png");
+      const firmaBase64 = readSignatureOrThrow(sigRef.current);
 
       const data = await evaluarCapacitacion(id, {
         nombre_empleado: nombre,
@@ -212,8 +214,16 @@ export default function EvaluacionPublicaPage() {
       });
       setStep("resultado");
       localStorage.removeItem(`evaluacion_state_${id}`);
-    } catch (err: any) {
-      setError(err.response?.data?.error || "Error al enviar la evaluación.");
+    } catch (err: unknown) {
+      const axiosErr = err as {
+        response?: { data?: { error?: string } };
+        message?: string;
+      };
+      setError(
+        axiosErr.response?.data?.error ||
+          axiosErr.message ||
+          "Error al enviar la evaluación.",
+      );
     } finally {
       setEnviando(false);
     }
@@ -276,7 +286,9 @@ export default function EvaluacionPublicaPage() {
             <div className="text-center mb-2">
               <h2 className="text-lg font-black text-slate-900">Bienvenido</h2>
               <p className="text-xs text-slate-500 font-semibold mt-1">
-                Ingresá tus datos para registrar la asistencia y evaluación.
+                {cap?.con_evaluacion === false
+                  ? "Ingresá tus datos para registrar la asistencia."
+                  : "Ingresá tus datos para registrar la asistencia y evaluación."}
               </p>
             </div>
 
@@ -508,18 +520,7 @@ export default function EvaluacionPublicaPage() {
               </p>
             </div>
 
-            <div className="border border-slate-200 rounded-2xl overflow-hidden bg-slate-50 h-44">
-              <SignatureCanvas
-                ref={sigRef}
-                penColor="#1e293b"
-                minWidth={0.6}
-                maxWidth={2.2}
-                canvasProps={{
-                  className: "w-full h-full cursor-crosshair bg-slate-50",
-                  style: { width: "100%", height: "176px" },
-                }}
-              />
-            </div>
+            <SignaturePad ref={sigRef} />
 
             <div className="flex gap-2">
               <button
@@ -545,7 +546,19 @@ export default function EvaluacionPublicaPage() {
         {step === "resultado" && resultado && (
           <div className="space-y-6">
             <div className="text-center py-4 space-y-3">
-              {resultado.aprobado ? (
+              {cap?.con_evaluacion === false ? (
+                <div className="space-y-2">
+                  <div className="h-16 w-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto border border-emerald-100">
+                    <ShieldCheck className="h-8 w-8 text-emerald-600" />
+                  </div>
+                  <h2 className="text-xl font-black text-slate-900">
+                    ¡Asistencia registrada!
+                  </h2>
+                  <p className="text-xs text-slate-500 font-semibold">
+                    Tu firma se guardó correctamente. Gracias por participar.
+                  </p>
+                </div>
+              ) : resultado.aprobado ? (
                 <div className="space-y-2">
                   <div className="h-16 w-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto border border-emerald-100">
                     <ShieldCheck className="h-8 w-8 text-emerald-600" />

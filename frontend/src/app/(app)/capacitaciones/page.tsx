@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Calendar,
   BookOpen,
+  CalendarRange,
 } from "lucide-react";
 
 import { useCapacitaciones } from "@/hooks/useCapacitaciones";
@@ -24,6 +25,7 @@ export default function CapacitacionesPage() {
   const [filtroEstado, setFiltroEstado] = useState<string>("todas");
 
   const canCreate = user?.rol === "preventor" || user?.rol === "admin";
+  const canViewPlan = !!user;
 
   useEffect(() => {
     if (empresa?.id) {
@@ -73,24 +75,35 @@ export default function CapacitacionesPage() {
             Capacitaciones
           </h1>
         </div>
-        {canCreate && (
-          <div className="flex flex-col sm:flex-row gap-2">
-            <Link
-              href="/capacitaciones/biblioteca"
-              className="inline-flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold px-5 py-3 rounded-xl text-sm cursor-pointer"
-            >
-              <BookOpen className="h-4 w-4" />
-              Biblioteca
-            </Link>
-            <Link
-              href="/capacitaciones/nuevo"
-              className="inline-flex items-center justify-center gap-2 bg-brand-primary hover:bg-brand-primary/95 text-white font-bold px-5 py-3 rounded-xl shadow-md shadow-blue-900/10 hover:shadow-lg transition-all text-sm cursor-pointer"
-            >
-              <Plus className="h-4 w-4 stroke-3" />
-              Nueva Capacitación
-            </Link>
+        <div className="flex flex-col sm:flex-row gap-2">
+            {canViewPlan && (
+              <Link
+                href="/capacitaciones/plan-anual"
+                className="inline-flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold px-5 py-3 rounded-xl text-sm cursor-pointer"
+              >
+                <CalendarRange className="h-4 w-4 text-blue-600" />
+                Plan anual
+              </Link>
+            )}
+            {canCreate && (
+              <>
+                <Link
+                  href="/capacitaciones/biblioteca"
+                  className="inline-flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold px-5 py-3 rounded-xl text-sm cursor-pointer"
+                >
+                  <BookOpen className="h-4 w-4" />
+                  Biblioteca
+                </Link>
+                <Link
+                  href="/capacitaciones/nuevo"
+                  className="inline-flex items-center justify-center gap-2 bg-brand-primary hover:bg-brand-primary/95 text-white font-bold px-5 py-3 rounded-xl shadow-md shadow-blue-900/10 hover:shadow-lg transition-all text-sm cursor-pointer"
+                >
+                  <Plus className="h-4 w-4 stroke-3" />
+                  Nueva Capacitación
+                </Link>
+              </>
+            )}
           </div>
-        )}
       </div>
 
       {/* Filtros */}
@@ -166,7 +179,9 @@ export default function CapacitacionesPage() {
                     </span>
                     <span className="text-[11px] text-slate-400 font-semibold flex items-center gap-1 shrink-0">
                       <HelpCircle className="h-3.5 w-3.5" />
-                      {cap.total_preguntas || 0} preguntas
+                      {cap.con_evaluacion === false
+                        ? "Sin evaluación"
+                        : `${cap.total_preguntas || 0} preguntas`}
                     </span>
                     <span className="text-[11px] text-slate-400 font-semibold flex items-center gap-1 shrink-0">
                       <Users className="h-3.5 w-3.5" />

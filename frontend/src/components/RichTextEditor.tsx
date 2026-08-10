@@ -1,9 +1,14 @@
 "use client";
 
 import React, { useRef, useEffect } from "react";
-import { useEditor, EditorContent } from "@tiptap/react";
+import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import ResizeImage from "tiptap-extension-resize-image";
+import { Table } from "@tiptap/extension-table";
+import { TableRow } from "@tiptap/extension-table-row";
+import { TableHeader } from "@tiptap/extension-table-header";
+import { TableCell } from "@tiptap/extension-table-cell";
+import { TextStyle, Color } from "@tiptap/extension-text-style";
 import {
   Bold,
   Italic,
@@ -12,13 +17,196 @@ import {
   ImageIcon,
   Heading2,
   Trash2,
+  Undo2,
 } from "lucide-react";
 import { useAlert } from "@/context/AlertContext";
+
+/** Conserva fondo y alineación al pegar tablas desde Word. */
+const CapTableCell = TableCell.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      backgroundColor: {
+        default: null,
+        parseHTML: (element) =>
+          element.style.backgroundColor ||
+          element.getAttribute("bgcolor") ||
+          null,
+        renderHTML: (attributes) => {
+          if (!attributes.backgroundColor) return {};
+          return {
+            style: `background-color: ${attributes.backgroundColor}`,
+          };
+        },
+      },
+      textAlign: {
+        default: null,
+        parseHTML: (element) =>
+          element.style.textAlign || element.getAttribute("align") || null,
+        renderHTML: (attributes) => {
+          if (!attributes.textAlign) return {};
+          return { style: `text-align: ${attributes.textAlign}` };
+        },
+      },
+    };
+  },
+});
+
+const CapTableHeader = TableHeader.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      backgroundColor: {
+        default: null,
+        parseHTML: (element) =>
+          element.style.backgroundColor ||
+          element.getAttribute("bgcolor") ||
+          null,
+        renderHTML: (attributes) => {
+          if (!attributes.backgroundColor) return {};
+          return {
+            style: `background-color: ${attributes.backgroundColor}`,
+          };
+        },
+      },
+      textAlign: {
+        default: null,
+        parseHTML: (element) =>
+          element.style.textAlign || element.getAttribute("align") || null,
+        renderHTML: (attributes) => {
+          if (!attributes.textAlign) return {};
+          return { style: `text-align: ${attributes.textAlign}` };
+        },
+      },
+    };
+  },
+});
 
 interface RichTextEditorProps {
   value: string;
   onChange: (content: string) => void;
   placeholder?: string;
+}
+
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") resolve(reader.result);
+      else reject(new Error("No se pudo leer la imagen"));
+    };
+    reader.onerror = () => reject(new Error("No se pudo leer la imagen"));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function sourceToDataUrl(src: string): Promise<string | null> {
+  if (src.startsWith("data:image/")) return src;
+
+  if (src.startsWith("blob:") || /^https?:\/\//i.test(src)) {
+    try {
+      const response = await fetch(src);
+      if (!response.ok) return null;
+      const blob = await response.blob();
+      if (!blob.type.startsWith("image/")) return null;
+      if (blob.size > MAX_IMAGE_BYTES) return null;
+      return await fileToDataUrl(
+        new File([blob], "pasted-image", { type: blob.type || "image/png" }),
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Convierte imgs del HTML pegado a data URLs embebidas.
+ * Para src rotos (file://, cid:, etc.) usa las imágenes del portapapeles en orden.
+ */
+async function embedClipboardImagesInHtml(
+  html: string,
+  clipboardImages: File[],
+): Promise<{ html: string; recovered: number; dropped: number }> {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, "text/html");
+  const imgs = Array.from(doc.querySelectorAll("img"));
+  let fileIndex = 0;
+  let recovered = 0;
+  let dropped = 0;
+
+  for (const img of imgs) {
+    const src = img.getAttribute("src")?.trim() || "";
+    let dataUrl = await sourceToDataUrl(src);
+
+    if (!dataUrl && fileIndex < clipboardImages.length) {
+      const file = clipboardImages[fileIndex++];
+      if (file.size <= MAX_IMAGE_BYTES) {
+        try {
+          dataUrl = await fileToDataUrl(file);
+        } catch {
+          dataUrl = null;
+        }
+      }
+    }
+
+    if (dataUrl) {
+      img.setAttribute("src", dataUrl);
+      img.removeAttribute("srcset");
+      recovered += 1;
+    } else {
+      img.remove();
+      dropped += 1;
+    }
+  }
+
+  return { html: doc.body.innerHTML, recovered, dropped };
+}
+
+/** Limpia HTML de Word/Office para que TipTap conserve tablas y formato útil. */
+function sanitizePastedHtml(html: string): string {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, "text/html");
+
+  doc
+    .querySelectorAll("style, meta, link, script, xml, noscript")
+    .forEach((el) => el.remove());
+
+  doc.querySelectorAll("*").forEach((el) => {
+    // Atributos propietarios de Word que no aportan al editor
+    for (const attr of Array.from(el.attributes)) {
+      const name = attr.name.toLowerCase();
+      if (
+        name.startsWith("o:") ||
+        name.startsWith("v:") ||
+        name.startsWith("w:") ||
+        name === "class" ||
+        name === "lang" ||
+        name.startsWith("data-")
+      ) {
+        el.removeAttribute(attr.name);
+      }
+    }
+  });
+
+  // Word a veces deja párrafos vacíos con &nbsp; dentro de celdas; TipTap los tolera.
+  return doc.body.innerHTML;
+}
+
+function collectClipboardImages(clipboardData: DataTransfer): File[] {
+  const fromItems = Array.from(clipboardData.items || [])
+    .filter((item) => item.type.startsWith("image/"))
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => !!file);
+
+  if (fromItems.length > 0) return fromItems;
+
+  return Array.from(clipboardData.files || []).filter((file) =>
+    file.type.startsWith("image/"),
+  );
 }
 
 export default function RichTextEditor({
@@ -28,10 +216,13 @@ export default function RichTextEditor({
 }: RichTextEditorProps) {
   const { showAlert } = useAlert();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const editorRef = useRef<Editor | null>(null);
+  const showAlertRef = useRef(showAlert);
+  showAlertRef.current = showAlert;
 
-  const processImageFile = (file: File, editorInstance: any) => {
+  const processImageFile = (file: File, editorInstance: Editor) => {
     if (!file.type.startsWith("image/")) {
-      showAlert(
+      showAlertRef.current(
         "error",
         "Archivo no válido",
         "Por favor, selecciona una imagen en formato PNG, JPG o WEBP.",
@@ -39,8 +230,8 @@ export default function RichTextEditor({
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      showAlert(
+    if (file.size > MAX_IMAGE_BYTES) {
+      showAlertRef.current(
         "warning",
         "Imagen muy pesada",
         "La imagen no debe superar los 5MB.",
@@ -48,63 +239,122 @@ export default function RichTextEditor({
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        editorInstance.chain().focus().setImage({ src: reader.result }).run();
-      }
-    };
-    reader.onerror = () => {
-      showAlert("error", "Error", "No se pudo procesar la imagen.");
-    };
-    reader.readAsDataURL(file);
+    void fileToDataUrl(file)
+      .then((dataUrl) => {
+        editorInstance.chain().focus().setImage({ src: dataUrl }).run();
+      })
+      .catch(() => {
+        showAlertRef.current("error", "Error", "No se pudo procesar la imagen.");
+      });
   };
 
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
       StarterKit,
+      TextStyle,
+      Color,
+      Table.configure({
+        resizable: true,
+        HTMLAttributes: {
+          class: "cap-table",
+        },
+      }),
+      TableRow,
+      CapTableHeader,
+      CapTableCell,
       ResizeImage.configure({
         inline: false,
         allowBase64: true,
       }),
     ],
     content: value,
-    onUpdate: ({ editor }) => {
-      onChange(editor.getHTML());
+    onCreate: ({ editor: created }) => {
+      editorRef.current = created;
+    },
+    onDestroy: () => {
+      editorRef.current = null;
+    },
+    onUpdate: ({ editor: updated }) => {
+      onChange(updated.getHTML());
     },
     editorProps: {
       attributes: {
         class:
           "prose prose-sm max-w-none p-4 min-h-[220px] focus:outline-hidden bg-white rounded-b-xl border-t border-slate-100 text-slate-800 leading-relaxed",
       },
-      handleDrop: (view, event, slice, moved) => {
+      transformPastedHTML: (html) => sanitizePastedHtml(html),
+      handleDrop: (view, event, _slice, moved) => {
         if (!moved && event.dataTransfer?.files?.length) {
+          const ed = editorRef.current;
+          if (!ed) return false;
           const file = event.dataTransfer.files[0];
           if (file.type.startsWith("image/")) {
             event.preventDefault();
-            processImageFile(file, editor);
+            processImageFile(file, ed);
             return true;
           }
         }
         return false;
       },
-      handlePaste: (view, event) => {
-        const items = Array.from(event.clipboardData?.items || []);
-        for (const item of items) {
-          if (item.type.indexOf("image") === 0) {
-            event.preventDefault();
-            const file = item.getAsFile();
-            if (file) processImageFile(file, editor);
-            return true;
-          }
+      handlePaste: (_view, event) => {
+        const clipboardData = event.clipboardData;
+        const ed = editorRef.current;
+        if (!clipboardData || !ed) return false;
+
+        const clipboardImages = collectClipboardImages(clipboardData);
+        const html = clipboardData.getData("text/html");
+        const hasHtmlImages = /<img[\s>]/i.test(html);
+        const hasHtmlTable = /<table[\s>]/i.test(html);
+
+        // Pegado con HTML rico (tablas y/o imágenes desde Word, Excel, etc.)
+        if (html && (hasHtmlImages || hasHtmlTable)) {
+          event.preventDefault();
+          void (async () => {
+            let processed = sanitizePastedHtml(html);
+            let dropped = 0;
+
+            if (hasHtmlImages) {
+              const result = await embedClipboardImagesInHtml(
+                processed,
+                clipboardImages,
+              );
+              processed = result.html;
+              dropped = result.dropped;
+            }
+
+            if (processed.trim()) {
+              ed.chain().focus().insertContent(processed).run();
+            }
+
+            if (dropped > 0 && clipboardImages.length === 0) {
+              showAlertRef.current(
+                "warning",
+                "Algunas imágenes no se pudieron pegar",
+                "Usá el botón «Insertar Imagen» o copiá la imagen sola (no desde Word/PowerPoint) y pegala con Ctrl+V.",
+              );
+            }
+          })();
+          return true;
         }
+
+        // Pegado directo de imagen / captura de pantalla
+        if (clipboardImages.length > 0) {
+          event.preventDefault();
+          clipboardImages.forEach((file) => processImageFile(file, ed));
+          return true;
+        }
+
         return false;
       },
     },
   });
 
-  // 🛠️ CLAVE: Sincronizar el contenido si cambia el prop 'value' desde afuera
+  useEffect(() => {
+    editorRef.current = editor;
+  }, [editor]);
+
+  // Sincronizar el contenido si cambia el prop 'value' desde afuera
   useEffect(() => {
     if (editor && value !== editor.getHTML()) {
       editor.commands.setContent(value || "");
@@ -218,6 +468,17 @@ export default function RichTextEditor({
           >
             <ImageIcon className="h-4 w-4 text-blue-600" />
             <span>Insertar Imagen</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => editor.chain().focus().undo().run()}
+            disabled={!editor.can().undo()}
+            className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-700 transition-colors flex items-center gap-1.5 text-xs font-bold cursor-pointer bg-white border border-slate-200 shadow-2xs disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white"
+            title="Deshacer (Ctrl+Z)"
+          >
+            <Undo2 className="h-4 w-4 text-slate-600" />
+            <span>Deshacer</span>
           </button>
         </div>
 

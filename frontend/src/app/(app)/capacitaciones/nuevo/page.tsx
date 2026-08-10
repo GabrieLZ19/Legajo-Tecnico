@@ -26,6 +26,15 @@ import {
   deriveTemario,
   normalizeDiapositivas,
 } from "@/lib/cap-diapositivas";
+import CapacitacionAgendaFields from "@/components/CapacitacionAgendaFields";
+import {
+  CapAgendaErrors,
+  CapAgendaValue,
+  buildFechasHorario,
+  emptyAgenda,
+  hasAgendaErrors,
+  validateAgenda,
+} from "@/lib/cap-agenda";
 
 type ModoOrigen = "cero" | "empresa" | "lt";
 
@@ -49,7 +58,12 @@ export default function NuevaCapacitacionPage() {
   const [diapositivas, setDiapositivas] = useState<CapacitacionDiapositiva[]>([
     { contenido: "" },
   ]);
-  const [fecha, setFecha] = useState(new Date().toISOString().split("T")[0]);
+  const [agenda, setAgenda] = useState<CapAgendaValue>(
+    emptyAgenda(new Date().toISOString().split("T")[0]),
+  );
+  const [agendaErrors, setAgendaErrors] = useState<CapAgendaErrors>({});
+  const [instructor, setInstructor] = useState("");
+  const [conEvaluacion, setConEvaluacion] = useState(true);
   const [preguntas, setPreguntas] = useState<PreguntaPlantillaForm[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +83,7 @@ export default function NuevaCapacitacionPage() {
     setTitulo("");
     setDiapositivas([{ contenido: "" }]);
     setPreguntas([]);
+    setConEvaluacion(true);
   };
 
   const handleSeleccionarPlantilla = async (plantillaId: string) => {
@@ -81,11 +96,11 @@ export default function NuevaCapacitacionPage() {
       setDiapositivas(
         normalizeDiapositivas(data.diapositivas, data.temario),
       );
-      setPreguntas(
-        mapPlantillaPreguntasToForm(
-          data.capacitacion_plantilla_preguntas || [],
-        ),
+      const preguntasForm = mapPlantillaPreguntasToForm(
+        data.capacitacion_plantilla_preguntas || [],
       );
+      setPreguntas(preguntasForm);
+      if (preguntasForm.length > 0) setConEvaluacion(true);
       showAlert(
         "success",
         "Cargada",
@@ -105,23 +120,46 @@ export default function NuevaCapacitacionPage() {
       return;
     }
 
+    const nextAgendaErrors = validateAgenda(agenda, {
+      requireFecha: true,
+      requireHorario: true,
+    });
+    setAgendaErrors(nextAgendaErrors);
+    if (hasAgendaErrors(nextAgendaErrors)) {
+      setError("Revisá la fecha, el horario y la cantidad de horas.");
+      return;
+    }
+
+    if (conEvaluacion && preguntas.length === 0) {
+      setError(
+        "Agregá al menos una pregunta, o elegí “Sin evaluación (solo firmar)”.",
+      );
+      return;
+    }
+
     setSaving(true);
     try {
       const temario = deriveTemario(diapositivas);
-      const preguntasPayload = preguntas.map((p) => ({
-        pregunta: p.pregunta,
-        opciones: p.opciones,
-        respuesta_correcta: Array.isArray(p.respuesta_correcta)
-          ? JSON.stringify(p.respuesta_correcta)
-          : String(p.respuesta_correcta),
-      }));
+      const preguntasPayload = conEvaluacion
+        ? preguntas.map((p) => ({
+            pregunta: p.pregunta,
+            opciones: p.opciones,
+            respuesta_correcta: Array.isArray(p.respuesta_correcta)
+              ? JSON.stringify(p.respuesta_correcta)
+              : String(p.respuesta_correcta),
+          }))
+        : [];
 
       await crearCapacitacion({
         empresa_id: empresa!.id,
         titulo,
         temario,
         diapositivas,
-        fecha,
+        fecha: agenda.fecha,
+        instructor: instructor.trim() || undefined,
+        fechas_horario: buildFechasHorario(agenda),
+        cantidad_horas: agenda.cantidadHoras.trim(),
+        con_evaluacion: conEvaluacion,
         preguntas: preguntasPayload,
         ...(selectedPlantillaId
           ? { copiar_de_plantilla_id: selectedPlantillaId }
@@ -135,7 +173,7 @@ export default function NuevaCapacitacionPage() {
           titulo: titulo.trim(),
           temario,
           diapositivas,
-          preguntas,
+          preguntas: conEvaluacion ? preguntas : [],
         });
       }
 
@@ -279,6 +317,53 @@ export default function NuevaCapacitacionPage() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3">
+          <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+            Al finalizar la presentación
+          </h2>
+          <p className="text-xs text-slate-500 font-semibold">
+            El QR puede llevar a una evaluación con preguntas, o solo a firmar
+            la asistencia.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setConEvaluacion(true)}
+              className={`px-4 py-3 rounded-xl text-left border transition-all cursor-pointer ${
+                conEvaluacion
+                  ? "border-blue-500 bg-blue-50 text-blue-800"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              <span className="block text-xs font-black uppercase tracking-wide">
+                Con evaluación
+              </span>
+              <span className="block text-[11px] font-semibold mt-1 opacity-80">
+                Datos → preguntas → firma
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setConEvaluacion(false);
+                setPreguntas([]);
+              }}
+              className={`px-4 py-3 rounded-xl text-left border transition-all cursor-pointer ${
+                !conEvaluacion
+                  ? "border-blue-500 bg-blue-50 text-blue-800"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              <span className="block text-xs font-black uppercase tracking-wide">
+                Sin evaluación
+              </span>
+              <span className="block text-[11px] font-semibold mt-1 opacity-80">
+                Solo datos y firma de asistencia
+              </span>
+            </button>
+          </div>
+        </div>
+
         <CapacitacionPlantillaForm
           titulo={titulo}
           diapositivas={diapositivas}
@@ -286,20 +371,37 @@ export default function NuevaCapacitacionPage() {
           onTituloChange={setTitulo}
           onDiapositivasChange={setDiapositivas}
           onPreguntasChange={setPreguntas}
+          showPreguntas={conEvaluacion}
           error={error}
         />
 
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-2">
-          <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-            <Calendar className="h-3 w-3" /> Fecha de Capacitación
-          </label>
-          <input
-            type="date"
-            required
-            value={fecha}
-            onChange={(e) => setFecha(e.target.value)}
-            className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 bg-white"
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+          <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+            <Calendar className="h-4 w-4 text-blue-600" />
+            Fecha y horario
+          </h2>
+
+          <CapacitacionAgendaFields
+            value={agenda}
+            onChange={(next) => {
+              setAgenda(next);
+              setAgendaErrors({});
+            }}
+            errors={agendaErrors}
           />
+
+          <div className="space-y-1.5 pt-1">
+            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              Instructor
+            </label>
+            <input
+              type="text"
+              value={instructor}
+              onChange={(e) => setInstructor(e.target.value)}
+              placeholder="Nombre del capacitador"
+              className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-semibold"
+            />
+          </div>
         </div>
 
         {modoOrigen === "cero" && (

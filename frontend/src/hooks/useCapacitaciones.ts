@@ -116,7 +116,7 @@ export function useCapacitaciones() {
 
   const exportarCapacitacion = async (
     id: string,
-    format: "csv" | "pdf",
+    format: "xlsx" | "pdf" | "csv",
     filters?: { search?: string; sector?: string; estado?: string }
   ) => {
     const params = new URLSearchParams({ format });
@@ -128,6 +128,32 @@ export function useCapacitaciones() {
       responseType: "blob",
     });
     return response.data;
+  };
+
+  const actualizarRegistroCapacitacion = async (
+    id: string,
+    payload: {
+      instructor?: string;
+      fecha?: string;
+      fechas_horario?: string;
+      cantidad_horas?: string;
+      aclaracion_capacitador?: string;
+      aclaracion_empresa?: string;
+      firma_capacitador?: string;
+      firma_empresa?: string;
+    },
+  ) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data } = await api.patch(`/capacitaciones/${id}/registro`, payload);
+      return data;
+    } catch (err: any) {
+      setError(err.response?.data?.error || "Error al guardar el registro");
+      throw err;
+    } finally {
+      setLoading(false);
+    }
   };
 
   const crearCapacitacion = async (payload: any) => {
@@ -171,6 +197,7 @@ export function useCapacitaciones() {
     crearCapacitacion,
     actualizarCapacitacion,
     evaluarCapacitacion,
+    actualizarRegistroCapacitacion,
   };
 }
 
