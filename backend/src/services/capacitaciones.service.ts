@@ -5,6 +5,10 @@ import {
   ensureDiapositivas,
   resolveDiapositivasAndTemario,
 } from "../utils/cap-diapositivas";
+import {
+  buildRegistroExcel,
+  buildRegistroPdf,
+} from "./capacitacionRegistroExport.service";
 
 export const capacitacionesService = {
   /**
@@ -44,11 +48,19 @@ export const capacitacionesService = {
     temario?: string;
     diapositivas?: CapacitacionDiapositiva[];
     fecha?: string;
+    instructor?: string;
+    fechas_horario?: string;
+    cantidad_horas?: string;
+    con_evaluacion?: boolean;
     preguntas?: any[];
     copiar_de_id?: string; // Clonar desde sesión previa (compat)
     copiar_de_plantilla_id?: string; // Clonar desde biblioteca de plantillas
   }) {
-    let preguntasAInsertar = params.preguntas || [];
+    const conEvaluacion = params.con_evaluacion !== false;
+    // Si el cliente envía preguntas explícitamente (aunque sea []), no clonamos desde plantilla
+    let preguntasAInsertar: any[] | null = Array.isArray(params.preguntas)
+      ? params.preguntas
+      : null;
     let diapositivasClonadas: CapacitacionDiapositiva[] | undefined;
 
     // Clonar desde plantilla (biblioteca empresa o LT)
@@ -82,8 +94,9 @@ export const capacitacionesService = {
           diapositivasClonadas = plantillaOrigen.diapositivas;
         }
         if (
-          plantillaOrigen.capacitacion_plantilla_preguntas &&
-          preguntasAInsertar.length === 0
+          conEvaluacion &&
+          preguntasAInsertar === null &&
+          plantillaOrigen.capacitacion_plantilla_preguntas
         ) {
           const sorted = [
             ...plantillaOrigen.capacitacion_plantilla_preguntas,
@@ -120,8 +133,9 @@ export const capacitacionesService = {
           diapositivasClonadas = capOrigen.diapositivas;
         }
         if (
-          capOrigen.capacitacion_preguntas &&
-          preguntasAInsertar.length === 0
+          conEvaluacion &&
+          preguntasAInsertar === null &&
+          capOrigen.capacitacion_preguntas
         ) {
           preguntasAInsertar = capOrigen.capacitacion_preguntas.map(
             (p: any) => ({
@@ -133,6 +147,10 @@ export const capacitacionesService = {
         }
       }
     }
+
+    const preguntasFinales = !conEvaluacion
+      ? []
+      : preguntasAInsertar || [];
 
     const { diapositivas, temario } = resolveDiapositivasAndTemario({
       diapositivas: params.diapositivas?.length
@@ -151,6 +169,10 @@ export const capacitacionesService = {
         temario,
         diapositivas,
         fecha: params.fecha || new Date().toISOString(),
+        instructor: params.instructor || null,
+        fechas_horario: params.fechas_horario || null,
+        cantidad_horas: params.cantidad_horas || null,
+        con_evaluacion: conEvaluacion,
         estado: "borrador",
       })
       .select()
@@ -158,8 +180,8 @@ export const capacitacionesService = {
 
     if (capError) throw capError;
 
-    if (preguntasAInsertar.length > 0) {
-      const preguntasData = preguntasAInsertar.map((p: any, idx: number) => ({
+    if (preguntasFinales.length > 0) {
+      const preguntasData = preguntasFinales.map((p: any, idx: number) => ({
         capacitacion_id: cap.id,
         enunciado: p.pregunta || p.enunciado,
         opciones: p.opciones,
@@ -228,7 +250,7 @@ export const capacitacionesService = {
       .from("capacitaciones")
       .select(
         `
-        id, titulo, temario, estado, fecha,
+        id, titulo, temario, estado, fecha, con_evaluacion,
         capacitacion_preguntas(id, enunciado, opciones, orden)
       `,
       )
@@ -240,7 +262,9 @@ export const capacitacionesService = {
     if (data.estado !== "activa")
       return { error: "La capacitación no está activa", code: 400 };
 
-    if (data.capacitacion_preguntas) {
+    if (!data.con_evaluacion) {
+      (data as any).capacitacion_preguntas = [];
+    } else if (data.capacitacion_preguntas) {
       data.capacitacion_preguntas = data.capacitacion_preguntas.map(
         (p: any) => ({
           ...p,
@@ -273,7 +297,7 @@ export const capacitacionesService = {
   async generarQR(id: string) {
     const { data: cap, error } = await supabaseAdmin
       .from("capacitaciones")
-      .select("id, titulo, estado")
+      .select("id, titulo, estado, con_evaluacion")
       .eq("id", id)
       .single();
 
@@ -297,11 +321,18 @@ export const capacitacionesService = {
   async evaluarEmpleado(id: string, body: any) {
     const { nombre_empleado, dni_empleado, sector, respuestas, firma } = body;
 
+    if (!nombre_empleado?.trim() || !dni_empleado?.trim()) {
+      throw new Error("Nombre y DNI son obligatorios");
+    }
+    if (!firma || typeof firma !== "string" || !firma.startsWith("data:image/")) {
+      throw new Error("La firma es obligatoria");
+    }
+
     const { data: cap, error: capError } = await supabaseAdmin
       .from("capacitaciones")
       .select(
         `
-        id, titulo, estado,
+        id, titulo, estado, con_evaluacion,
         capacitacion_preguntas(id, enunciado, opciones, respuesta_correcta, orden)
       `,
       )
@@ -312,7 +343,10 @@ export const capacitacionesService = {
     if (cap.estado !== "activa")
       throw new Error("La capacitación no está activa");
 
-    const preguntas = (cap as any).capacitacion_preguntas || [];
+    const conEvaluacion = (cap as any).con_evaluacion !== false;
+    const preguntas = conEvaluacion
+      ? (cap as any).capacitacion_preguntas || []
+      : [];
     let correctas = 0;
     const totalPreguntas = preguntas.length;
 
@@ -383,7 +417,12 @@ export const capacitacionesService = {
         .from("firmas_digitales")
         .upload(firmaPath, buffer, { contentType: "image/png", upsert: true });
 
-      if (!storageError) {
+      if (storageError) {
+        console.error(
+          "Error al subir firma de capacitación:",
+          storageError.message,
+        );
+      } else {
         const { data: urlData } = supabaseAdmin.storage
           .from("firmas_digitales")
           .getPublicUrl(firmaPath);
@@ -400,11 +439,16 @@ export const capacitacionesService = {
         sector: sector || null,
         puntaje,
         firma_url: firmaUrl,
+        firmado_at: new Date().toISOString(),
       })
       .select()
       .single();
 
-    if (asistError) throw asistError;
+    if (asistError) {
+      throw new Error(
+        asistError.message || "No se pudo registrar la asistencia",
+      );
+    }
 
     return {
       success: true,
@@ -419,7 +463,17 @@ export const capacitacionesService = {
    * Actualizar capacitación
    */
   async actualizar(id: string, body: any) {
-    const { titulo, temario, diapositivas, fecha, preguntas } = body;
+    const {
+      titulo,
+      temario,
+      diapositivas,
+      fecha,
+      preguntas,
+      instructor,
+      fechas_horario,
+      cantidad_horas,
+      con_evaluacion,
+    } = body;
 
     const { data: cap, error: capError } = await supabaseAdmin
       .from("capacitaciones")
@@ -435,10 +489,20 @@ export const capacitacionesService = {
         code: 400,
       };
 
+    const conEvaluacion =
+      con_evaluacion === undefined ? undefined : con_evaluacion !== false;
+
     const updatePayload: Record<string, unknown> = {
       titulo: titulo || undefined,
       fecha: fecha || undefined,
+      instructor: instructor !== undefined ? instructor : undefined,
+      fechas_horario: fechas_horario !== undefined ? fechas_horario : undefined,
+      cantidad_horas: cantidad_horas !== undefined ? cantidad_horas : undefined,
     };
+
+    if (conEvaluacion !== undefined) {
+      updatePayload.con_evaluacion = conEvaluacion;
+    }
 
     if (diapositivas !== undefined || temario !== undefined) {
       const resolved = resolveDiapositivasAndTemario({
@@ -456,14 +520,18 @@ export const capacitacionesService = {
 
     if (updateError) throw updateError;
 
-    if (preguntas && Array.isArray(preguntas)) {
+    const shouldClearPreguntas = conEvaluacion === false;
+    if (shouldClearPreguntas || (preguntas && Array.isArray(preguntas))) {
       await supabaseAdmin
         .from("capacitacion_preguntas")
         .delete()
         .eq("capacitacion_id", id);
 
-      if (preguntas.length > 0) {
-        const preguntasData = preguntas.map((p: any, idx: number) => ({
+      const preguntasAGuardar =
+        shouldClearPreguntas || !Array.isArray(preguntas) ? [] : preguntas;
+
+      if (preguntasAGuardar.length > 0) {
+        const preguntasData = preguntasAGuardar.map((p: any, idx: number) => ({
           capacitacion_id: id,
           enunciado: p.pregunta,
           opciones: p.opciones,
@@ -501,7 +569,7 @@ export const capacitacionesService = {
   },
 
   /**
-   * Generar contenido para exportar asistencias (CSV o PDF)
+   * Generar contenido para exportar asistencias (Excel XLSX o PDF)
    */
   async exportarAsistencias(
     id: string,
@@ -515,8 +583,9 @@ export const capacitacionesService = {
       .select(
         `
         *,
-        empresas(razon_social, cuit),
-        capacitacion_asistencias(id, nombre_empleado, documento, sector, puntaje, firmado_at)
+        empresas(razon_social, cuit, logo_url),
+        preventor:perfiles!capacitaciones_preventor_id_fkey(nombre_completo),
+        capacitacion_asistencias(id, nombre_empleado, documento, sector, puntaje, firma_url, firmado_at)
       `,
       )
       .eq("id", id)
@@ -550,173 +619,98 @@ export const capacitacionesService = {
         asistencias = asistencias.filter((a: any) => a.puntaje < 60);
     }
 
-    if (format === "csv") {
-      let csvContent = "\uFEFF";
-      csvContent +=
-        "N°,Nombre y Apellido,DNI,Sector,Puntaje,Estado,Fecha de Registro\n";
+    const registroData = {
+      titulo: cap.titulo || "",
+      fecha: cap.fecha,
+      instructor:
+        cap.instructor ||
+        (cap.preventor as any)?.nombre_completo ||
+        null,
+      fechas_horario: cap.fechas_horario,
+      cantidad_horas: cap.cantidad_horas,
+      firma_capacitador_url: cap.firma_capacitador_url,
+      aclaracion_capacitador: cap.aclaracion_capacitador,
+      firma_empresa_url: cap.firma_empresa_url,
+      aclaracion_empresa: cap.aclaracion_empresa,
+      empresa: cap.empresas,
+      asistencias,
+    };
 
-      asistencias.forEach((a: any, idx: number) => {
-        const nombre = a.nombre_empleado || "N/A";
-        const dni = a.documento || "N/A";
-        const sec = a.sector || "N/A";
-        const puntaje = a.puntaje !== undefined ? `${a.puntaje}%` : "N/A";
-        const est = a.puntaje >= 60 ? "APROBADO" : "DESAPROBADO";
-        const fecha = a.firmado_at
-          ? new Date(a.firmado_at).toLocaleDateString("es-AR")
-          : "N/A";
-
-        csvContent += `"${idx + 1}","${nombre}","${dni}","${sec}","${puntaje}","${est}","${fecha}"\n`;
-      });
-
-      return { type: "csv", content: csvContent };
+    if (format === "xlsx" || format === "excel" || format === "csv") {
+      const buffer = await buildRegistroExcel(registroData);
+      return { type: "xlsx" as const, buffer };
     }
 
     if (format === "pdf") {
-      const PDFDocument = require("pdfkit");
-      const doc = new PDFDocument({
-        size: "A4",
-        margin: 40,
-        bufferPages: true,
-        autoPageBreak: false,
-      });
-
-      doc
-        .fillColor("#1B365D")
-        .fontSize(20)
-        .text("Registro de Asistencia y Evaluación", { bold: true });
-      doc
-        .fillColor("#4B5563")
-        .fontSize(9)
-        .text(
-          `Capacitación: ${cap.titulo} | Fecha: ${cap.fecha ? cap.fecha.split("T")[0].split("-").reverse().join("/") : ""}`,
-        );
-      doc.text(
-        `Empresa: ${cap.empresas?.razon_social || "N/A"} | CUIT: ${cap.empresas?.cuit || "N/A"} | Generado: ${new Date().toLocaleDateString("es-AR")}`,
-      );
-      doc.moveDown(1.5);
-
-      const total = asistencias.length;
-      const aprobados = asistencias.filter((a: any) => a.puntaje >= 60).length;
-      const desaprobados = total - aprobados;
-
-      const startY = doc.y;
-      const cardWidth = 160;
-      const cardHeight = 45;
-      const cardGap = 15;
-
-      doc
-        .roundedRect(40, startY, cardWidth, cardHeight, 6)
-        .fillColor("#D1FAE5")
-        .fill();
-      doc
-        .fillColor("#059669")
-        .fontSize(14)
-        .text(String(aprobados), 50, startY + 8, { bold: true });
-      doc
-        .fillColor("#065F46")
-        .fontSize(8)
-        .text("Aprobados (>=60%)", 50, startY + 24);
-
-      doc
-        .roundedRect(40 + cardWidth + cardGap, startY, cardWidth, cardHeight, 6)
-        .fillColor("#FEE2E2")
-        .fill();
-      doc
-        .fillColor("#DC2626")
-        .fontSize(14)
-        .text(String(desaprobados), 40 + cardWidth + cardGap + 10, startY + 8, {
-          bold: true,
-        });
-      doc
-        .fillColor("#991B1B")
-        .fontSize(8)
-        .text(
-          "Desaprobados (<60%)",
-          40 + cardWidth + cardGap + 10,
-          startY + 24,
-        );
-
-      doc
-        .roundedRect(
-          40 + (cardWidth + cardGap) * 2,
-          startY,
-          cardWidth,
-          cardHeight,
-          6,
-        )
-        .fillColor("#F3F4F6")
-        .fill();
-      doc
-        .fillColor("#1F2937")
-        .fontSize(14)
-        .text(String(total), 40 + (cardWidth + cardGap) * 2 + 10, startY + 8, {
-          bold: true,
-        });
-      doc
-        .fillColor("#374151")
-        .fontSize(8)
-        .text(
-          "Total Asistencias",
-          40 + (cardWidth + cardGap) * 2 + 10,
-          startY + 24,
-        );
-
-      doc.moveDown(3.5);
-
-      let currentY = doc.y;
-      doc.rect(40, currentY, 515, 20).fillColor("#1E3A8A").fill();
-      doc.fillColor("#FFFFFF").fontSize(8);
-      doc.text("#", 45, currentY + 6, { bold: true });
-      doc.text("NOMBRE Y APELLIDO", 65, currentY + 6, { bold: true });
-      doc.text("DNI", 240, currentY + 6, { bold: true });
-      doc.text("SECTOR", 320, currentY + 6, { bold: true });
-      doc.text("PUNTAJE", 420, currentY + 6, { bold: true });
-      doc.text("ESTADO", 480, currentY + 6, { bold: true });
-
-      currentY += 20;
-
-      asistencias.forEach((a: any, idx: number) => {
-        if (currentY > 730) {
-          doc.addPage();
-          currentY = 40;
-          doc.rect(40, currentY, 515, 20).fillColor("#1E3A8A").fill();
-          doc.fillColor("#FFFFFF").fontSize(8);
-          doc.text("#", 45, currentY + 6, { bold: true });
-          doc.text("NOMBRE Y APELLIDO", 65, currentY + 6, { bold: true });
-          doc.text("DNI", 240, currentY + 6, { bold: true });
-          doc.text("SECTOR", 320, currentY + 6, { bold: true });
-          doc.text("PUNTAJE", 420, currentY + 6, { bold: true });
-          doc.text("ESTADO", 480, currentY + 6, { bold: true });
-          currentY += 20;
-        }
-
-        if (idx % 2 === 1)
-          doc.rect(40, currentY, 515, 22).fillColor("#F9FAFB").fill();
-
-        doc.fillColor("#374151").fontSize(8);
-        doc.text(String(idx + 1), 45, currentY + 7);
-        doc.text(a.nombre_empleado || "N/A", 65, currentY + 7, {
-          width: 170,
-          ellipsis: true,
-        });
-        doc.text(a.documento || "N/A", 240, currentY + 7);
-        doc.text(a.sector || "N/A", 320, currentY + 7, {
-          width: 90,
-          ellipsis: true,
-        });
-        doc.text(`${a.puntaje}%`, 420, currentY + 7);
-
-        const apr = a.puntaje >= 60;
-        doc
-          .fillColor(apr ? "#059669" : "#DC2626")
-          .text(apr ? "APROBADO" : "REPROBADO", 480, currentY + 7);
-
-        currentY += 22;
-      });
-
-      return { type: "pdf", doc };
+      const doc = await buildRegistroPdf(registroData);
+      return { type: "pdf" as const, doc };
     }
 
     return { error: "Formato no soportado", code: 400 };
+  },
+
+  /**
+   * Actualizar datos del registro (instructor/horas/firmas) sin tocar el contenido
+   */
+  async actualizarRegistro(id: string, body: any) {
+    const allowed: Record<string, unknown> = {};
+    const fields = [
+      "instructor",
+      "fecha",
+      "fechas_horario",
+      "cantidad_horas",
+      "aclaracion_capacitador",
+      "aclaracion_empresa",
+    ] as const;
+
+    for (const field of fields) {
+      if (body[field] !== undefined) allowed[field] = body[field];
+    }
+
+    const uploadFirma = async (
+      firma: string | undefined,
+      pathPrefix: string,
+    ) => {
+      if (!firma || typeof firma !== "string" || !firma.startsWith("data:image/"))
+        return null;
+      const base64Data = firma.replace(/^data:image\/\w+;base64,/, "");
+      const buffer = Buffer.from(base64Data, "base64");
+      const firmaPath = `capacitaciones/${id}/${pathPrefix}_${Date.now()}.png`;
+      const { error: storageError } = await supabaseAdmin.storage
+        .from("firmas_digitales")
+        .upload(firmaPath, buffer, { contentType: "image/png", upsert: true });
+      if (storageError) throw new Error(storageError.message);
+      const { data: urlData } = supabaseAdmin.storage
+        .from("firmas_digitales")
+        .getPublicUrl(firmaPath);
+      return urlData.publicUrl;
+    };
+
+    if (body.firma_capacitador) {
+      allowed.firma_capacitador_url = await uploadFirma(
+        body.firma_capacitador,
+        "firma_capacitador",
+      );
+    }
+    if (body.firma_empresa) {
+      allowed.firma_empresa_url = await uploadFirma(
+        body.firma_empresa,
+        "firma_empresa",
+      );
+    }
+
+    if (Object.keys(allowed).length === 0) {
+      return { error: "No hay datos para actualizar", code: 400 };
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from("capacitaciones")
+      .update(allowed)
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { data };
   },
 };

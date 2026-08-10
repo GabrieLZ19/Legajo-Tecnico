@@ -111,7 +111,7 @@ export const capacitacionesController = {
   },
 
   /**
-   * Exportar asistencias (PDF / CSV)
+   * Exportar asistencias (PDF / Excel)
    */
   async exportarAsistencias(req: Request, res: Response, next: NextFunction) {
     try {
@@ -129,20 +129,23 @@ export const capacitacionesController = {
       if (result.error)
         return res.status(result.code!).json({ error: result.error });
 
-      if (result.type === "csv") {
-        res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      if (result.type === "xlsx" && result.buffer) {
+        res.setHeader(
+          "Content-Type",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        );
         res.setHeader(
           "Content-Disposition",
-          `attachment; filename=asistencias_capacitacion_${id}.csv`,
+          `attachment; filename=registro_capacitacion_${id}.xlsx`,
         );
-        return res.send(result.content);
+        return res.send(result.buffer);
       }
 
-      if (result.type === "pdf") {
+      if (result.type === "pdf" && result.doc) {
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader(
           "Content-Disposition",
-          `attachment; filename=asistencias_capacitacion_${id}.pdf`,
+          `attachment; filename=registro_capacitacion_${id}.pdf`,
         );
         result.doc.pipe(res);
         result.doc.end();
@@ -152,6 +155,21 @@ export const capacitacionesController = {
       res.status(400).json({ error: "Formato no soportado" });
     } catch (error) {
       next(error);
+    }
+  },
+
+  async actualizarRegistro(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = String(req.params.id);
+      const result = await capacitacionesService.actualizarRegistro(
+        id,
+        req.body,
+      );
+      if (result.error)
+        return res.status(result.code!).json({ error: result.error });
+      res.json(result.data);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Error al guardar registro" });
     }
   },
 };
