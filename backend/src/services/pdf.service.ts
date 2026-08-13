@@ -281,7 +281,7 @@ export const pdfService = {
               .fillColor("#FFFFFF")
               .font("Helvetica-Bold")
               .fontSize(9)
-              .text("DECLARACIÓN JURADA DE LA VISITA", 72, yPos + 6);
+              .text("INFORME DE LA VISITA REALIZADA:", 72, yPos + 6);
 
             doc.y = yPos + 20 + 10;
             doc.fillColor(darkText).font("Helvetica-Oblique").fontSize(8.5);
