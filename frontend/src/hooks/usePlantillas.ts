@@ -16,14 +16,14 @@ export const usePlantillas = () => {
   const query = useQuery<PlantillaDeclaracion[]>({
     queryKey: ['plantillas'],
     queryFn: async () => {
-      const { data } = await api.get('/plantillas');
+      const { data } = await api.get('/plantillas-declaracion');
       return data;
     },
   });
 
   const crearMutation = useMutation({
     mutationFn: async (nueva: { nombre: string; contenido: string }) => {
-      const { data } = await api.post('/plantillas', nueva);
+      const { data } = await api.post('/plantillas-declaracion', nueva);
       return data;
     },
     onSuccess: () => {
@@ -33,7 +33,7 @@ export const usePlantillas = () => {
 
   const editarMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: { nombre: string; contenido: string } }) => {
-      const { data: resData } = await api.put(`/plantillas/${id}`, data);
+      const { data: resData } = await api.put(`/plantillas-declaracion/${id}`, data);
       return resData;
     },
     onSuccess: () => {
@@ -43,7 +43,7 @@ export const usePlantillas = () => {
 
   const eliminarMutation = useMutation({
     mutationFn: async (id: string) => {
-      await api.delete(`/plantillas/${id}`);
+      await api.delete(`/plantillas-declaracion/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['plantillas'] });

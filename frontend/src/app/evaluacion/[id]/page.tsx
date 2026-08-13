@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import type SignatureCanvas from "react-signature-canvas";
 import SignaturePad, { readSignatureOrThrow } from "@/components/SignaturePad";
+import SignatureImageImport from "@/components/SignatureImageImport";
 import { isSignatureEmpty } from "@/lib/signature";
 
 interface Pregunta {
@@ -257,7 +258,7 @@ export default function EvaluacionPublicaPage() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-between p-4 sm:p-6 md:p-8">
       <div
-        className={`${containerClass} w-full mx-auto my-auto bg-white rounded-3xl border border-slate-100 p-6 sm:p-8 shadow-xl space-y-6 transition-all duration-300`}
+        className={`${containerClass} w-full mx-auto my-auto bg-white rounded-3xl border border-slate-100 p-6 sm:p-8 shadow-xl space-y-6`}
       >
         {/* Header */}
         <div className="flex items-center gap-3">
@@ -516,25 +517,32 @@ export default function EvaluacionPublicaPage() {
                 Registrar Firma
               </h2>
               <p className="text-xs text-slate-500 font-semibold mt-1">
-                Firmá dentro del recuadro para certificar tu asistencia.
+                Firmá en el recuadro, subí una imagen o pegá un recorte
+                (Ctrl+V).
               </p>
             </div>
 
             <SignaturePad ref={sigRef} />
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => sigRef.current?.clear()}
-                className="flex-1 py-3 border border-slate-200 text-slate-600 font-bold rounded-xl text-xs hover:bg-slate-50"
+                className="flex-1 min-w-[90px] py-3 border border-slate-200 text-slate-600 font-bold rounded-xl text-xs hover:bg-slate-50"
               >
                 Limpiar
               </button>
+              <SignatureImageImport
+                canvasRef={sigRef}
+                onError={(msg) => setError(msg)}
+                className="flex-1 min-w-[120px] inline-flex items-center justify-center gap-1.5 py-3 border border-slate-200 text-slate-600 font-bold rounded-xl text-xs hover:bg-slate-50"
+                label="Insertar imagen"
+              />
               <button
                 type="button"
                 disabled={enviando}
                 onClick={handleEnviar}
-                className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs disabled:opacity-50"
+                className="flex-1 min-w-[120px] py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs disabled:opacity-50"
               >
                 {enviando ? "Enviando..." : "Confirmar Firma"}
               </button>

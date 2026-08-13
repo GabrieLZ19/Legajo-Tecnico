@@ -4,6 +4,7 @@ import React, { useRef } from 'react';
 import type SignatureCanvas from 'react-signature-canvas';
 import { RotateCcw, Check } from 'lucide-react';
 import SignaturePad, { readSignatureOrThrow } from '@/components/SignaturePad';
+import SignatureImageImport from '@/components/SignatureImageImport';
 
 interface FirmaCanvasProps {
   onSave: (base64: string) => void;
@@ -31,17 +32,23 @@ export const FirmaCanvas: React.FC<FirmaCanvasProps> = ({ onSave, onCancel, titl
     }
   };
 
+  const handleImageError = (message: string) => {
+    alert(message);
+  };
+
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-6 max-w-lg w-full mx-auto space-y-6 shadow-md">
       <div className="text-center">
         <h3 className="text-lg font-bold text-slate-900">{title}</h3>
-        <p className="text-xs text-slate-500 mt-1">Dibuja tu firma sobre el recuadro blanco utilizando tu dedo o un lápiz táctil.</p>
+        <p className="text-xs text-slate-500 mt-1">
+          Dibujá tu firma, subí una imagen o pegá un recorte (Ctrl+V / Cmd+V).
+        </p>
       </div>
 
       <SignaturePad ref={sigCanvas} heightClassName="h-48" className="border-2 border-dashed rounded-lg" />
 
       <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
-        <div className="flex justify-between items-center gap-2 w-full sm:w-auto">
+        <div className="flex flex-wrap justify-between sm:justify-start items-center gap-2 w-full sm:w-auto">
           {onCancel && (
             <button
               type="button"
@@ -59,6 +66,11 @@ export const FirmaCanvas: React.FC<FirmaCanvasProps> = ({ onSave, onCancel, titl
             <RotateCcw className="h-3.5 w-3.5" />
             Limpiar
           </button>
+          <SignatureImageImport
+            canvasRef={sigCanvas}
+            onError={handleImageError}
+            label="Insertar imagen"
+          />
         </div>
         <button
           type="button"

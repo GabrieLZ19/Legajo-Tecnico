@@ -67,7 +67,10 @@ export const subirEvidenciaInforme = async (id: string, formData: FormData) => {
   return data;
 };
 
-export const firmarInforme = async (endpoint: string, payload: { firma_persona?: string; aclaracion_persona?: string }) => {
+export const firmarInforme = async (
+  endpoint: string,
+  payload: { firma_base64: string },
+) => {
   const { data } = await api.post(endpoint, payload);
   return data;
 };

@@ -11,7 +11,8 @@ interface SignaturePadProps {
 
 /**
  * Pad de firma estable en mobile: tamaño explícito + sin clearOnResize.
- * Evita getTrimmedCanvas colgado midiendo el contenedor una sola vez al montar.
+ * Re-mide el contenedor con ResizeObserver para no quedar desfasado
+ * cuando el layout anima el ancho (p. ej. evaluación pública).
  */
 export const SignaturePad = React.forwardRef<
   SignatureCanvas | null,
@@ -28,13 +29,18 @@ export const SignaturePad = React.forwardRef<
 
     const measure = () => {
       const rect = el.getBoundingClientRect();
-      setSize({
-        width: Math.max(1, Math.floor(rect.width)),
-        height: Math.max(1, Math.floor(rect.height)),
+      const width = Math.max(1, Math.floor(rect.width));
+      const height = Math.max(1, Math.floor(rect.height));
+      setSize((prev) => {
+        if (prev && prev.width === width && prev.height === height) return prev;
+        return { width, height };
       });
     };
 
     measure();
+    const observer = new ResizeObserver(() => measure());
+    observer.observe(el);
+    return () => observer.disconnect();
   }, []);
 
   const setRefs = (instance: SignatureCanvas | null) => {
@@ -49,6 +55,7 @@ export const SignaturePad = React.forwardRef<
     >
       {size ? (
         <SignatureCanvas
+          key={`${size.width}x${size.height}`}
           ref={setRefs}
           penColor="#1e293b"
           minWidth={0.6}
@@ -57,10 +64,10 @@ export const SignaturePad = React.forwardRef<
           canvasProps={{
             width: size.width,
             height: size.height,
-            className: "touch-none cursor-crosshair bg-slate-50",
+            className: "touch-none cursor-crosshair bg-slate-50 block w-full h-full",
             style: {
-              width: `${size.width}px`,
-              height: `${size.height}px`,
+              width: "100%",
+              height: "100%",
               touchAction: "none",
               display: "block",
             },

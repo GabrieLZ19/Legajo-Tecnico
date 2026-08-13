@@ -5,6 +5,7 @@ import type SignatureCanvas from "react-signature-canvas";
 import { Capacitacion } from "@/types";
 import { PenLine, Save } from "lucide-react";
 import SignaturePad, { readSignatureOrThrow } from "@/components/SignaturePad";
+import SignatureImageImport from "@/components/SignatureImageImport";
 import { isSignatureEmpty } from "@/lib/signature";
 import CapacitacionAgendaFields from "@/components/CapacitacionAgendaFields";
 import {
@@ -62,6 +63,9 @@ export default function CapacitacionRegistroFirmas({
   const [saving, setSaving] = useState(false);
   const [firmando, setFirmando] = useState<"capacitador" | "empresa" | null>(
     null,
+  );
+  const [activePad, setActivePad] = useState<"capacitador" | "empresa">(
+    "capacitador",
   );
 
   const sigCapRef = useRef<SignatureCanvas>(null);
@@ -225,7 +229,12 @@ export default function CapacitacionRegistroFirmas({
             </div>
           ) : canEdit ? (
             <>
-              <SignaturePad ref={sigCapRef} heightClassName="h-36" />
+              <div onPointerDown={() => setActivePad("capacitador")}>
+                <SignaturePad ref={sigCapRef} heightClassName="h-36" />
+              </div>
+              <p className="text-[11px] text-slate-400 font-semibold">
+                También podés subir una imagen o pegar un recorte (Ctrl+V).
+              </p>
               <input
                 type="text"
                 value={aclaracionCap}
@@ -233,19 +242,26 @@ export default function CapacitacionRegistroFirmas({
                 placeholder="Aclaración"
                 className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold"
               />
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => sigCapRef.current?.clear()}
-                  className="flex-1 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600"
+                  className="flex-1 min-w-[90px] py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600"
                 >
                   Limpiar
                 </button>
+                <SignatureImageImport
+                  canvasRef={sigCapRef}
+                  enablePaste={activePad === "capacitador"}
+                  onError={(msg) => onAlert("error", "Imagen de firma", msg)}
+                  className="flex-1 min-w-[120px] inline-flex items-center justify-center gap-1.5 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50"
+                  label="Insertar imagen"
+                />
                 <button
                   type="button"
                   disabled={firmando === "capacitador"}
                   onClick={() => guardarFirma("capacitador")}
-                  className="flex-1 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold disabled:opacity-50"
+                  className="flex-1 min-w-[120px] py-2 bg-blue-600 text-white rounded-xl text-xs font-bold disabled:opacity-50"
                 >
                   {firmando === "capacitador" ? "Guardando..." : "Confirmar firma"}
                 </button>
@@ -275,7 +291,12 @@ export default function CapacitacionRegistroFirmas({
             </div>
           ) : canEdit ? (
             <>
-              <SignaturePad ref={sigEmpRef} heightClassName="h-36" />
+              <div onPointerDown={() => setActivePad("empresa")}>
+                <SignaturePad ref={sigEmpRef} heightClassName="h-36" />
+              </div>
+              <p className="text-[11px] text-slate-400 font-semibold">
+                También podés subir una imagen o pegar un recorte (Ctrl+V).
+              </p>
               <input
                 type="text"
                 value={aclaracionEmp}
@@ -283,19 +304,26 @@ export default function CapacitacionRegistroFirmas({
                 placeholder="Aclaración"
                 className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold"
               />
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => sigEmpRef.current?.clear()}
-                  className="flex-1 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600"
+                  className="flex-1 min-w-[90px] py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600"
                 >
                   Limpiar
                 </button>
+                <SignatureImageImport
+                  canvasRef={sigEmpRef}
+                  enablePaste={activePad === "empresa"}
+                  onError={(msg) => onAlert("error", "Imagen de firma", msg)}
+                  className="flex-1 min-w-[120px] inline-flex items-center justify-center gap-1.5 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50"
+                  label="Insertar imagen"
+                />
                 <button
                   type="button"
                   disabled={firmando === "empresa"}
                   onClick={() => guardarFirma("empresa")}
-                  className="flex-1 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold disabled:opacity-50"
+                  className="flex-1 min-w-[120px] py-2 bg-blue-600 text-white rounded-xl text-xs font-bold disabled:opacity-50"
                 >
                   {firmando === "empresa" ? "Guardando..." : "Confirmar firma"}
                 </button>

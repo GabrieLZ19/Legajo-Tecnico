@@ -50,7 +50,7 @@ export default function FirmaInformePage() {
           : `/informes/${id}/firma-dueno`;
 
       await firmarInforme(endpoint, {
-        firma_persona: base64,
+        firma_base64: base64,
       });
 
       // Invalidar cache y volver al detalle del informe
