@@ -10,6 +10,7 @@ import {
 } from "@/hooks/useInformes";
 
 import { usePlantillas } from "@/hooks/usePlantillas";
+import { sanitizeRichHtml } from "@/lib/sanitizeHtml";
 import {
   Calendar,
   Clock,
@@ -226,7 +227,9 @@ export default function EditarInformePage() {
       }
 
       if (editorRef.current) {
-        editorRef.current.innerHTML = informe.declaracion_legal || "";
+        editorRef.current.innerHTML = sanitizeRichHtml(
+          informe.declaracion_legal || "",
+        );
       }
     }
   }, [informe, id, router, showAlert]);
@@ -641,7 +644,9 @@ export default function EditarInformePage() {
                             type="button"
                             onClick={() => {
                               if (editorRef.current) {
-                                editorRef.current.innerHTML = tmpl.content;
+                                editorRef.current.innerHTML = sanitizeRichHtml(
+                                  tmpl.content,
+                                );
                                 updateToolbarState();
                               }
                               setShowTemplatesDropdown(false);
@@ -673,7 +678,7 @@ export default function EditarInformePage() {
                                 onClick={() => {
                                   if (editorRef.current) {
                                     editorRef.current.innerHTML =
-                                      tmpl.contenido;
+                                      sanitizeRichHtml(tmpl.contenido);
                                     updateToolbarState();
                                   }
                                   setShowTemplatesDropdown(false);

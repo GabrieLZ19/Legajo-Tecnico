@@ -1,17 +1,27 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { useApiWarmup } from "@/hooks/useApiWarmup";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Lock, User, Briefcase, Eye, EyeOff, AlertCircle } from "lucide-react";
 
 export default function LoginPage() {
-  const { login, loading } = useAuth();
+  const { login } = useAuth();
+  const router = useRouter();
   const [cuit, setCuit] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  useApiWarmup();
+
+  useEffect(() => {
+    router.prefetch("/dashboard");
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,10 +32,12 @@ export default function LoginPage() {
       return;
     }
 
+    setSubmitting(true);
     try {
       await login(cuit, username, password);
     } catch (err: any) {
       setError(err.message || "Error al iniciar sesión. Inténtalo de nuevo.");
+      setSubmitting(false);
     }
   };
 
@@ -157,10 +169,10 @@ export default function LoginPage() {
             <div className="space-y-4 pt-2">
               <button
                 type="submit"
-                disabled={loading}
+                disabled={submitting}
                 className="w-full py-3.5 px-4 border border-transparent text-sm font-bold rounded-xl text-white bg-brand-primary hover:bg-brand-primary/95 shadow-md shadow-brand-primary/20 hover:shadow-lg focus:outline-hidden transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer text-center"
               >
-                {loading ? "Ingresando..." : "Ingresar"}
+                {submitting ? "Ingresando..." : "Ingresar"}
               </button>
 
               <div className="text-center space-y-2">

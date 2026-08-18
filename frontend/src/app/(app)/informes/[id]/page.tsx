@@ -11,6 +11,7 @@ import { actualizarEstadoPlanAccion } from "@/hooks/usePlanAccion";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAlert } from "@/context/AlertContext";
 import { useAuth } from "@/hooks/useAuth";
+import { sanitizeRichHtml } from "@/lib/sanitizeHtml";
 import {
   Calendar,
   User,
@@ -302,9 +303,10 @@ export default function InformeDetallePage() {
             <div
               className="text-xs text-slate-600 leading-relaxed font-semibold"
               dangerouslySetInnerHTML={{
-                __html:
+                __html: sanitizeRichHtml(
                   informe.declaracion_legal ||
-                  "Se deja constancia de que se verificaron las condiciones de higiene y seguridad del establecimiento conforme a la normativa vigente (Ley 19.587 y Dec. 351/79).",
+                    "Se deja constancia de que se verificaron las condiciones de higiene y seguridad del establecimiento conforme a la normativa vigente (Ley 19.587 y Dec. 351/79).",
+                ),
               }}
             />
           </div>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Capacitacion } from "@/types";
 import Link from "next/link";
+import { sanitizeRichHtml } from "@/lib/sanitizeHtml";
 import {
   GraduationCap,
   ArrowLeft,
@@ -399,7 +400,7 @@ export default function DetalleCapacitacionPage() {
         [&_strong]:font-bold [&_em]:italic 
         [&_img]:rounded-xl [&_img]:max-w-full [&_img]:my-3 [&_img]:shadow-xs
         overflow-x-auto"
-            dangerouslySetInnerHTML={{ __html: cap.temario }}
+            dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(cap.temario) }}
           />
         </div>
       )}

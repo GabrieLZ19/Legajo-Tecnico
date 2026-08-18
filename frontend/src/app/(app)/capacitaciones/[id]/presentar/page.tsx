@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { sanitizeRichHtml } from "@/lib/sanitizeHtml";
 import {
   ChevronLeft,
   ChevronRight,
@@ -293,7 +294,7 @@ export default function PresentarCapacitacionPage() {
           <div
             className={slideHtmlClass}
             dangerouslySetInnerHTML={{
-              __html: slides[index]?.contenido || "",
+              __html: sanitizeRichHtml(slides[index]?.contenido || ""),
             }}
           />
         )}

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useLayoutEffect } from 'react';
 import Cookies from 'js-cookie';
 import { api } from '@/lib/api';
 import { Perfil, Empresa } from '@/types';
@@ -18,64 +18,96 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const COOKIE_OPTS = { expires: 7, secure: true, sameSite: 'lax' as const };
+
+function readStoredProfile(): { user: Perfil | null; empresa: Empresa | null } {
+  if (typeof window === 'undefined') {
+    return { user: null, empresa: null };
+  }
+  try {
+    const savedPerfil = Cookies.get('perfil');
+    const savedEmpresa = Cookies.get('empresa');
+    if (!savedPerfil) {
+      return { user: null, empresa: null };
+    }
+    return {
+      user: JSON.parse(savedPerfil) as Perfil,
+      empresa: savedEmpresa ? (JSON.parse(savedEmpresa) as Empresa) : null,
+    };
+  } catch {
+    return { user: null, empresa: null };
+  }
+}
+
+function persistProfile(perfil: Perfil, empresa?: Empresa | null) {
+  Cookies.set('perfil', JSON.stringify(perfil), COOKIE_OPTS);
+  if (empresa) {
+    Cookies.set('empresa', JSON.stringify(empresa), COOKIE_OPTS);
+  }
+}
+
+function clearClientSession() {
+  Cookies.remove('token');
+  Cookies.remove('perfil');
+  Cookies.remove('empresa');
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<Perfil | null>(null);
   const [empresa, setEmpresa] = useState<Empresa | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  useEffect(() => {
-    // Restaurar sesión desde las cookies al montar el componente
-    const token = Cookies.get('token');
-    const savedPerfil = Cookies.get('perfil');
-    const savedEmpresa = Cookies.get('empresa');
-
-    if (token && savedPerfil) {
-      setUser(JSON.parse(savedPerfil));
-      if (savedEmpresa) {
-        setEmpresa(JSON.parse(savedEmpresa));
+  useLayoutEffect(() => {
+    let cancelled = false;
+    const restore = async () => {
+      try {
+        const { data } = await api.get('/auth/me');
+        if (cancelled) return;
+        const stored = readStoredProfile();
+        setUser(stored.user ?? data.user ?? null);
+        setEmpresa(stored.empresa);
+      } catch {
+        if (cancelled) return;
+        clearClientSession();
+        setUser(null);
+        setEmpresa(null);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    }
-    setLoading(false);
+    };
+    void restore();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const login = async (cuit: string, username: string, pass: string) => {
-    setLoading(true);
     try {
       const response = await api.post('/auth/login', { cuit, username, password: pass });
-      const { access_token, perfil, empresa: empData } = response.data;
-
-      // Guardar en cookies (expira en 7 días)
-      Cookies.set('token', access_token, { expires: 7, secure: true });
-      Cookies.set('perfil', JSON.stringify(perfil), { expires: 7, secure: true });
-      if (empData) {
-        Cookies.set('empresa', JSON.stringify(empData), { expires: 7, secure: true });
-        setEmpresa(empData);
-      }
-
+      const { perfil, empresa: empData } = response.data;
+      Cookies.remove('token');
+      persistProfile(perfil, empData);
       setUser(perfil);
+      setEmpresa(empData ?? null);
       router.push('/dashboard');
-    } catch (error: any) {
-      throw new Error(error.response?.data?.error || 'Error al iniciar sesión');
-    } finally {
-      setLoading(false);
+    } catch (error: unknown) {
+      const message =
+        error && typeof error === 'object' && 'response' in error
+          ? (error as { response?: { data?: { error?: string } } }).response?.data?.error
+          : undefined;
+      throw new Error(message || 'Error al iniciar sesión');
     }
   };
 
   const loginAdmin = async (email: string, pass: string) => {
-    setLoading(true);
     try {
       const response = await api.post('/auth/login-admin', { email, password: pass });
-      const { access_token, perfil } = response.data;
-
-      // Guardar en cookies (expira en 7 días)
-      Cookies.set('token', access_token, { expires: 7, secure: true });
-      Cookies.set('perfil', JSON.stringify(perfil), { expires: 7, secure: true });
-      
-      // Limpiar datos de empresa ya que los admins son globales
+      const { perfil } = response.data;
+      Cookies.remove('token');
+      persistProfile(perfil);
       Cookies.remove('empresa');
       setEmpresa(null);
-
       setUser(perfil);
       if (perfil.rol === "ente_regulador") {
         router.push("/ente/dashboard");
@@ -84,29 +116,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         router.push("/dashboard");
       }
-    } catch (error: any) {
-      throw new Error(error.response?.data?.error || 'Error al iniciar sesión como administrador');
-    } finally {
-      setLoading(false);
+    } catch (error: unknown) {
+      const message =
+        error && typeof error === 'object' && 'response' in error
+          ? (error as { response?: { data?: { error?: string } } }).response?.data?.error
+          : undefined;
+      throw new Error(message || 'Error al iniciar sesión como administrador');
     }
   };
 
   const logout = () => {
-    Cookies.remove('token');
-    Cookies.remove('perfil');
-    Cookies.remove('empresa');
+    void api.post('/auth/logout').catch(() => undefined);
+    clearClientSession();
     setUser(null);
     setEmpresa(null);
     router.push('/login');
   };
 
-  /**
-   * Cambia la empresa activa en el contexto del usuario.
-   * Persiste la selección en cookies y fuerza un re-render de los componentes
-   * que dependen de `empresa` para actualizar métricas e información.
-   */
   const cambiarEmpresaContexto = (nuevaEmpresa: Empresa) => {
-    Cookies.set('empresa', JSON.stringify(nuevaEmpresa), { expires: 7, secure: true });
+    Cookies.set('empresa', JSON.stringify(nuevaEmpresa), COOKIE_OPTS);
     setEmpresa(nuevaEmpresa);
   };
 
@@ -129,4 +157,3 @@ export const getMisEmpresas = async () => {
   const { data } = await api.get('/auth/mis-empresas');
   return data.empresas || [];
 };
-

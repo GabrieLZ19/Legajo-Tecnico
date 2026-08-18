@@ -20,6 +20,7 @@ import {
   Undo2,
 } from "lucide-react";
 import { useAlert } from "@/context/AlertContext";
+import { sanitizeRichHtml } from "@/lib/sanitizeHtml";
 
 /** Conserva fondo y alineación al pegar tablas desde Word. */
 const CapTableCell = TableCell.extend({
@@ -268,7 +269,7 @@ export default function RichTextEditor({
         allowBase64: true,
       }),
     ],
-    content: value,
+    content: sanitizeRichHtml(value),
     onCreate: ({ editor: created }) => {
       editorRef.current = created;
     },
@@ -357,7 +358,7 @@ export default function RichTextEditor({
   // Sincronizar el contenido si cambia el prop 'value' desde afuera
   useEffect(() => {
     if (editor && value !== editor.getHTML()) {
-      editor.commands.setContent(value || "");
+      editor.commands.setContent(sanitizeRichHtml(value || ""));
     }
   }, [value, editor]);
 

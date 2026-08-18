@@ -5,17 +5,18 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 
 export const api = axios.create({
   baseURL: API_URL,
+  timeout: 20000,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Interceptor para inyectar el token JWT de las cookies en cada petición
 api.interceptors.request.use(
   (config) => {
-    const token = Cookies.get('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    const legacyToken = Cookies.get('token');
+    if (legacyToken && !config.headers.Authorization) {
+      config.headers.Authorization = `Bearer ${legacyToken}`;
     }
     if (typeof FormData !== "undefined" && config.data instanceof FormData) {
       const headers = config.headers as { delete?: (name: string) => void } & Record<string, unknown>;
@@ -32,21 +33,21 @@ api.interceptors.request.use(
   }
 );
 
-// Interceptor para manejar errores globales (como 401 No Autorizado)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
       const path =
         typeof window !== "undefined" ? window.location.pathname : "";
+      const requestUrl = String(error.config?.url || "");
       const isPublicRoute =
         path.includes("/login") ||
         path.startsWith("/evaluacion") ||
         path.startsWith("/firmar") ||
         path.startsWith("/cotizar");
+      const isLogout = requestUrl.includes("/auth/logout");
 
-      // No expulsar al login en flujos públicos (QR de evaluación, etc.)
-      if (!isPublicRoute) {
+      if (!isPublicRoute && !isLogout) {
         Cookies.remove("token");
         Cookies.remove("perfil");
         Cookies.remove("empresa");

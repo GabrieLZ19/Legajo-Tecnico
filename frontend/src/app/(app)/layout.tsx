@@ -66,17 +66,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Cargar las empresas del usuario para el selector
   useEffect(() => {
-    if (user && (user.rol === "preventor" || user.rol === "admin" || user.rol === "ente_regulador")) {
-      const fetchEmpresas = async () => {
-        try {
-          const empresas = await getMisEmpresas();
-          setMisEmpresas(empresas);
-        } catch (err) {
-          console.error("Error loading mis-empresas:", err);
-        }
-      };
-      fetchEmpresas();
+    if (
+      !user ||
+      (user.rol !== "preventor" &&
+        user.rol !== "admin" &&
+        user.rol !== "ente_regulador")
+    ) {
+      return;
     }
+    const timer = window.setTimeout(() => {
+      getMisEmpresas()
+        .then(setMisEmpresas)
+        .catch((err) => {
+          console.error("Error loading mis-empresas:", err);
+        });
+    }, 1200);
+    return () => window.clearTimeout(timer);
   }, [user]);
 
   if (loading || !user) {

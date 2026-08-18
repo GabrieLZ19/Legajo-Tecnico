@@ -12,12 +12,15 @@ export function NotificationBell() {
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
-    if (user) {
-      fetchNotifications();
-      // Polling cada 1 minuto (simplificado para esta versión)
-      const interval = setInterval(fetchNotifications, 60000);
-      return () => clearInterval(interval);
-    }
+    if (!user) return;
+    const timer = window.setTimeout(() => {
+      void fetchNotifications();
+    }, 1500);
+    const interval = window.setInterval(fetchNotifications, 120000);
+    return () => {
+      window.clearTimeout(timer);
+      window.clearInterval(interval);
+    };
   }, [user]);
 
   const fetchNotifications = async () => {
@@ -50,7 +53,11 @@ export function NotificationBell() {
   return (
     <div className="sm:relative">
       <button 
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          const next = !isOpen;
+          setIsOpen(next);
+          if (next) void fetchNotifications();
+        }}
         className="relative p-2 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-full transition-all"
       >
         <Bell className="h-5 w-5" />

@@ -37,6 +37,7 @@ export default function ConfiguracionPage() {
       Cookies.set("empresa", JSON.stringify(updatedEmpresa), {
         expires: 7,
         secure: true,
+        sameSite: "lax",
       });
 
       // Forzar recarga de estado de la aplicación

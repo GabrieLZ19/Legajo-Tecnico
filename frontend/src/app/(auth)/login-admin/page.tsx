@@ -2,22 +2,28 @@
 
 import React, { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { useApiWarmup } from "@/hooks/useApiWarmup";
 import { Lock, Mail, Loader2 } from "lucide-react";
 import Link from "next/link";
 
 export default function LoginAdminPage() {
-  const { loginAdmin, loading } = useAuth();
+  const { loginAdmin } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useApiWarmup();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setSubmitting(true);
     try {
       await loginAdmin(email, password);
     } catch (err: any) {
       setError(err.message || "Error al iniciar sesión");
+      setSubmitting(false);
     }
   };
 
@@ -97,10 +103,10 @@ export default function LoginAdminPage() {
           {/* Botón de Envío */}
           <button
             type="submit"
-            disabled={loading}
+            disabled={submitting}
             className="w-full py-3.5 bg-[#1d3b8a] hover:bg-[#172e6c] disabled:opacity-50 text-white font-bold rounded-xl text-sm shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
           >
-            {loading ? (
+            {submitting ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               "Ingresar al panel"

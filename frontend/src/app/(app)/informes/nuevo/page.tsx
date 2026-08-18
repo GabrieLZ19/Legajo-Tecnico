@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useInformes, subirEvidenciaInforme } from "@/hooks/useInformes";
 import { usePlantillas } from "@/hooks/usePlantillas";
+import { sanitizeRichHtml } from "@/lib/sanitizeHtml";
 import { getEmpresaDetalle } from "@/hooks/useAdminEmpresas";
 import {
   Calendar,
@@ -600,7 +601,9 @@ export default function NuevoInformePage() {
                             type="button"
                             onClick={() => {
                               if (editorRef.current) {
-                                editorRef.current.innerHTML = tmpl.content;
+                                editorRef.current.innerHTML = sanitizeRichHtml(
+                                  tmpl.content,
+                                );
                                 updateToolbarState();
                               }
                               setShowTemplatesDropdown(false);
@@ -632,7 +635,7 @@ export default function NuevoInformePage() {
                                 onClick={() => {
                                   if (editorRef.current) {
                                     editorRef.current.innerHTML =
-                                      tmpl.contenido;
+                                      sanitizeRichHtml(tmpl.contenido);
                                     updateToolbarState();
                                   }
                                   setShowTemplatesDropdown(false);
