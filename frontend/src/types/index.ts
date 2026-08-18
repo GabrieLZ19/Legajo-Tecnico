@@ -213,7 +213,75 @@ export interface EppTipo {
   id: string;
   nombre: string;
   descripcion?: string;
+  foto_url?: string | null;
   activo: boolean;
+}
+
+export interface Empleado {
+  id: string;
+  empresa_id: string;
+  nombre: string;
+  documento: string;
+  sector?: string | null;
+  qr_token: string;
+  activo: boolean;
+  created_at: string;
+}
+
+export interface EppProveedor {
+  id: string;
+  consultora_id: string;
+  nombre: string;
+  email: string;
+  activo: boolean;
+}
+
+export interface EppLicitacionItem {
+  id: string;
+  licitacion_id: string;
+  epp_tipo_id: string;
+  cantidad: number;
+  epp_tipos?: EppTipo | null;
+}
+
+export interface EppCotizacion {
+  id: string;
+  licitacion_id: string;
+  proveedor_id?: string | null;
+  proveedor_nombre: string;
+  proveedor_email?: string | null;
+  monto?: number | null;
+  url_carga?: string | null;
+  token_publico?: string;
+  items_ofertados?: unknown;
+  comision_calculada?: number | null;
+  estado: string;
+  created_at: string;
+}
+
+export interface EppLicitacion {
+  id: string;
+  empresa_id: string;
+  consultora_id: string;
+  titulo: string;
+  descripcion?: string | null;
+  estado: string;
+  comision_porcentaje?: number | null;
+  fecha_cierre?: string | null;
+  created_at: string;
+  epp_licitacion_items?: EppLicitacionItem[];
+  epp_licitacion_cotizaciones?: EppCotizacion[];
+}
+
+export interface DocumentoArchivo {
+  id: string;
+  tipo: "informe" | "capacitacion" | "epp";
+  titulo: string;
+  fecha: string;
+  empresa_id: string;
+  empresa_razon_social: string;
+  pdf_disponible: boolean;
+  extra?: Record<string, string | number | boolean | null>;
 }
 
 export interface EppEntrega {

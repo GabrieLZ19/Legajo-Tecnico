@@ -66,7 +66,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Cargar las empresas del usuario para el selector
   useEffect(() => {
-    if (user && (user.rol === "preventor" || user.rol === "admin")) {
+    if (user && (user.rol === "preventor" || user.rol === "admin" || user.rol === "ente_regulador")) {
       const fetchEmpresas = async () => {
         try {
           const empresas = await getMisEmpresas();
@@ -104,7 +104,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     { name: "Inicio", href: "/dashboard" },
     { name: "Informes", href: "/informes" },
     { name: "Plan de Acción", href: "/plan-accion" },
-    ...(user?.rol !== "dueno"
+    ...(user?.rol !== "dueno" && user?.rol !== "ente_regulador"
       ? [
           { name: "EPP", href: "/epp", disabled: false },
           { name: "Capacitaciones", href: "/capacitaciones", disabled: false },

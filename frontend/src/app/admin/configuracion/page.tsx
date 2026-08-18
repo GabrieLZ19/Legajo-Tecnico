@@ -19,8 +19,12 @@ import { useConfiguracion } from "@/hooks/useConfiguracion";
 interface Consultora {
   id: string;
   nombre: string;
-  cuit: string;
+  cuit?: string;
   logo_url: string | null;
+  config?: {
+    cuit?: string;
+    comision_epp_porcentaje?: number;
+  };
 }
 
 export default function AdminConfiguracionPage() {
@@ -31,7 +35,11 @@ export default function AdminConfiguracionPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [formData, setFormData] = useState({ nombre: "", cuit: "" });
+  const [formData, setFormData] = useState({
+    nombre: "",
+    cuit: "",
+    comision_epp_porcentaje: 0,
+  });
   const [uploadingLogo, setUploadingLogo] = useState(false);
 
   useEffect(() => {
@@ -45,7 +53,8 @@ export default function AdminConfiguracionPage() {
       setConsultora(data);
       setFormData({
         nombre: data.nombre || "",
-        cuit: data.cuit || "",
+        cuit: data.cuit || data.config?.cuit || "",
+        comision_epp_porcentaje: Number(data.config?.comision_epp_porcentaje || 0),
       });
     } catch (err) {
       console.error("Error fetching consultora:", err);
@@ -223,8 +232,29 @@ export default function AdminConfiguracionPage() {
                       setFormData({ ...formData, cuit: e.target.value })
                     }
                     className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold text-slate-800 outline-none focus:border-blue-200 focus:bg-white transition-all"
-                    required
                   />
+                </div>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">
+                    Comisión EPP (%)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step="0.1"
+                    value={formData.comision_epp_porcentaje}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        comision_epp_porcentaje: Number(e.target.value),
+                      })
+                    }
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold text-slate-800 outline-none focus:border-blue-200 focus:bg-white transition-all"
+                  />
+                  <p className="text-[11px] text-slate-400 px-1">
+                    Se aplica automáticamente a cada cotización. El cobro online está fuera de alcance.
+                  </p>
                 </div>
               </div>
 

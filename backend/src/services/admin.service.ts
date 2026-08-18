@@ -471,10 +471,33 @@ export const adminService = {
     return data;
   },
 
-  async actualizarConsultora(usuarioId: string, consultoraId: string, nombre: string, cuit: string) {
+  async actualizarConsultora(
+    usuarioId: string,
+    consultoraId: string,
+    payload: {
+      nombre?: string;
+      cuit?: string;
+      comision_epp_porcentaje?: number;
+    }
+  ) {
+    const actual = await this.obtenerConsultora(consultoraId);
+    const currentConfig =
+      actual?.config && typeof actual.config === "object" ? (actual.config as Record<string, unknown>) : {};
+
+    const nextConfig = {
+      ...currentConfig,
+      ...(payload.cuit !== undefined ? { cuit: payload.cuit } : {}),
+      ...(payload.comision_epp_porcentaje !== undefined
+        ? { comision_epp_porcentaje: payload.comision_epp_porcentaje }
+        : {}),
+    };
+
+    const updates: Record<string, unknown> = { config: nextConfig };
+    if (payload.nombre !== undefined) updates.nombre = payload.nombre;
+
     const { data, error } = await supabaseAdmin
       .from("consultoras")
-      .update({ nombre, cuit })
+      .update(updates)
       .eq("id", consultoraId)
       .select()
       .single();
@@ -486,7 +509,7 @@ export const adminService = {
       accion: "ACTUALIZAR_CONFIGURACION",
       entidad: "consultoras",
       entidad_id: consultoraId,
-      detalles: { nombre, cuit },
+      detalles: payload,
       consultora_id: consultoraId,
     });
 

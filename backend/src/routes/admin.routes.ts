@@ -33,5 +33,8 @@ router.post('/preventores/desasignar', adminController.desasignarEmpresaAPrevent
 router.post('/consultoras/:id/logo', upload.single('logo'), adminController.subirLogoConsultora);
 router.post('/empresas/:id/logo', upload.single('logo'), adminController.subirLogoEmpresa);
 router.get('/empresas/buscar-cuit/:cuit', adminController.buscarCuit);
+router.get('/archivo', adminController.obtenerArchivo);
+router.get('/entes/:id/empresas', adminController.listarAsignacionesEnte);
+router.put('/entes/:id/empresas', adminController.guardarAsignacionesEnte);
 
 export default router;

@@ -39,7 +39,7 @@ export function AlertProvider({ children }: { children: React.ReactNode }) {
     <AlertContext.Provider value={{ showAlert, hideAlert }}>
       {children}
       {state.isOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 animate-fadeIn p-4 select-none">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-[80] animate-fadeIn p-4 select-none">
           <div className="bg-white rounded-2xl p-6 w-full max-w-xs shadow-xl border border-slate-100 space-y-4 relative overflow-hidden text-center flex flex-col items-center">
             <div className={`h-12 w-12 rounded-2xl flex items-center justify-center shrink-0 ${
               state.type === "success" ? "bg-emerald-50 text-emerald-600" :

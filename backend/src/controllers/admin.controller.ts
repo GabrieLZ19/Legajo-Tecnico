@@ -1,5 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import { adminService } from "../services/admin.service";
+import { archivoService } from "../services/archivo.service";
+import { enteService } from "../services/ente.service";
+import type { TipoDocumentoArchivo } from "../services/archivo.service";
 
 export const adminController = {
   async listarUsuarios(req: Request, res: Response, next: NextFunction) {
@@ -126,9 +129,16 @@ export const adminController = {
     try {
       const usuarioId = req.user!.id;
       const consultoraId = req.user!.consultora_id || "d3b07384-d113-4ec2-a9b6-419dc4040835";
-      const { nombre, cuit } = req.body;
+      const { nombre, cuit, comision_epp_porcentaje } = req.body;
 
-      const data = await adminService.actualizarConsultora(usuarioId, consultoraId, nombre, cuit);
+      const data = await adminService.actualizarConsultora(usuarioId, consultoraId, {
+        nombre,
+        cuit,
+        comision_epp_porcentaje:
+          comision_epp_porcentaje === undefined || comision_epp_porcentaje === ""
+            ? undefined
+            : Number(comision_epp_porcentaje),
+      });
       res.json(data);
     } catch (error) {
       next(error);
@@ -208,6 +218,56 @@ export const adminController = {
       const cuit = Array.isArray(req.params.cuit) ? req.params.cuit[0] : req.params.cuit;
       const data = await adminService.buscarCuit(cuit);
       res.json(data);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async obtenerArchivo(req: Request, res: Response, next: NextFunction) {
+    try {
+      const consultoraId = req.user?.consultora_id;
+      const empresaId = req.query.empresaId ? String(req.query.empresaId) : undefined;
+      const tipo = req.query.tipo ? String(req.query.tipo) : undefined;
+
+      let empresaIds: string[] = [];
+      if (empresaId) {
+        empresaIds = [empresaId];
+      } else if (consultoraId) {
+        const empresas = await adminService.listarEmpresas(consultoraId);
+        empresaIds = (empresas ?? []).map((e: { id: string }) => e.id);
+      }
+
+      const incluir: TipoDocumentoArchivo[] =
+        tipo === "informe" || tipo === "capacitacion" || tipo === "epp"
+          ? [tipo]
+          : ["informe", "capacitacion", "epp"];
+
+      const result = await archivoService.listar({
+        empresaIds,
+        incluir,
+      });
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async listarAsignacionesEnte(req: Request, res: Response, next: NextFunction) {
+    try {
+      const enteId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const data = await enteService.listarEmpresasAsignadas(enteId);
+      res.json({ asignaciones: data });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async guardarAsignacionesEnte(req: Request, res: Response, next: NextFunction) {
+    try {
+      const enteId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const asignaciones = Array.isArray(req.body.asignaciones) ? req.body.asignaciones : [];
+      const data = await enteService.guardarAsignaciones(enteId, asignaciones);
+      res.json({ asignaciones: data });
     } catch (error) {
       next(error);
     }

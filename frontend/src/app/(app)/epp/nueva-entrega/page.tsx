@@ -18,6 +18,8 @@ import {
   Calendar,
 } from "lucide-react";
 import { useEpp } from "@/hooks/useEpp";
+import { useAlert } from "@/context/AlertContext";
+import { FileImagePicker } from "@/components/FileImagePicker";
 
 interface ItemEntrega {
   epp_tipo_id: string;
@@ -30,10 +32,12 @@ interface ItemEntrega {
 export default function NuevaEntregaEppPage() {
   const router = useRouter();
   const { empresa } = useAuth();
-  const { getTiposEpp, crearTipoEpp, crearEntregaEpp } = useEpp();
+  const { getTiposEpp, crearTipoEpp, crearEntregaEpp, buscarEmpleadoPorQr } = useEpp();
+  const { showAlert } = useAlert();
 
   const [nombreEmpleado, setNombreEmpleado] = useState("");
   const [dniEmpleado, setDniEmpleado] = useState("");
+  const [empleadoId, setEmpleadoId] = useState<string | null>(null);
   const [fechaEntrega, setFechaEntrega] = useState(
     new Date().toISOString().split("T")[0],
   );
@@ -49,6 +53,7 @@ export default function NuevaEntregaEppPage() {
   const [showModalEpp, setShowModalEpp] = useState(false);
   const [nuevoEppNombre, setNuevoEppNombre] = useState("");
   const [nuevoEppDescripcion, setNuevoEppDescripcion] = useState("");
+  const [nuevoEppFoto, setNuevoEppFoto] = useState<File | null>(null);
   const [guardandoNuevoEpp, setGuardandoNuevoEpp] = useState(false);
   const [creandoEppParaIndex, setCreandoEppParaIndex] = useState<number | null>(
     null,
@@ -60,6 +65,7 @@ export default function NuevaEntregaEppPage() {
   const [qrScanningError, setQrScanningError] = useState<string | null>(null);
   const qrInstanceRef = useRef<any>(null);
   const sigRef = useRef<SignatureCanvas>(null);
+  const sigEmpleadorRef = useRef<SignatureCanvas>(null);
 
   useEffect(() => {
     fetchTipos();
@@ -111,6 +117,7 @@ export default function NuevaEntregaEppPage() {
       const data = await crearTipoEpp({
         nombre: nuevoEppNombre,
         descripcion: nuevoEppDescripcion,
+        foto: nuevoEppFoto ?? undefined,
       });
 
       const nuevoTipo: EppTipo = data;
@@ -126,10 +133,19 @@ export default function NuevaEntregaEppPage() {
 
       setNuevoEppNombre("");
       setNuevoEppDescripcion("");
+      setNuevoEppFoto(null);
       setShowModalEpp(false);
       setCreandoEppParaIndex(null);
-    } catch (err: any) {
-      alert(err.response?.data?.error || "Error al crear el EPP");
+    } catch (err: unknown) {
+      const message =
+        typeof err === "object" &&
+        err !== null &&
+        "response" in err &&
+        typeof (err as { response?: { data?: { error?: string } } }).response?.data?.error ===
+          "string"
+          ? (err as { response: { data: { error: string } } }).response.data.error
+          : "Error al crear el EPP";
+      showAlert("error", "Error", message);
     } finally {
       setGuardandoNuevoEpp(false);
     }
@@ -179,39 +195,37 @@ export default function NuevaEntregaEppPage() {
     qrInstanceRef.current = null;
   };
 
-  const handleQrScanSuccess = (decodedText: string) => {
+  const handleQrScanSuccess = async (decodedText: string) => {
     try {
-      if (decodedText.startsWith("{")) {
-        const data = JSON.parse(decodedText);
-        if (data.nombre) setNombreEmpleado(data.nombre);
-        if (data.dni) setDniEmpleado(data.dni);
-      } else if (decodedText.includes(",")) {
-        const [nombre, dni] = decodedText.split(",");
-        if (nombre) setNombreEmpleado(nombre.trim());
-        if (dni) setDniEmpleado(dni.trim());
-      } else {
-        const cleanDni = decodedText.replace(/\D/g, "").slice(0, 8);
-        setDniEmpleado(cleanDni);
-        setNombreEmpleado("Trabajador Escaneado");
+      const lookupToken = decodedText.startsWith("{")
+        ? (JSON.parse(decodedText).token || JSON.parse(decodedText).qr_token || decodedText)
+        : decodedText;
+      const { empleado } = await buscarEmpleadoPorQr(lookupToken);
+      setNombreEmpleado(empleado.nombre);
+      setDniEmpleado(empleado.documento);
+      setEmpleadoId(empleado.id);
+      setEscaneadoPorQr(true);
+      setShowQrScanner(false);
+      await stopScanner();
+    } catch {
+      try {
+        if (decodedText.startsWith("{")) {
+          const data = JSON.parse(decodedText);
+          if (data.nombre) setNombreEmpleado(data.nombre);
+          if (data.dni) setDniEmpleado(data.dni);
+        } else if (decodedText.includes(",")) {
+          const [nombre, dni] = decodedText.split(",");
+          if (nombre) setNombreEmpleado(nombre.trim());
+          if (dni) setDniEmpleado(dni.trim());
+        }
+        setEmpleadoId(null);
+        setEscaneadoPorQr(true);
+        setShowQrScanner(false);
+        await stopScanner();
+      } catch {
+        setQrScanningError("QR no reconocido. Completá los datos a mano.");
       }
-      setEscaneadoPorQr(true);
-      setShowQrScanner(false);
-      stopScanner();
-    } catch (err) {
-      console.error("Error al procesar QR:", err);
-      setDniEmpleado(decodedText.trim().slice(0, 8));
-      setEscaneadoPorQr(true);
-      setShowQrScanner(false);
-      stopScanner();
     }
-  };
-
-  const handleSimulateScan = () => {
-    setNombreEmpleado("Juan Pérez");
-    setDniEmpleado("28456789");
-    setEscaneadoPorQr(true);
-    setShowQrScanner(false);
-    stopScanner();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -250,13 +264,20 @@ export default function NuevaEntregaEppPage() {
         .getTrimmedCanvas()
         .toDataURL("image/png");
 
+      const firmaEmpleador =
+        sigEmpleadorRef.current && !sigEmpleadorRef.current.isEmpty()
+          ? sigEmpleadorRef.current.getTrimmedCanvas().toDataURL("image/png")
+          : null;
+
       await crearEntregaEpp({
         empresa_id: empresa!.id,
+        empleado_id: empleadoId,
         nombre_empleado: nombreEmpleado,
         dni_empleado: dniEmpleado,
         fecha_entrega: fechaEntrega,
         items: itemsValidos,
         firma: firmaBase64,
+        firma_empleador: firmaEmpleador,
       });
 
       router.push("/epp");
@@ -461,8 +482,9 @@ export default function NuevaEntregaEppPage() {
                     <option value="">Seleccionar EPP...</option>
                     {tipos.map((t) => (
                       <option key={t.id} value={t.id}>
+                        {t.foto_url ? "📷 " : ""}
                         {t.nombre}
-                        {t.descripcion ? ` (${t.descripcion})` : ""}
+                        {t.descripcion ? ` — ${t.descripcion}` : ""}
                       </option>
                     ))}
                     <option
@@ -495,7 +517,7 @@ export default function NuevaEntregaEppPage() {
 
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-slate-400 uppercase">
-                    Marca / Modelo
+                    Marca
                   </label>
                   <input
                     type="text"
@@ -503,7 +525,21 @@ export default function NuevaEntregaEppPage() {
                     onChange={(e) =>
                       actualizarItem(idx, "marca", e.target.value)
                     }
-                    placeholder="Ej: 3M N95"
+                    placeholder="Ej: 3M"
+                    className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">
+                    Modelo
+                  </label>
+                  <input
+                    type="text"
+                    value={item.modelo}
+                    onChange={(e) =>
+                      actualizarItem(idx, "modelo", e.target.value)
+                    }
+                    placeholder="Ej: N95 8210"
                     className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500"
                   />
                 </div>
@@ -559,6 +595,32 @@ export default function NuevaEntregaEppPage() {
           <button
             type="button"
             onClick={() => sigRef.current?.clear()}
+            className="text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+          >
+            Borrar firma
+          </button>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+          <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+            Firma del Responsable / Empleador
+          </h2>
+          <p className="text-xs text-slate-500">
+            Opcional. Queda impresa en la constancia SRT 299/11.
+          </p>
+          <div className="border-2 border-dashed border-slate-300 rounded-xl overflow-hidden bg-white">
+            <SignatureCanvas
+              ref={sigEmpleadorRef}
+              penColor="#1e293b"
+              canvasProps={{
+                className: "w-full",
+                style: { width: "100%", height: "140px" },
+              }}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => sigEmpleadorRef.current?.clear()}
             className="text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
           >
             Borrar firma
@@ -625,6 +687,11 @@ export default function NuevaEntregaEppPage() {
                   className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 resize-none"
                 />
               </div>
+              <FileImagePicker
+                file={nuevoEppFoto}
+                onChange={setNuevoEppFoto}
+                label="Foto del EPP"
+              />
 
               <div className="flex gap-2 pt-2">
                 <button
@@ -679,19 +746,9 @@ export default function NuevaEntregaEppPage() {
               )}
             </div>
 
-            <div className="flex flex-col gap-2 pt-2">
-              <button
-                type="button"
-                onClick={handleSimulateScan}
-                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer"
-              >
-                Simular Escaneo (Juan Pérez - DNI 28456789)
-              </button>
-              <p className="text-[10px] text-slate-400 text-center">
-                Permita el acceso a la cámara o use la simulación rápida para
-                pruebas de demostración.
-              </p>
-            </div>
+            <p className="text-[10px] text-slate-400 text-center">
+              El QR debe ser el emitido desde Personal / QR. Si no reconoce el código, completá nombre y DNI a mano.
+            </p>
           </div>
         </div>
       )}

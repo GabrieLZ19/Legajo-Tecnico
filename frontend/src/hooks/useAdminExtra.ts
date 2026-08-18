@@ -5,13 +5,18 @@ export function useAdminMetricas() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const getMetricas = useCallback(async () => {
+  const getMetricas = useCallback(async (dateFrom?: string, dateTo?: string) => {
     setLoading(true);
     setError(null);
     try {
       const [empresasRes, dashboardRes] = await Promise.all([
         api.get("/admin/empresas"),
-        api.get("/admin/dashboard"),
+        api.get("/admin/dashboard", {
+          params: {
+            ...(dateFrom ? { fechaDesde: dateFrom } : {}),
+            ...(dateTo ? { fechaHasta: dateTo } : {}),
+          },
+        }),
       ]);
       return {
         empresas: empresasRes.data,
@@ -61,19 +66,47 @@ export function useArchivo() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const getArchivoData = useCallback(async () => {
+  const getArchivoData = useCallback(async (params?: { empresaId?: string; tipo?: string }) => {
     setLoading(true);
     setError(null);
     try {
-      const [empresasRes, informesRes, dashboardRes] = await Promise.all([
+      const [empresasRes, archivoRes, dashboardRes] = await Promise.all([
         api.get("/admin/empresas"),
-        api.get("/informes"),
+        api.get("/admin/archivo", { params }),
         api.get("/admin/dashboard"),
       ]);
+      const documentos = (archivoRes.data.documentos || []) as Array<{
+        id: string;
+        tipo: "informe" | "capacitacion" | "epp";
+        titulo: string;
+        fecha: string;
+        empresa_id: string;
+        empresa_razon_social: string;
+        pdf_disponible: boolean;
+        extra?: Record<string, string | number | boolean | null>;
+      }>;
+
+      const informes = documentos.map((doc) => ({
+        id: doc.id,
+        empresa_id: doc.empresa_id,
+        preventor_id: "",
+        numero_informe: doc.tipo === "informe" ? Number(doc.titulo.replace(/\D/g, "")) || 0 : 0,
+        actividad: doc.titulo,
+        fecha_hora_visita: doc.fecha,
+        estado_firma:
+          doc.extra?.estado_firma === "firmado" || doc.pdf_disponible ? "firmado" : "borrador",
+        url_pdf_generado: doc.pdf_disponible ? "1" : undefined,
+        created_at: doc.fecha,
+        updated_at: doc.fecha,
+        tipo_archivo: doc.tipo,
+        titulo_archivo: doc.titulo,
+      }));
+
       return {
         empresas: empresasRes.data,
-        informes: informesRes.data,
+        informes,
         dashboard: dashboardRes.data,
+        documentos,
       };
     } catch (err: any) {
       setError(err.response?.data?.error || "Error al cargar archivo");
@@ -84,11 +117,17 @@ export function useArchivo() {
   }, []);
 
 
-  const descargarPdfArchivo = useCallback(async (informeId: string) => {
+  const descargarPdfArchivo = useCallback(async (informeId: string, tipo: "informe" | "capacitacion" | "epp" = "informe") => {
     setLoading(true);
     setError(null);
     try {
-      const response = await api.get(`/informes/${informeId}/pdf`, {
+      const path =
+        tipo === "epp"
+          ? `/epp/entregas/${informeId}/pdf`
+          : tipo === "capacitacion"
+            ? `/capacitaciones/${informeId}/exportar?formato=pdf`
+            : `/informes/${informeId}/pdf`;
+      const response = await api.get(path, {
         responseType: "blob",
       });
       return response.data;

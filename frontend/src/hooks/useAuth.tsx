@@ -77,7 +77,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setEmpresa(null);
 
       setUser(perfil);
-      router.push('/admin/dashboard');
+      if (perfil.rol === "ente_regulador") {
+        router.push("/ente/dashboard");
+      } else if (perfil.rol === "admin") {
+        router.push("/admin/dashboard");
+      } else {
+        router.push("/dashboard");
+      }
     } catch (error: any) {
       throw new Error(error.response?.data?.error || 'Error al iniciar sesión como administrador');
     } finally {

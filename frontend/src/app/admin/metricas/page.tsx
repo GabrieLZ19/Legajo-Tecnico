@@ -37,14 +37,16 @@ export default function AdminMetricasPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [appliedFrom, setAppliedFrom] = useState("");
+  const [appliedTo, setAppliedTo] = useState("");
 
   const fetchData = useCallback(
-    async (isRefresh = false) => {
+    async (from: string, to: string, isRefresh = false) => {
       try {
         if (isRefresh) setRefreshing(true);
         else setLoading(true);
 
-        const res = await getMetricas();
+        const res = await getMetricas(from, to);
         setEmpresas(res.empresas);
         setDashboardData(res.dashboard);
       } catch (err) {
@@ -58,8 +60,16 @@ export default function AdminMetricasPage() {
   );
 
   useEffect(() => {
-    fetchData();
+    void fetchData("", "");
   }, [fetchData]);
+
+  const pendingDateFilter = dateFrom !== appliedFrom || dateTo !== appliedTo;
+
+  const applyDateFilter = () => {
+    setAppliedFrom(dateFrom);
+    setAppliedTo(dateTo);
+    void fetchData(dateFrom, dateTo, true);
+  };
 
   const exportToCSV = () => {
     if (!empresas.length) return;
@@ -165,6 +175,7 @@ export default function AdminMetricasPage() {
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
               className="bg-transparent text-xs font-bold text-slate-700 outline-none"
+              aria-label="Desde"
             />
             <span className="text-slate-300 mx-1">—</span>
             <input
@@ -172,14 +183,24 @@ export default function AdminMetricasPage() {
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
               className="bg-transparent text-xs font-bold text-slate-700 outline-none"
+              aria-label="Hasta"
             />
+            <button
+              type="button"
+              onClick={applyDateFilter}
+              disabled={!pendingDateFilter || refreshing}
+              className="ml-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl text-[11px] font-black cursor-pointer disabled:cursor-not-allowed"
+            >
+              Aplicar
+            </button>
           </div>
 
           <div className="h-8 w-px bg-slate-100 mx-1 hidden sm:block" />
 
           <button
-            onClick={() => fetchData(true)}
-            className="p-3 hover:bg-slate-50 rounded-xl transition-colors text-slate-400 hover:text-blue-600"
+            type="button"
+            onClick={() => fetchData(appliedFrom, appliedTo, true)}
+            className="p-3 hover:bg-slate-50 rounded-xl transition-colors text-slate-400 hover:text-blue-600 cursor-pointer"
           >
             <RefreshCw
               className={`h-5 w-5 ${refreshing ? "animate-spin" : ""}`}

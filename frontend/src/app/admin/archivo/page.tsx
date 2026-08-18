@@ -36,7 +36,12 @@ const MESES = [
   "Diciembre",
 ];
 
-type ArchiveFilter = "all" | "signed" | "pending" | "with-pdf";
+type ArchiveFilter = "all" | "signed" | "pending" | "with-pdf" | "informe" | "capacitacion" | "epp";
+
+type ArchiveDoc = InformeVisita & {
+  tipo_archivo?: "informe" | "capacitacion" | "epp";
+  titulo_archivo?: string;
+};
 
 type YearGroup = {
   year: number;
@@ -49,7 +54,10 @@ type MonthGroup = {
 };
 
 const FILTERS: Array<{ value: ArchiveFilter; label: string }> = [
-  { value: "all", label: "Constancias" },
+  { value: "all", label: "Todos" },
+  { value: "informe", label: "Informes" },
+  { value: "capacitacion", label: "Capacitaciones" },
+  { value: "epp", label: "EPP" },
   { value: "signed", label: "Firmadas" },
   { value: "pending", label: "Pendientes" },
   { value: "with-pdf", label: "Con PDF" },
@@ -59,7 +67,7 @@ export default function AdminArchivoPage() {
   const { getArchivoData, descargarPdfArchivo } = useArchivo();
   const [empresas, setEmpresas] = useState<AdminEmpresaOption[]>([]);
 
-  const [informes, setInformes] = useState<InformeVisita[]>([]);
+  const [informes, setInformes] = useState<ArchiveDoc[]>([]);
   const [selectedEmpresaId, setSelectedEmpresaId] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -84,7 +92,7 @@ export default function AdminArchivoPage() {
         const res = await getArchivoData();
 
         setEmpresas(res.empresas as AdminEmpresaOption[]);
-        setInformes(res.informes as InformeVisita[]);
+        setInformes(res.informes as ArchiveDoc[]);
         setErrorMessage(null);
       } catch (error) {
         console.error("Error loading archive data:", error);
@@ -151,6 +159,16 @@ export default function AdminArchivoPage() {
       }
 
       if (toTime !== null && documentTime > toTime) {
+        return false;
+      }
+
+      if (archiveFilter === "informe" && documento.tipo_archivo !== "informe") {
+        return false;
+      }
+      if (archiveFilter === "capacitacion" && documento.tipo_archivo !== "capacitacion") {
+        return false;
+      }
+      if (archiveFilter === "epp" && documento.tipo_archivo !== "epp") {
         return false;
       }
 
@@ -271,20 +289,22 @@ export default function AdminArchivoPage() {
     setCurrentMonth(null);
   };
 
-  const handleDownloadPdf = async (documento: InformeVisita) => {
+  const handleDownloadPdf = async (documento: ArchiveDoc) => {
     setDownloadingId(documento.id);
 
     try {
-      const pdfBlob = await descargarPdfArchivo(documento.id);
+      const tipo = documento.tipo_archivo ?? "informe";
+      const pdfBlob = await descargarPdfArchivo(documento.id, tipo);
 
       const blob = new Blob([pdfBlob], { type: "application/pdf" });
       const url = window.URL.createObjectURL(blob);
 
       const link = document.createElement("a");
       link.href = url;
-      link.download = `constancia_visita_${String(
-        documento.numero_informe,
-      ).padStart(6, "0")}.pdf`;
+      const slug = (documento.titulo_archivo || documento.actividad || documento.id)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_");
+      link.download = `${tipo}_${slug}.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();

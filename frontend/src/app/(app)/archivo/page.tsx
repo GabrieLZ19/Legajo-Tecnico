@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useInformes } from "@/hooks/useInformes";
 import Link from "next/link";
@@ -15,6 +15,8 @@ import {
   X,
   Building2,
 } from "lucide-react";
+import { api } from "@/lib/api";
+import type { DocumentoArchivo } from "@/types";
 
 // Nombres de los meses para mostrar en las carpetas
 const MESES = [
@@ -44,6 +46,38 @@ export default function ArchivoPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
+  const [otrosDocs, setOtrosDocs] = useState<DocumentoArchivo[]>([]);
+  const [downloadingOtro, setDownloadingOtro] = useState<string | null>(null);
+
+  const downloadOtro = async (doc: DocumentoArchivo) => {
+    setDownloadingOtro(doc.id);
+    try {
+      const path =
+        doc.tipo === "epp"
+          ? `/epp/entregas/${doc.id}/pdf`
+          : `/capacitaciones/${doc.id}/exportar?formato=pdf`;
+      const res = await api.get(path, { responseType: "blob" });
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${doc.tipo}_${doc.id}.pdf`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } finally {
+      setDownloadingOtro(null);
+    }
+  };
+
+  useEffect(() => {
+    if (!empresa?.id) return;
+    api
+      .get("/archivo", { params: { empresa_id: empresa.id } })
+      .then((res) => {
+        const docs = (res.data.documentos || []) as DocumentoArchivo[];
+        setOtrosDocs(docs.filter((d) => d.tipo !== "informe"));
+      })
+      .catch(console.error);
+  }, [empresa?.id]);
 
   // Determinar si hay alguna búsqueda o filtro de fecha activo
   const isFilteringActive =
@@ -377,6 +411,36 @@ export default function ArchivoPage() {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {otrosDocs.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-sm font-black uppercase tracking-wider text-slate-500">
+            Capacitaciones y entregas EPP
+          </h2>
+          <div className="bg-white border border-slate-200 rounded-2xl divide-y">
+            {otrosDocs.map((doc) => (
+              <div key={`${doc.tipo}-${doc.id}`} className="px-5 py-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    {doc.tipo}
+                  </p>
+                  <p className="text-sm font-bold text-slate-800">{doc.titulo}</p>
+                </div>
+                {doc.pdf_disponible && (
+                  <button
+                    type="button"
+                    onClick={() => downloadOtro(doc)}
+                    disabled={downloadingOtro === doc.id}
+                    className="text-[11px] font-bold text-blue-700 cursor-pointer disabled:opacity-50"
+                  >
+                    PDF
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

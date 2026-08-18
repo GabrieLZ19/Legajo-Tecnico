@@ -1,13 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 
-export function useAdminDashboard(empresaId?: string) {
+export function useAdminDashboard(empresaId?: string, fechaDesde?: string, fechaHasta?: string) {
   // Query 1: Dashboard metrics
   const dashboardQuery = useQuery({
-    queryKey: ['adminDashboard', empresaId],
+    queryKey: ['adminDashboard', empresaId, fechaDesde, fechaHasta],
     queryFn: async () => {
       const response = await api.get('/admin/dashboard', {
-        params: empresaId ? { empresaId } : {}
+        params: {
+          ...(empresaId ? { empresaId } : {}),
+          ...(fechaDesde ? { fechaDesde } : {}),
+          ...(fechaHasta ? { fechaHasta } : {}),
+        }
       });
       return response.data;
     }

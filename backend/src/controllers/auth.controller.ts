@@ -68,8 +68,8 @@ export const authController = {
         .eq('id', authData.user.id)
         .single();
 
-      if (!perfil || (perfil.rol !== 'admin' && perfil.rol !== 'preventor')) {
-        return res.status(403).json({ error: 'No tienes permisos de administrador' });
+      if (!perfil || !['admin', 'preventor', 'ente_regulador'].includes(perfil.rol)) {
+        return res.status(403).json({ error: 'No tienes permisos para acceder a este panel' });
       }
 
       res.json({
@@ -131,7 +131,7 @@ export const authController = {
         const { data, error } = await supabaseAdmin
           .from('ente_regulador_empresas')
           .select('empresa_id, empresas(id, razon_social, cuit, logo_url, actividad)')
-          .eq('ente_regulador_id', userId);
+          .eq('ente_id', userId);
 
         if (error) throw error;
         empresas = (data || []).map((ere: any) => ere.empresas).filter(Boolean);

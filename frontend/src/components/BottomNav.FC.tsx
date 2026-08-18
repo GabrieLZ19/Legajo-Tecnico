@@ -15,7 +15,7 @@ export const BottomNav: React.FC = () => {
     { name: 'Inicio', href: '/dashboard', icon: Home },
     { name: 'Informes', href: '/informes', icon: FileText },
     { name: 'Plan', href: '/plan-accion', icon: CheckSquare },
-    ...(user?.rol !== 'dueno' ? [
+    ...(user?.rol !== "dueno" && user?.rol !== "ente_regulador" ? [
       { name: 'EPP', href: '/epp', icon: HardHat },
       { name: 'Capacit.', href: '/capacitaciones', icon: GraduationCap },
     ] : []),

@@ -34,7 +34,8 @@ api.interceptors.response.use(
       const isPublicRoute =
         path.includes("/login") ||
         path.startsWith("/evaluacion") ||
-        path.startsWith("/firmar");
+        path.startsWith("/firmar") ||
+        path.startsWith("/cotizar");
 
       // No expulsar al login en flujos públicos (QR de evaluación, etc.)
       if (!isPublicRoute) {
