@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { supabaseAdmin } from '../config/supabase';
+import { supabaseAdmin, createPasswordAuthClient } from '../config/supabase';
 import { userPerteneceAEmpresa, requireConsultoraId } from '../middlewares/empresaAccess';
 import { clearAuthCookie, setAuthCookie } from '../utils/authCookie';
 
@@ -43,7 +43,7 @@ export const authController = {
       }
 
       const { data: authData, error: authError } =
-        await supabaseAdmin.auth.signInWithPassword({
+        await createPasswordAuthClient().auth.signInWithPassword({
           email: proxyEmail,
           password: password,
         });
@@ -85,7 +85,7 @@ export const authController = {
   async loginAdmin(req: Request, res: Response, next: NextFunction) {
     try {
       const { email, password } = req.body;
-      const { data: authData, error: authError } = await supabaseAdmin.auth.signInWithPassword({
+      const { data: authData, error: authError } = await createPasswordAuthClient().auth.signInWithPassword({
         email,
         password,
       });
