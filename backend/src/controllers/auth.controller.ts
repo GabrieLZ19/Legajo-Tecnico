@@ -3,19 +3,40 @@ import { supabaseAdmin } from '../config/supabase';
 import { userPerteneceAEmpresa, requireConsultoraId } from '../middlewares/empresaAccess';
 import { clearAuthCookie, setAuthCookie } from '../utils/authCookie';
 
+function digitsOnly(value: unknown): string {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
+function cuitLookupValues(cleanCuit: string): string[] {
+  const formatted =
+    cleanCuit.length === 11
+      ? `${cleanCuit.slice(0, 2)}-${cleanCuit.slice(2, 10)}-${cleanCuit.slice(10)}`
+      : cleanCuit;
+  return Array.from(new Set([cleanCuit, formatted]));
+}
+
 export const authController = {
   async login(req: Request, res: Response, next: NextFunction) {
     try {
       const { cuit, username, password } = req.body;
-
       const LOGIN_ERROR = "Credenciales inválidas o sesión no iniciada";
-      const proxyEmail = `${username}@${cuit}.legajo.local`;
+      const cleanCuit = digitsOnly(cuit);
+      const usernameNorm = String(username ?? "").trim();
 
-      const { data: empresa } = await supabaseAdmin
+      if (!cleanCuit || !usernameNorm) {
+        return res.status(401).json({ error: LOGIN_ERROR });
+      }
+
+      const proxyEmail = `${usernameNorm}@${cleanCuit}.legajo.local`;
+
+      const { data: empresas, error: empresaError } = await supabaseAdmin
         .from("empresas")
         .select("id, razon_social, cuit, logo_url, consultora_id")
-        .eq("cuit", cuit)
-        .maybeSingle();
+        .in("cuit", cuitLookupValues(cleanCuit))
+        .limit(1);
+
+      if (empresaError) throw empresaError;
+      const empresa = empresas?.[0];
 
       if (!empresa) {
         return res.status(401).json({ error: LOGIN_ERROR });
@@ -31,13 +52,13 @@ export const authController = {
         return res.status(401).json({ error: LOGIN_ERROR });
       }
 
-      const { data: perfil } = await supabaseAdmin
+      const { data: perfil, error: perfilError } = await supabaseAdmin
         .from("perfiles")
         .select("*")
         .eq("id", authData.user.id)
-        .single();
+        .maybeSingle();
 
-      if (!perfil || perfil.activo === false) {
+      if (perfilError || !perfil || perfil.activo === false) {
         return res.status(401).json({ error: LOGIN_ERROR });
       }
 
