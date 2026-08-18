@@ -60,7 +60,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useLayoutEffect(() => {
     let cancelled = false;
+    const path =
+      typeof window !== "undefined" ? window.location.pathname : "";
+    const isLoginPage = path.includes("/login");
+
     const restore = async () => {
+      if (isLoginPage) {
+        setLoading(false);
+        return;
+      }
       try {
         const { data } = await api.get('/auth/me');
         if (cancelled) return;

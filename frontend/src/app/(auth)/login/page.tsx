@@ -34,7 +34,7 @@ export default function LoginPage() {
 
     setSubmitting(true);
     try {
-      await login(cuit, username, password);
+      await login(cuit.replace(/\D/g, ""), username.trim(), password);
     } catch (err: any) {
       setError(err.message || "Error al iniciar sesión. Inténtalo de nuevo.");
       setSubmitting(false);
