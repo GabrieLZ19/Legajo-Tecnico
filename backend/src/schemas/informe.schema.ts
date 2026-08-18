@@ -72,6 +72,6 @@ export const firmaSchema = z.object({
     id: z.string().uuid(),
   }),
   body: z.object({
-    firma_base64: z.string().min(1, 'La firma es requerida'),
+    firma_base64: z.string().min(1, 'La firma es requerida').max(400_000, 'La firma es demasiado grande'),
   }),
 });

@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { planAnualService } from "../services/planAnual.service";
+import { assertEmpresaAccess } from "../middlewares/empresaAccess";
+import { HttpError } from "../utils/httpError";
 
 export const planAnualController = {
   async plantilla(req: Request, res: Response, next: NextFunction) {
@@ -25,6 +27,7 @@ export const planAnualController = {
       if (!empresaId) {
         return res.status(400).json({ error: "empresa_id es requerido" });
       }
+      await assertEmpresaAccess(req.user!, empresaId);
       const anios = await planAnualService.listarAnios(empresaId);
       res.json({ anios });
     } catch (error) {
@@ -38,6 +41,7 @@ export const planAnualController = {
       if (!empresaId) {
         return res.status(400).json({ error: "empresa_id es requerido" });
       }
+      await assertEmpresaAccess(req.user!, empresaId);
       const anioRaw = req.query.anio ? Number(req.query.anio) : undefined;
       const anio =
         anioRaw && Number.isFinite(anioRaw) ? anioRaw : undefined;
@@ -58,6 +62,7 @@ export const planAnualController = {
       if (!empresaId) {
         return res.status(400).json({ error: "empresa_id es requerido" });
       }
+      await assertEmpresaAccess(req.user!, empresaId);
       if (!file) {
         return res
           .status(400)
@@ -72,9 +77,13 @@ export const planAnualController = {
       });
 
       res.status(201).json(result);
-    } catch (error: any) {
+    } catch (error) {
+      if (error instanceof HttpError) {
+        next(error);
+        return;
+      }
       res.status(400).json({
-        error: error.message || "No se pudo subir el plan anual",
+        error: error instanceof Error ? error.message : "No se pudo subir el plan anual",
       });
     }
   },

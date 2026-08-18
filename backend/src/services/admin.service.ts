@@ -2,12 +2,14 @@ import { supabaseAdmin } from "../config/supabase";
 import { logService } from "./log.service";
 import { notificacionService } from "./notificacion.service";
 import { storageService } from "./storage.service";
+import { HttpError } from "../utils/httpError";
 
 export const adminService = {
-  async listarUsuarios() {
+  async listarUsuarios(consultoraId: string) {
     const { data, error } = await supabaseAdmin
       .from("perfiles")
-      .select("*, preventor_empresas(empresa_id, empresas(razon_social))");
+      .select("*, preventor_empresas(empresa_id, empresas(razon_social))")
+      .eq("consultora_id", consultoraId);
 
     if (error) throw error;
     return data;
@@ -26,7 +28,10 @@ export const adminService = {
     }
   ) {
     const { email, password, username, nombre_completo, rol, empresa_id } = userData;
-    const consultora_id = consultoraIdToken || "d3b07384-d113-4ec2-a9b6-419dc4040835";
+    if (!consultoraIdToken) {
+      throw new HttpError(403, "El usuario no tiene consultora asignada");
+    }
+    const consultora_id = consultoraIdToken;
 
     let finalEmail = email;
 
@@ -161,7 +166,10 @@ export const adminService = {
     }
   ) {
     const { cuit, razon_social, actividad, domicilio, localidad, codigo_postal, telefono, contacto } = empresaData;
-    const consultora_id = consultoraIdToken || "d3b07384-d113-4ec2-a9b6-419dc4040835";
+    if (!consultoraIdToken) {
+      throw new HttpError(403, "El usuario no tiene consultora asignada");
+    }
+    const consultora_id = consultoraIdToken;
 
     const { data, error } = await supabaseAdmin
       .from("empresas")

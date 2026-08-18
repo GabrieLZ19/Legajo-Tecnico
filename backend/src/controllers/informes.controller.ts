@@ -4,14 +4,15 @@ import { firmaService } from '../services/firma.service';
 import { supabaseAdmin } from '../config/supabase';
 import { storageService } from '../services/storage.service';
 import { pdfService } from '../services/pdf.service';
+import { assertEmpresaAccess, assertInformeAccess, requireConsultoraId } from '../middlewares/empresaAccess';
 
 export const informesController = {
   async crearInforme(req: Request, res: Response, next: NextFunction) {
     try {
-      // req.user está disponible gracias al middleware requireAuth
       const preventorId = req.user!.id;
       const data = req.body;
-      
+      await assertEmpresaAccess(req.user!, data.empresa_id);
+
       const informe = await informeService.crearInforme(preventorId, data);
       res.status(201).json(informe);
     } catch (error) {
@@ -25,13 +26,13 @@ export const informesController = {
       const user = req.user;
 
       if (empresaId) {
+        await assertEmpresaAccess(req.user!, empresaId as string);
         const informes = await informeService.listarPorEmpresa(empresaId as string);
         return res.json(informes);
       }
 
-      // Si no se provee empresaId, verificar rol del usuario
       if (user?.rol === 'admin') {
-        const consultoraId = user.consultora_id || 'd3b07384-d113-4ec2-a9b6-419dc4040835';
+        const consultoraId = requireConsultoraId(user);
         const { data: empresas } = await supabaseAdmin
           .from('empresas')
           .select('id')
@@ -60,6 +61,10 @@ export const informesController = {
   async obtenerInforme(req: Request, res: Response, next: NextFunction) {
     try {
       const informe = await informeService.obtenerPorId(req.params.id as string);
+      if (!informe) {
+        return res.status(404).json({ error: 'Informe no encontrado' });
+      }
+      await assertEmpresaAccess(req.user!, informe.empresa_id);
       res.json(informe);
     } catch (error) {
       next(error);
@@ -68,6 +73,7 @@ export const informesController = {
 
   async editarInforme(req: Request, res: Response, next: NextFunction) {
     try {
+      await assertInformeAccess(req.user!, req.params.id as string);
       const updateData = req.body;
       const informe = await informeService.editarBorrador(req.params.id as string, updateData);
       res.json(informe);
@@ -78,6 +84,7 @@ export const informesController = {
 
   async firmarPreventor(req: Request, res: Response, next: NextFunction) {
     try {
+      await assertInformeAccess(req.user!, req.params.id as string);
       const { firma_base64 } = req.body;
       const firmanteId = req.user!.id;
       const ip = req.ip;
@@ -91,6 +98,7 @@ export const informesController = {
 
   async firmarDueno(req: Request, res: Response, next: NextFunction) {
     try {
+      await assertInformeAccess(req.user!, req.params.id as string);
       const { firma_base64 } = req.body;
       const firmanteId = req.user!.id;
       const ip = req.ip;
@@ -105,6 +113,7 @@ export const informesController = {
   async subirEvidencia(req: Request, res: Response, next: NextFunction) {
     try {
       const { id: informeId } = req.params;
+      await assertInformeAccess(req.user!, informeId as string);
       const { punto_mejora_id } = req.body;
 
       // Obtener archivos de Multer (pueden venir como array o single)
@@ -186,6 +195,7 @@ export const informesController = {
   async descargarPdf(req: Request, res: Response, next: NextFunction) {
     try {
       const id = req.params.id as string;
+      await assertInformeAccess(req.user!, id);
       const url = await pdfService.generarPdf(id);
       res.redirect(url);
     } catch (error) {

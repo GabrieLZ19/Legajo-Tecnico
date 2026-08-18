@@ -63,6 +63,8 @@ export interface InformeVisita {
   fecha_hora_visita: string;
   lugar_visita?: string;
   contacto_visita?: string;
+  declaracion_legal?: string;
+  observaciones?: string;
   estado_firma: EstadoFirmaInforme;
   url_pdf_generado?: string;
   created_at: string;

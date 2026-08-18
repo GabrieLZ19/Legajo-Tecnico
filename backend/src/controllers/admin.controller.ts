@@ -3,11 +3,13 @@ import { adminService } from "../services/admin.service";
 import { archivoService } from "../services/archivo.service";
 import { enteService } from "../services/ente.service";
 import type { TipoDocumentoArchivo } from "../services/archivo.service";
+import { assertEmpresaAccess, assertPerfilDeConsultora, requireConsultoraId } from "../middlewares/empresaAccess";
+import { HttpError } from "../utils/httpError";
 
 export const adminController = {
   async listarUsuarios(req: Request, res: Response, next: NextFunction) {
     try {
-      const data = await adminService.listarUsuarios();
+      const data = await adminService.listarUsuarios(requireConsultoraId(req.user!));
       res.json(data);
     } catch (error) {
       next(error);
@@ -17,7 +19,7 @@ export const adminController = {
   async crearUsuario(req: Request, res: Response, next: NextFunction) {
     try {
       const usuarioCreadorId = req.user!.id;
-      const consultoraIdToken = req.user?.consultora_id;
+      const consultoraIdToken = requireConsultoraId(req.user!);
       const userData = req.body;
 
       const data = await adminService.crearUsuario(usuarioCreadorId, consultoraIdToken, userData);
@@ -30,7 +32,7 @@ export const adminController = {
   async editarUsuario(req: Request, res: Response, next: NextFunction) {
     try {
       const usuarioEditorId = req.user!.id;
-      const consultoraId = req.user!.consultora_id || "d3b07384-d113-4ec2-a9b6-419dc4040835";
+      const consultoraId = requireConsultoraId(req.user!);
       const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
       const userData = req.body;
 
@@ -43,7 +45,7 @@ export const adminController = {
 
   async listarEmpresas(req: Request, res: Response, next: NextFunction) {
     try {
-      const consultoraId = req.user?.consultora_id || "d3b07384-d113-4ec2-a9b6-419dc4040835";
+      const consultoraId = requireConsultoraId(req.user!);
       const data = await adminService.listarEmpresas(consultoraId);
       res.json(data);
     } catch (error) {
@@ -54,7 +56,7 @@ export const adminController = {
   async crearEmpresa(req: Request, res: Response, next: NextFunction) {
     try {
       const usuarioCreadorId = req.user!.id;
-      const consultoraIdToken = req.user?.consultora_id;
+      const consultoraIdToken = requireConsultoraId(req.user!);
       const empresaData = req.body;
 
       const data = await adminService.crearEmpresa(usuarioCreadorId, consultoraIdToken, empresaData);
@@ -67,7 +69,7 @@ export const adminController = {
   async editarEmpresa(req: Request, res: Response, next: NextFunction) {
     try {
       const usuarioEditorId = req.user!.id;
-      const consultoraId = req.user!.consultora_id || "d3b07384-d113-4ec2-a9b6-419dc4040835";
+      const consultoraId = requireConsultoraId(req.user!);
       const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
       const empresaData = req.body;
 
@@ -80,8 +82,11 @@ export const adminController = {
 
   async obtenerDashboardGlobal(req: Request, res: Response, next: NextFunction) {
     try {
-      const consultoraId = req.user?.consultora_id || "d3b07384-d113-4ec2-a9b6-419dc4040835";
+      const consultoraId = requireConsultoraId(req.user!);
       const { empresaId, fechaDesde, fechaHasta } = req.query;
+      if (empresaId) {
+        await assertEmpresaAccess(req.user!, String(empresaId));
+      }
 
       const data = await adminService.obtenerDashboardGlobal(consultoraId, {
         empresaId: empresaId ? String(empresaId) : undefined,
@@ -98,6 +103,12 @@ export const adminController = {
   async asignarEmpresaAPreventor(req: Request, res: Response, next: NextFunction) {
     try {
       const { preventor_id, empresa_id } = req.body;
+      await assertEmpresaAccess(req.user!, empresa_id);
+      await assertPerfilDeConsultora(
+        preventor_id,
+        requireConsultoraId(req.user!),
+        "preventor",
+      );
       await adminService.asignarEmpresaAPreventor(preventor_id, empresa_id);
       res.json({ success: true });
     } catch (error) {
@@ -108,6 +119,12 @@ export const adminController = {
   async desasignarEmpresaAPreventor(req: Request, res: Response, next: NextFunction) {
     try {
       const { preventor_id, empresa_id } = req.body;
+      await assertEmpresaAccess(req.user!, empresa_id);
+      await assertPerfilDeConsultora(
+        preventor_id,
+        requireConsultoraId(req.user!),
+        "preventor",
+      );
       await adminService.desasignarEmpresaAPreventor(preventor_id, empresa_id);
       res.json({ success: true });
     } catch (error) {
@@ -117,7 +134,7 @@ export const adminController = {
 
   async obtenerConsultora(req: Request, res: Response, next: NextFunction) {
     try {
-      const consultoraId = req.user!.consultora_id || "d3b07384-d113-4ec2-a9b6-419dc4040835";
+      const consultoraId = requireConsultoraId(req.user!);
       const data = await adminService.obtenerConsultora(consultoraId);
       res.json(data);
     } catch (error) {
@@ -128,7 +145,7 @@ export const adminController = {
   async actualizarConsultora(req: Request, res: Response, next: NextFunction) {
     try {
       const usuarioId = req.user!.id;
-      const consultoraId = req.user!.consultora_id || "d3b07384-d113-4ec2-a9b6-419dc4040835";
+      const consultoraId = requireConsultoraId(req.user!);
       const { nombre, cuit, comision_epp_porcentaje } = req.body;
 
       const data = await adminService.actualizarConsultora(usuarioId, consultoraId, {
@@ -147,7 +164,7 @@ export const adminController = {
 
   async listarLogs(req: Request, res: Response, next: NextFunction) {
     try {
-      const consultoraId = req.user!.consultora_id || "d3b07384-d113-4ec2-a9b6-419dc4040835";
+      const consultoraId = requireConsultoraId(req.user!);
       const logs = await adminService.listarLogs(consultoraId);
       res.json(logs);
     } catch (error) {
@@ -159,7 +176,7 @@ export const adminController = {
     try {
       const { titulo, mensaje, tipo } = req.body;
       const usuarioId = req.user!.id;
-      const consultoraId = req.user!.consultora_id || "d3b07384-d113-4ec2-a9b6-419dc4040835";
+      const consultoraId = requireConsultoraId(req.user!);
 
       const notificacion = await adminService.enviarNotificacion(usuarioId, consultoraId, titulo, mensaje, tipo);
       res.status(201).json(notificacion);
@@ -171,7 +188,11 @@ export const adminController = {
   async listarMisNotificaciones(req: Request, res: Response, next: NextFunction) {
     try {
       const usuarioId = req.user!.id;
-      const consultoraId = req.user!.consultora_id || "d3b07384-d113-4ec2-a9b6-419dc4040835";
+      const consultoraId = req.user?.consultora_id;
+      if (!consultoraId) {
+        res.json([]);
+        return;
+      }
 
       const notifications = await adminService.listarMisNotificaciones(usuarioId, consultoraId);
       res.json(notifications);
@@ -183,6 +204,10 @@ export const adminController = {
   async subirLogoConsultora(req: Request, res: Response, next: NextFunction) {
     try {
       const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const consultoraId = requireConsultoraId(req.user!);
+      if (id !== consultoraId) {
+        throw new HttpError(403, "No tenés acceso a esta consultora");
+      }
       const file = req.file;
 
       if (!file) {
@@ -199,7 +224,7 @@ export const adminController = {
   async subirLogoEmpresa(req: Request, res: Response, next: NextFunction) {
     try {
       const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-      const consultoraId = req.user?.consultora_id || "d3b07384-d113-4ec2-a9b6-419dc4040835";
+      const consultoraId = requireConsultoraId(req.user!);
       const file = req.file;
 
       if (!file) {
@@ -225,14 +250,15 @@ export const adminController = {
 
   async obtenerArchivo(req: Request, res: Response, next: NextFunction) {
     try {
-      const consultoraId = req.user?.consultora_id;
+      const consultoraId = requireConsultoraId(req.user!);
       const empresaId = req.query.empresaId ? String(req.query.empresaId) : undefined;
       const tipo = req.query.tipo ? String(req.query.tipo) : undefined;
 
       let empresaIds: string[] = [];
       if (empresaId) {
+        await assertEmpresaAccess(req.user!, empresaId);
         empresaIds = [empresaId];
-      } else if (consultoraId) {
+      } else {
         const empresas = await adminService.listarEmpresas(consultoraId);
         empresaIds = (empresas ?? []).map((e: { id: string }) => e.id);
       }
@@ -255,6 +281,11 @@ export const adminController = {
   async listarAsignacionesEnte(req: Request, res: Response, next: NextFunction) {
     try {
       const enteId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      await assertPerfilDeConsultora(
+        enteId,
+        requireConsultoraId(req.user!),
+        "ente_regulador",
+      );
       const data = await enteService.listarEmpresasAsignadas(enteId);
       res.json({ asignaciones: data });
     } catch (error) {
@@ -266,6 +297,16 @@ export const adminController = {
     try {
       const enteId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
       const asignaciones = Array.isArray(req.body.asignaciones) ? req.body.asignaciones : [];
+      await assertPerfilDeConsultora(
+        enteId,
+        requireConsultoraId(req.user!),
+        "ente_regulador",
+      );
+      for (const asignacion of asignaciones) {
+        if (asignacion?.empresa_id) {
+          await assertEmpresaAccess(req.user!, asignacion.empresa_id);
+        }
+      }
       const data = await enteService.guardarAsignaciones(enteId, asignaciones);
       res.json({ asignaciones: data });
     } catch (error) {

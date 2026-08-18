@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { planAccionService } from "../services/planAccion.service";
 import { EstadoAccion } from "../types/database";
 import { supabaseAdmin } from "../config/supabase";
+import { assertAccionAccess, assertEmpresaAccess } from "../middlewares/empresaAccess";
 
 export const planAccionController = {
   async listar(req: Request, res: Response, next: NextFunction) {
@@ -11,6 +12,7 @@ export const planAccionController = {
         return res.status(400).json({ error: "empresaId es requerido" });
       }
 
+      await assertEmpresaAccess(req.user!, empresaId as string);
       const acciones = await planAccionService.listarAcciones(
         empresaId as string,
         estado as EstadoAccion | undefined,
@@ -30,6 +32,7 @@ export const planAccionController = {
         return res.status(400).json({ error: "Estado inválido o no provisto" });
       }
 
+      await assertAccionAccess(req.user!, id as string);
       const accion = await planAccionService.actualizarEstado(
         id as string,
         estado as EstadoAccion,
@@ -47,6 +50,7 @@ export const planAccionController = {
         return res.status(400).json({ error: "empresaId es requerido" });
       }
 
+      await assertEmpresaAccess(req.user!, empresaId as string);
       const acciones = await planAccionService.listarAcciones(
         empresaId as string,
       );

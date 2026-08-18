@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireAuth, requireRole } from "../middlewares/auth";
 import { eppController } from "../controllers/epp.controller";
 import { upload } from "../config/multer";
+import { publicActionLimiter } from "../middlewares/rateLimit";
 
 const router = Router();
 
@@ -84,7 +85,7 @@ router.post(
   eppController.crearLicitacion,
 );
 
-router.get("/cotizar/:token", eppController.obtenerCotizacionPublica);
-router.post("/cotizar/:token", eppController.cargarCotizacionPublica);
+router.get("/cotizar/:token", publicActionLimiter, eppController.obtenerCotizacionPublica);
+router.post("/cotizar/:token", publicActionLimiter, eppController.cargarCotizacionPublica);
 
 export default router;

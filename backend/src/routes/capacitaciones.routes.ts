@@ -3,6 +3,7 @@ import { requireAuth, requireRole } from "../middlewares/auth";
 import { capacitacionesController } from "../controllers/capacitaciones.controller";
 import { planAnualController } from "../controllers/planAnual.controller";
 import { uploadExcel } from "../config/multerExcel";
+import { publicActionLimiter } from "../middlewares/rateLimit";
 
 const router = Router();
 
@@ -69,7 +70,7 @@ router.delete(
 );
 
 // Ruta PÚBLICA: evaluación del empleado (sin autenticación - accedida desde el QR)
-router.get("/:id/publica", capacitacionesController.detallePublico);
-router.post("/:id/evaluar", capacitacionesController.evaluar);
+router.get("/:id/publica", publicActionLimiter, capacitacionesController.detallePublico);
+router.post("/:id/evaluar", publicActionLimiter, capacitacionesController.evaluar);
 
 export default router;

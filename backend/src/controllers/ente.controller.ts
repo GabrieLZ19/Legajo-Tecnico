@@ -3,6 +3,7 @@ import { enteService } from "../services/ente.service";
 import { archivoService } from "../services/archivo.service";
 import { HttpError } from "../utils/httpError";
 import type { TipoDocumentoArchivo } from "../services/archivo.service";
+import { assertEmpresaAccess } from "../middlewares/empresaAccess";
 
 export const enteController = {
   async dashboard(req: Request, res: Response, next: NextFunction) {
@@ -41,6 +42,7 @@ export const archivoController = {
     try {
       const empresaId = req.query.empresa_id ? String(req.query.empresa_id) : req.user?.empresa_id;
       if (!empresaId) throw new HttpError(400, "empresa_id es requerido");
+      await assertEmpresaAccess(req.user!, empresaId);
       const tipo = req.query.tipo ? String(req.query.tipo) : undefined;
       const incluir: TipoDocumentoArchivo[] =
         tipo === "informe" || tipo === "capacitacion" || tipo === "epp"

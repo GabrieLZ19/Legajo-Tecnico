@@ -1,11 +1,17 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabaseAdmin } from '../config/supabase';
 import { storageService } from '../services/storage.service';
+import { assertEmpresaAccess } from '../middlewares/empresaAccess';
 
 export const empresasController = {
   async obtenerEmpresa(req: Request, res: Response, next: NextFunction) {
     try {
-      const { id } = req.params;
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      if (!id) {
+        return res.status(400).json({ error: 'ID de empresa inválido' });
+      }
+      await assertEmpresaAccess(req.user!, id);
+
       const { data, error } = await supabaseAdmin
         .from('empresas')
         .select('*')
@@ -24,7 +30,11 @@ export const empresasController = {
 
   async subirLogo(req: Request, res: Response, next: NextFunction) {
     try {
-      const { id } = req.params;
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      if (!id) {
+        return res.status(400).json({ error: 'ID de empresa inválido' });
+      }
+      await assertEmpresaAccess(req.user!, id);
       const file = req.file;
 
       if (!file) {

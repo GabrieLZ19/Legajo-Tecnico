@@ -1,3 +1,5 @@
+import { sanitizeRichHtml } from "./sanitizeHtml";
+
 export interface CapacitacionDiapositiva {
   contenido: string;
 }
@@ -16,15 +18,20 @@ export function resolveDiapositivasAndTemario(params: {
       )
     : [];
 
-  let diapositivas = incoming;
+  let diapositivas = incoming.map((d) => ({
+    ...d,
+    contenido: sanitizeRichHtml(d.contenido),
+  }));
   if (diapositivas.length === 0 && params.temario) {
-    diapositivas = [{ contenido: params.temario }];
+    diapositivas = [{ contenido: sanitizeRichHtml(params.temario) }];
   }
 
   const temario =
     diapositivas.length > 0
       ? diapositivas.map((d) => d.contenido || "").join("")
-      : params.temario || null;
+      : params.temario
+        ? sanitizeRichHtml(params.temario)
+        : null;
 
   return { diapositivas, temario };
 }

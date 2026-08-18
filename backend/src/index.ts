@@ -1,5 +1,7 @@
 import express from "express";
 import cors from "cors";
+import compression from "compression";
+import helmet from "helmet";
 import { env } from "./config/env";
 import { errorHandler } from "./middlewares/errorHandler";
 
@@ -18,6 +20,7 @@ import enteRoutes from "./routes/ente.routes";
 import archivoRoutes from "./routes/archivo.routes";
 
 const app = express();
+app.set("trust proxy", 1);
 
 // Middlewares globales — CORS primero para que errores de body/parse no pierdan headers
 app.use(
@@ -26,6 +29,13 @@ app.use(
     credentials: true,
   }),
 );
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  }),
+);
+app.use(compression());
 // Límite alto: diapositivas con imágenes embebidas (base64) pueden superar 100kb
 app.use(express.json({ limit: "15mb" }));
 app.use(express.urlencoded({ extended: true, limit: "15mb" }));

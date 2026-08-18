@@ -1,5 +1,9 @@
 import { Request, Response, NextFunction } from "express";
 import { capacitacionesService } from "../services/capacitaciones.service";
+import { assertCapacitacionAccess, assertEmpresaAccess } from "../middlewares/empresaAccess";
+import { HttpError } from "../utils/httpError";
+
+const MAX_FIRMA_CHARS = 400_000;
 
 export const capacitacionesController = {
   async listar(req: Request, res: Response, next: NextFunction) {
@@ -8,6 +12,7 @@ export const capacitacionesController = {
       if (!empresaId)
         return res.status(400).json({ error: "empresa_id es requerido" });
 
+      await assertEmpresaAccess(req.user!, empresaId);
       const capacitaciones = await capacitacionesService.listar(empresaId);
       res.json({ capacitaciones });
     } catch (error) {
@@ -18,6 +23,10 @@ export const capacitacionesController = {
   async crear(req: Request, res: Response, next: NextFunction) {
     try {
       const preventorId = req.user!.id;
+      if (!req.body.empresa_id) {
+        return res.status(400).json({ error: "empresa_id es requerido" });
+      }
+      await assertEmpresaAccess(req.user!, req.body.empresa_id);
       const cap = await capacitacionesService.crear({
         ...req.body,
         preventor_id: preventorId,
@@ -31,6 +40,7 @@ export const capacitacionesController = {
   async detalle(req: Request, res: Response, next: NextFunction) {
     try {
       const id = String(req.params.id);
+      await assertCapacitacionAccess(req.user!, id);
       const data = await capacitacionesService.obtenerPorId(id);
       if (!data)
         return res.status(404).json({ error: "Capacitación no encontrada" });
@@ -55,6 +65,7 @@ export const capacitacionesController = {
   async actualizarEstado(req: Request, res: Response, next: NextFunction) {
     try {
       const id = String(req.params.id);
+      await assertCapacitacionAccess(req.user!, id);
       const { estado } = req.body;
       if (!["borrador", "activa", "cerrada"].includes(estado)) {
         return res.status(400).json({ error: "Estado inválido" });
@@ -69,6 +80,7 @@ export const capacitacionesController = {
   async generarQR(req: Request, res: Response, next: NextFunction) {
     try {
       const id = String(req.params.id);
+      await assertCapacitacionAccess(req.user!, id);
       const result = await capacitacionesService.generarQR(id);
       if (!result)
         return res.status(404).json({ error: "Capacitación no encontrada" });
@@ -81,16 +93,27 @@ export const capacitacionesController = {
   async evaluar(req: Request, res: Response, next: NextFunction) {
     try {
       const id = String(req.params.id);
+      const firma = req.body?.firma;
+      if (typeof firma === "string" && firma.length > MAX_FIRMA_CHARS) {
+        throw new HttpError(400, "La firma es demasiado grande");
+      }
       const result = await capacitacionesService.evaluarEmpleado(id, req.body);
       res.status(201).json(result);
-    } catch (error: any) {
-      res.status(400).json({ error: error.message });
+    } catch (error) {
+      if (error instanceof HttpError) {
+        next(error);
+        return;
+      }
+      res.status(400).json({
+        error: error instanceof Error ? error.message : "No se pudo evaluar",
+      });
     }
   },
 
   async actualizar(req: Request, res: Response, next: NextFunction) {
     try {
       const id = String(req.params.id);
+      await assertCapacitacionAccess(req.user!, id);
       const result = await capacitacionesService.actualizar(id, req.body);
       if (result.error)
         return res.status(result.code!).json({ error: result.error });
@@ -103,6 +126,7 @@ export const capacitacionesController = {
   async eliminar(req: Request, res: Response, next: NextFunction) {
     try {
       const id = String(req.params.id);
+      await assertCapacitacionAccess(req.user!, id);
       await capacitacionesService.eliminar(id);
       res.json({ success: true, message: "Capacitación eliminada con éxito" });
     } catch (error) {
@@ -116,6 +140,7 @@ export const capacitacionesController = {
   async exportarAsistencias(req: Request, res: Response, next: NextFunction) {
     try {
       const id = String(req.params.id);
+      await assertCapacitacionAccess(req.user!, id);
       const { format, search, sector, estado } = req.query;
 
       const result = await capacitacionesService.exportarAsistencias(
@@ -161,6 +186,7 @@ export const capacitacionesController = {
   async actualizarRegistro(req: Request, res: Response, next: NextFunction) {
     try {
       const id = String(req.params.id);
+      await assertCapacitacionAccess(req.user!, id);
       const result = await capacitacionesService.actualizarRegistro(
         id,
         req.body,

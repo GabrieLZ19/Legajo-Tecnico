@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "../config/supabase";
 import { recalcularCumplimientoEmpresa } from "../utils/compliance";
+import { sanitizeRichHtml } from "../utils/sanitizeHtml";
 import {
   InformeVisita,
   PeligroDetectado,
@@ -78,7 +79,9 @@ export const informeService = {
         fecha_hora_visita: data.fecha_hora_visita,
         lugar_visita: data.lugar_visita,
         contacto_visita: data.contacto_visita,
-        declaracion_legal: data.declaracion_legal,
+        declaracion_legal: data.declaracion_legal
+          ? sanitizeRichHtml(data.declaracion_legal)
+          : data.declaracion_legal,
         observaciones: data.observaciones,
         estado_firma: "borrador",
       })
@@ -215,6 +218,9 @@ export const informeService = {
 
     // Separar puntos_mejora del resto de las columnas para evitar error en el update de la tabla informes_visita
     const { puntos_mejora, ...restData } = updateData;
+    if (typeof restData.declaracion_legal === "string") {
+      restData.declaracion_legal = sanitizeRichHtml(restData.declaracion_legal);
+    }
 
     const { error } = await supabaseAdmin
       .from("informes_visita")

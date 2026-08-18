@@ -1,12 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { capacitacionPlantillasService } from "../services/capacitacion-plantillas.service";
-
-function canWriteEmpresa(user: Express.Request["user"], empresaId: string) {
-  if (!user) return false;
-  if (user.rol === "admin") return true;
-  if (user.rol === "preventor") return true;
-  return user.empresa_id === empresaId;
-}
+import { assertEmpresaAccess } from "../middlewares/empresaAccess";
 
 export const capacitacionPlantillasController = {
   async listar(req: Request, res: Response, next: NextFunction) {
@@ -26,6 +20,9 @@ export const capacitacionPlantillasController = {
           .json({ error: "empresa_id es requerido para ambito=empresa" });
         return;
       }
+      if (ambito === "empresa" && empresaId) {
+        await assertEmpresaAccess(req.user!, empresaId);
+      }
 
       const plantillas = await capacitacionPlantillasService.listar({
         ambito,
@@ -44,6 +41,9 @@ export const capacitacionPlantillasController = {
       if (!plantilla) {
         res.status(404).json({ error: "Plantilla no encontrada" });
         return;
+      }
+      if (plantilla.ambito === "empresa" && plantilla.empresa_id) {
+        await assertEmpresaAccess(req.user!, plantilla.empresa_id);
       }
       res.json(plantilla);
     } catch (error) {
@@ -80,10 +80,7 @@ export const capacitacionPlantillasController = {
             .json({ error: "empresa_id es requerido para plantillas de empresa" });
           return;
         }
-        if (!canWriteEmpresa(user, empresa_id)) {
-          res.status(403).json({ error: "Sin permiso para esta empresa" });
-          return;
-        }
+        await assertEmpresaAccess(user, empresa_id);
         if (user.rol !== "admin" && user.rol !== "preventor") {
           res.status(403).json({ error: "Rol insuficiente" });
           return;
@@ -134,10 +131,11 @@ export const capacitacionPlantillasController = {
           return;
         }
       } else {
-        if (!canWriteEmpresa(user, existente.empresa_id)) {
-          res.status(403).json({ error: "Sin permiso para esta plantilla" });
+        if (!existente.empresa_id) {
+          res.status(400).json({ error: "Plantilla de empresa inválida" });
           return;
         }
+        await assertEmpresaAccess(user, existente.empresa_id);
         if (user.rol !== "admin" && user.rol !== "preventor") {
           res.status(403).json({ error: "Rol insuficiente" });
           return;
@@ -175,10 +173,11 @@ export const capacitacionPlantillasController = {
           return;
         }
       } else {
-        if (!canWriteEmpresa(user, existente.empresa_id)) {
-          res.status(403).json({ error: "Sin permiso para esta plantilla" });
+        if (!existente.empresa_id) {
+          res.status(400).json({ error: "Plantilla de empresa inválida" });
           return;
         }
+        await assertEmpresaAccess(user, existente.empresa_id);
         if (user.rol !== "admin" && user.rol !== "preventor") {
           res.status(403).json({ error: "Rol insuficiente" });
           return;

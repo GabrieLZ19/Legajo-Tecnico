@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../config/supabase';
+import { sanitizeRichHtml } from '../utils/sanitizeHtml';
 
 export const plantillasService = {
   async listarPorConsultora(consultoraId: string) {
@@ -20,7 +21,10 @@ export const plantillasService = {
   }) {
     const { data: inserted, error } = await supabaseAdmin
       .from('plantillas_declaracion')
-      .insert(data)
+      .insert({
+        ...data,
+        contenido: sanitizeRichHtml(data.contenido),
+      })
       .select()
       .single();
 
@@ -52,9 +56,16 @@ export const plantillasService = {
     nombre?: string;
     contenido?: string;
   }) {
+    const payload = {
+      ...data,
+      contenido:
+        data.contenido !== undefined
+          ? sanitizeRichHtml(data.contenido)
+          : data.contenido,
+    };
     const { data: updated, error } = await supabaseAdmin
       .from('plantillas_declaracion')
-      .update(data)
+      .update(payload)
       .eq('id', id)
       .select()
       .single();

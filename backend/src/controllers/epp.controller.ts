@@ -14,6 +14,11 @@ import {
   tokenParamSchema,
 } from "../schemas/epp.schema";
 import { HttpError } from "../utils/httpError";
+import {
+  assertEmpresaAccess,
+  assertEmpleadoAccess,
+  assertEntregaAccess,
+} from "../middlewares/empresaAccess";
 
 function param(value: string | string[] | undefined): string {
   if (Array.isArray(value)) return value[0];
@@ -75,6 +80,7 @@ export const eppController = {
     try {
       const empresaId = String(req.query.empresa_id || "");
       if (!empresaId) throw new HttpError(400, "empresa_id es requerido");
+      await assertEmpresaAccess(requireUser(req), empresaId);
       const data = await eppService.listarEmpleados(empresaId);
       res.json(data);
     } catch (error) {
@@ -85,6 +91,7 @@ export const eppController = {
   async crearEmpleado(req: Request, res: Response, next: NextFunction) {
     try {
       const parsed = crearEmpleadoSchema.parse({ body: req.body });
+      await assertEmpresaAccess(requireUser(req), parsed.body.empresa_id);
       const data = await eppService.crearEmpleado(parsed.body);
       res.status(201).json(data);
     } catch (error) {
@@ -98,6 +105,7 @@ export const eppController = {
         params: { id: param(req.params.id) },
         body: req.body,
       });
+      await assertEmpleadoAccess(requireUser(req), parsed.params.id);
       const data = await eppService.actualizarEmpleado(parsed.params.id, parsed.body);
       res.json(data);
     } catch (error) {
@@ -109,6 +117,7 @@ export const eppController = {
     try {
       const parsed = tokenParamSchema.parse({ params: { token: param(req.params.token) } });
       const data = await eppService.buscarEmpleadoPorQr(parsed.params.token);
+      await assertEmpresaAccess(requireUser(req), data.empresa_id);
       res.json({ empleado: data });
     } catch (error) {
       next(error);
@@ -118,6 +127,7 @@ export const eppController = {
   async generarQrEmpleado(req: Request, res: Response, next: NextFunction) {
     try {
       const parsed = idParamSchema.parse({ params: { id: param(req.params.id) } });
+      await assertEmpleadoAccess(requireUser(req), parsed.params.id);
       const data = await eppService.generarQrEmpleado(parsed.params.id);
       res.json(data);
     } catch (error) {
@@ -129,6 +139,7 @@ export const eppController = {
     try {
       const empresaId = String(req.query.empresa_id || "");
       if (!empresaId) throw new HttpError(400, "empresa_id es requerido");
+      await assertEmpresaAccess(requireUser(req), empresaId);
       const data = await eppService.listarEntregas(empresaId);
       res.json(data);
     } catch (error) {
@@ -139,7 +150,9 @@ export const eppController = {
   async registrarEntrega(req: Request, res: Response, next: NextFunction) {
     try {
       const parsed = registrarEntregaSchema.parse({ body: req.body });
-      const data = await eppService.registrarEntrega(requireUser(req), parsed.body);
+      const user = requireUser(req);
+      await assertEmpresaAccess(user, parsed.body.empresa_id);
+      const data = await eppService.registrarEntrega(user, parsed.body);
       res.status(201).json(data);
     } catch (error) {
       next(error);
@@ -149,7 +162,9 @@ export const eppController = {
   async regenerarPdf(req: Request, res: Response, next: NextFunction) {
     try {
       const parsed = idParamSchema.parse({ params: { id: param(req.params.id) } });
-      const data = await eppService.regenerarPdf(requireUser(req), parsed.params.id);
+      const user = requireUser(req);
+      await assertEntregaAccess(user, parsed.params.id);
+      const data = await eppService.regenerarPdf(user, parsed.params.id);
       res.json(data);
     } catch (error) {
       next(error);
@@ -159,6 +174,7 @@ export const eppController = {
   async descargarPdf(req: Request, res: Response, next: NextFunction) {
     try {
       const parsed = idParamSchema.parse({ params: { id: param(req.params.id) } });
+      await assertEntregaAccess(requireUser(req), parsed.params.id);
       const file = await eppService.descargarPdf(parsed.params.id);
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename="${file.filename}"`);
@@ -214,6 +230,7 @@ export const eppController = {
     try {
       const empresaId = String(req.query.empresa_id || "");
       if (!empresaId) throw new HttpError(400, "empresa_id es requerido");
+      await assertEmpresaAccess(requireUser(req), empresaId);
       const data = await eppService.listarLicitaciones(empresaId);
       res.json(data);
     } catch (error) {
@@ -224,7 +241,9 @@ export const eppController = {
   async crearLicitacion(req: Request, res: Response, next: NextFunction) {
     try {
       const parsed = crearLicitacionSchema.parse({ body: req.body });
-      const data = await eppService.crearLicitacion(requireUser(req), parsed.body);
+      const user = requireUser(req);
+      await assertEmpresaAccess(user, parsed.body.empresa_id);
+      const data = await eppService.crearLicitacion(user, parsed.body);
       res.status(201).json(data);
     } catch (error) {
       next(error);

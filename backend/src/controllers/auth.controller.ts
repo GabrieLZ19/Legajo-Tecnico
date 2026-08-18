@@ -1,56 +1,67 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { supabaseAdmin } from '../config/supabase';
-import { Perfil } from '../types/database';
+import { userPerteneceAEmpresa, requireConsultoraId } from '../middlewares/empresaAccess';
+import { clearAuthCookie, setAuthCookie } from '../utils/authCookie';
 
 export const authController = {
-  async login(req: Request, res: Response) {
+  async login(req: Request, res: Response, next: NextFunction) {
     try {
       const { cuit, username, password } = req.body;
 
-      // En un flujo real: 
-      // 1. Buscamos la empresa por CUIT para validar que exista
+      const LOGIN_ERROR = "Credenciales inválidas o sesión no iniciada";
+      const proxyEmail = `${username}@${cuit}.legajo.local`;
+
       const { data: empresa } = await supabaseAdmin
-        .from('empresas')
-        .select('id, razon_social, cuit, logo_url')
-        .eq('cuit', cuit)
-        .single();
-      
+        .from("empresas")
+        .select("id, razon_social, cuit, logo_url, consultora_id")
+        .eq("cuit", cuit)
+        .maybeSingle();
+
       if (!empresa) {
-        return res.status(401).json({ error: 'Empresa no encontrada con ese CUIT' });
+        return res.status(401).json({ error: LOGIN_ERROR });
       }
 
-      // 2. Autenticamos con Supabase Auth (ej. el username podría mapearse a un email dummy como username@cuit.empresa)
-      // Supongamos que usamos un proxy de email:
-      const proxyEmail = `${username}@${cuit}.legajo.local`;
-      
-      const { data: authData, error: authError } = await supabaseAdmin.auth.signInWithPassword({
-        email: proxyEmail,
-        password: password,
-      });
+      const { data: authData, error: authError } =
+        await supabaseAdmin.auth.signInWithPassword({
+          email: proxyEmail,
+          password: password,
+        });
 
       if (authError || !authData.user || !authData.session) {
-        return res.status(401).json({ error: 'Credenciales inválidas o sesión no iniciada' });
+        return res.status(401).json({ error: LOGIN_ERROR });
       }
 
-      // 3. Obtenemos el perfil
       const { data: perfil } = await supabaseAdmin
-        .from('perfiles')
-        .select('*')
-        .eq('id', authData.user.id)
+        .from("perfiles")
+        .select("*")
+        .eq("id", authData.user.id)
         .single();
 
+      if (!perfil || perfil.activo === false) {
+        return res.status(401).json({ error: LOGIN_ERROR });
+      }
+
+      const pertenece = await userPerteneceAEmpresa(perfil, empresa);
+      if (!pertenece) {
+        return res.status(401).json({ error: LOGIN_ERROR });
+      }
+
+      setAuthCookie(res, authData.session.access_token);
       res.json({
-        access_token: authData.session.access_token,
-        refresh_token: authData.session.refresh_token,
         perfil,
-        empresa
+        empresa: {
+          id: empresa.id,
+          razon_social: empresa.razon_social,
+          cuit: empresa.cuit,
+          logo_url: empresa.logo_url,
+        },
       });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
+    } catch (error) {
+      next(error);
     }
   },
 
-  async loginAdmin(req: Request, res: Response) {
+  async loginAdmin(req: Request, res: Response, next: NextFunction) {
     try {
       const { email, password } = req.body;
       const { data: authData, error: authError } = await supabaseAdmin.auth.signInWithPassword({
@@ -68,23 +79,26 @@ export const authController = {
         .eq('id', authData.user.id)
         .single();
 
-      if (!perfil || !['admin', 'preventor', 'ente_regulador'].includes(perfil.rol)) {
-        return res.status(403).json({ error: 'No tienes permisos para acceder a este panel' });
+      if (!perfil || perfil.activo === false || !['admin', 'preventor', 'ente_regulador'].includes(perfil.rol)) {
+        return res.status(401).json({ error: 'Credenciales inválidas o sesión no iniciada' });
       }
 
+      setAuthCookie(res, authData.session.access_token);
       res.json({
-        access_token: authData.session.access_token,
-        refresh_token: authData.session.refresh_token,
         perfil
       });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
+    } catch (error) {
+      next(error);
     }
   },
   
   async me(req: Request, res: Response) {
-    // Retorna los datos que inyectamos en req.user desde el middleware
     res.json({ user: req.user });
+  },
+
+  async logout(_req: Request, res: Response) {
+    clearAuthCookie(res);
+    res.json({ success: true });
   },
 
   /**
@@ -94,7 +108,7 @@ export const authController = {
    * - ente_regulador: las autorizadas en ente_regulador_empresas
    * - dueno: su propia empresa
    */
-  async misEmpresas(req: Request, res: Response) {
+  async misEmpresas(req: Request, res: Response, next: NextFunction) {
     try {
       const userId = req.user!.id;
       const rol = req.user!.rol;
@@ -102,17 +116,13 @@ export const authController = {
       let empresas: any[] = [];
 
       if (rol === 'admin') {
-        // Admin ve todas las empresas (de su consultora si tiene una asignada)
-        const query = supabaseAdmin
+        const consultoraId = requireConsultoraId(req.user!);
+        const { data, error } = await supabaseAdmin
           .from('empresas')
           .select('id, razon_social, cuit, logo_url, actividad')
+          .eq('consultora_id', consultoraId)
           .order('razon_social');
 
-        if (req.user!.consultora_id) {
-          query.eq('consultora_id', req.user!.consultora_id);
-        }
-
-        const { data, error } = await query;
         if (error) throw error;
         empresas = data || [];
 
@@ -151,8 +161,8 @@ export const authController = {
       }
 
       res.json({ empresas });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
+    } catch (error) {
+      next(error);
     }
   }
 };
