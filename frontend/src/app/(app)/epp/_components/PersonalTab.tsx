@@ -66,7 +66,7 @@ export function PersonalTab({ empleados, empresaId, canEdit, onChanged }: Person
       {canEdit && (
         <form
           onSubmit={handleCreate}
-          className="bg-white rounded-3xl border border-slate-100 p-5 grid grid-cols-1 sm:grid-cols-4 gap-3"
+          className="bg-white rounded-3xl border border-slate-100 p-4 sm:p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4"
         >
           <input
             required
@@ -74,7 +74,7 @@ export function PersonalTab({ empleados, empresaId, canEdit, onChanged }: Person
             value={nombre}
             onChange={(e) => setNombre(e.target.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/g, ""))}
             placeholder="Nombre y apellido"
-            className="px-3 py-2.5 border border-slate-200 rounded-xl text-sm"
+            className="w-full min-h-12 px-4 py-3 border border-slate-200 rounded-xl text-base sm:text-sm font-medium"
           />
           <input
             required
@@ -83,20 +83,20 @@ export function PersonalTab({ empleados, empresaId, canEdit, onChanged }: Person
             value={documento}
             onChange={(e) => setDocumento(e.target.value.replace(/\D/g, "").slice(0, 8))}
             placeholder="DNI"
-            className="px-3 py-2.5 border border-slate-200 rounded-xl text-sm"
+            className="w-full min-h-12 px-4 py-3 border border-slate-200 rounded-xl text-base sm:text-sm font-medium"
           />
           <input
             value={sector}
             onChange={(e) => setSector(e.target.value)}
             placeholder="Sector (opcional)"
-            className="px-3 py-2.5 border border-slate-200 rounded-xl text-sm"
+            className="w-full min-h-12 px-4 py-3 border border-slate-200 rounded-xl text-base sm:text-sm font-medium"
           />
           <button
             type="submit"
             disabled={saving}
-            className="inline-flex items-center justify-center gap-2 bg-slate-900 text-white rounded-xl text-xs font-bold cursor-pointer disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 w-full min-h-12 px-5 py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold cursor-pointer disabled:opacity-50"
           >
-            <UserPlus className="h-4 w-4" />
+            <UserPlus className="h-5 w-5" />
             Alta
           </button>
         </form>
@@ -110,10 +110,13 @@ export function PersonalTab({ empleados, empresaId, canEdit, onChanged }: Person
         ) : (
           <ul className="divide-y divide-slate-100">
             {empleados.map((emp) => (
-              <li key={emp.id} className="px-5 py-4 flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-bold text-slate-800">{emp.nombre}</p>
-                  <p className="text-[11px] text-slate-400 font-semibold">
+              <li
+                key={emp.id}
+                className="px-4 sm:px-5 py-4 flex items-center justify-between gap-3"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-slate-800 truncate">{emp.nombre}</p>
+                  <p className="text-xs text-slate-400 font-semibold">
                     DNI {emp.documento}
                     {emp.sector ? ` · ${emp.sector}` : ""}
                     {!emp.activo ? " · inactivo" : ""}
@@ -122,9 +125,9 @@ export function PersonalTab({ empleados, empresaId, canEdit, onChanged }: Person
                 <button
                   type="button"
                   onClick={() => handleQr(emp)}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 text-[11px] font-bold rounded-lg cursor-pointer"
+                  className="inline-flex items-center justify-center gap-2 shrink-0 min-h-11 px-4 py-2.5 bg-blue-50 text-blue-700 text-sm font-bold rounded-xl cursor-pointer"
                 >
-                  <QrCode className="h-3.5 w-3.5" />
+                  <QrCode className="h-4 w-4" />
                   Ver QR
                 </button>
               </li>
@@ -147,14 +150,14 @@ export function PersonalTab({ empleados, empresaId, canEdit, onChanged }: Person
               <button
                 type="button"
                 onClick={() => setQrPreview(null)}
-                className="flex-1 py-2.5 border rounded-xl text-sm font-bold cursor-pointer"
+                className="flex-1 min-h-12 py-3 border rounded-xl text-sm font-bold cursor-pointer"
               >
                 Cerrar
               </button>
               <button
                 type="button"
                 onClick={downloadQr}
-                className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold inline-flex items-center justify-center gap-2 cursor-pointer"
+                className="flex-1 min-h-12 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold inline-flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Download className="h-4 w-4" />
                 Descargar

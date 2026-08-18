@@ -16,6 +16,33 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Legajo Técnico Digital",
   description: "Gestión digital de Higiene y Seguridad Laboral",
+  applicationName: "Legajo Técnico",
+  icons: {
+    icon: [{ url: "/login.jpg", type: "image/jpeg" }],
+    apple: [{ url: "/login.jpg", type: "image/jpeg" }],
+    shortcut: "/login.jpg",
+  },
+  openGraph: {
+    title: "Legajo Técnico Digital",
+    description: "Gestión digital de Higiene y Seguridad Laboral",
+    siteName: "Legajo Técnico",
+    locale: "es_AR",
+    type: "website",
+    images: [
+      {
+        url: "/login.jpg",
+        width: 512,
+        height: 512,
+        alt: "Legajo Técnico",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary",
+    title: "Legajo Técnico Digital",
+    description: "Gestión digital de Higiene y Seguridad Laboral",
+    images: ["/login.jpg"],
+  },
 };
 
 export default function RootLayout({

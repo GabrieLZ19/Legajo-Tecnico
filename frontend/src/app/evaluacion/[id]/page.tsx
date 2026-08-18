@@ -14,6 +14,8 @@ import {
   ChevronLeft,
   ChevronRight,
   AlertCircle,
+  Square,
+  CheckSquare,
 } from "lucide-react";
 import type SignatureCanvas from "react-signature-canvas";
 import SignaturePad, { readSignatureOrThrow } from "@/components/SignaturePad";
@@ -24,7 +26,8 @@ interface Pregunta {
   id: string;
   pregunta: string;
   opciones: string[];
-  respuesta_correcta: string;
+  respuesta_correcta?: string;
+  es_multiple?: boolean;
   orden: number;
 }
 
@@ -124,31 +127,34 @@ export default function EvaluacionPublicaPage() {
     }
   }, [id]);
 
-  const esMultiple = (respuestaCorrecta: string) => {
-    return respuestaCorrecta && respuestaCorrecta.startsWith("[");
+  const esMultiple = (p: Pregunta) => {
+    if (p.es_multiple) return true;
+    const raw = p.respuesta_correcta;
+    if (!raw) return false;
+    if (Array.isArray(raw)) return true;
+    return String(raw).trim().startsWith("[");
   };
 
   const seleccionarRespuesta = (
     preguntaId: string,
     opcionIdx: number,
-    respuestaCorrecta: string,
+    isMult: boolean,
   ) => {
-    const isMult = esMultiple(respuestaCorrecta);
-    if (isMult) {
-      const current = Array.isArray(respuestas[preguntaId])
-        ? (respuestas[preguntaId] as number[])
-        : [];
-      let next = current.includes(opcionIdx)
-        ? current.filter((idx) => idx !== opcionIdx)
-        : [...current, opcionIdx];
-
-      setRespuestas({
-        ...respuestas,
-        [preguntaId]: next.sort((a, b) => a - b),
-      });
-    } else {
-      setRespuestas({ ...respuestas, [preguntaId]: opcionIdx });
-    }
+    setRespuestas((prev) => {
+      if (isMult) {
+        const current = Array.isArray(prev[preguntaId])
+          ? (prev[preguntaId] as number[])
+          : [];
+        const next = current.includes(opcionIdx)
+          ? current.filter((idx) => idx !== opcionIdx)
+          : [...current, opcionIdx];
+        return {
+          ...prev,
+          [preguntaId]: next.sort((a, b) => a - b),
+        };
+      }
+      return { ...prev, [preguntaId]: opcionIdx };
+    });
   };
 
   const handleSiguiente = () => {
@@ -418,7 +424,7 @@ export default function EvaluacionPublicaPage() {
                 (a, b) => a.orden - b.orden,
               )[currentPreguntaIndex];
               if (!p) return null;
-              const isMult = esMultiple(p.respuesta_correcta);
+              const isMult = esMultiple(p);
               return (
                 <div className="space-y-4 animate-in fade-in duration-300">
                   <div className="bg-slate-50 rounded-2xl border border-slate-100 p-5 space-y-3">
@@ -435,6 +441,11 @@ export default function EvaluacionPublicaPage() {
                     <p className="text-base sm:text-lg font-bold text-slate-800 leading-snug">
                       {p.pregunta}
                     </p>
+                    {isMult && (
+                      <p className="text-sm font-semibold text-purple-700">
+                        (elija las respuestas correctas)
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-2.5">
@@ -446,21 +457,18 @@ export default function EvaluacionPublicaPage() {
 
                       return (
                         <button
+                          type="button"
                           key={optIdx}
                           onClick={() =>
-                            seleccionarRespuesta(
-                              p.id,
-                              optIdx,
-                              p.respuesta_correcta,
-                            )
+                            seleccionarRespuesta(p.id, optIdx, isMult)
                           }
-                          className={`w-full text-left px-5 py-4 rounded-2xl text-sm font-semibold transition-all cursor-pointer border flex items-center justify-between ${
+                          className={`w-full text-left px-5 py-4 rounded-2xl text-sm font-semibold transition-all cursor-pointer border flex items-center justify-between gap-3 ${
                             isSelected
                               ? "bg-blue-50 border-blue-400 text-blue-900"
                               : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
                           }`}
                         >
-                          <div className="flex items-start">
+                          <div className="flex items-start min-w-0">
                             <span className="font-black mr-3 text-slate-400">
                               {String.fromCharCode(65 + optIdx)}.
                             </span>
@@ -468,6 +476,12 @@ export default function EvaluacionPublicaPage() {
                               {opt}
                             </span>
                           </div>
+                          {isMult &&
+                            (isSelected ? (
+                              <CheckSquare className="h-5 w-5 text-blue-600 shrink-0" />
+                            ) : (
+                              <Square className="h-5 w-5 text-slate-300 shrink-0" />
+                            ))}
                         </button>
                       );
                     })}
@@ -596,6 +610,10 @@ export default function EvaluacionPublicaPage() {
                   <div className="text-base font-black text-rose-600 bg-rose-50 border border-rose-100 rounded-xl py-2 w-36 mx-auto">
                     Nota: {resultado.puntaje}%
                   </div>
+                  <p className="text-sm font-semibold text-rose-800 leading-snug max-w-sm mx-auto">
+                    Ud deberá volver a tomar el curso y rendir nuevamente el
+                    examen
+                  </p>
                 </div>
               )}
             </div>

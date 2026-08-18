@@ -92,9 +92,9 @@ export function CatalogoTab({ tipos, canEdit, onChanged }: CatalogoTabProps) {
           <button
             type="button"
             onClick={openCreate}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl cursor-pointer"
+            className="inline-flex items-center justify-center gap-2 w-full sm:w-auto min-h-12 px-5 py-3 bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold rounded-xl cursor-pointer"
           >
-            <Plus className="h-4 w-4" />
+            <Plus className="h-5 w-5" />
             Nuevo tipo
           </button>
         </div>
@@ -125,20 +125,20 @@ export function CatalogoTab({ tipos, canEdit, onChanged }: CatalogoTabProps) {
                   <p className="text-[11px] text-slate-400 mt-1 line-clamp-2">{tipo.descripcion}</p>
                 )}
                 {canEdit && (
-                  <div className="mt-2 flex items-center gap-3">
+                  <div className="mt-3 flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => openEdit(tipo)}
-                      className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 cursor-pointer"
+                      className="inline-flex items-center justify-center gap-1.5 min-h-11 px-3 text-sm font-bold text-blue-600 cursor-pointer"
                     >
-                      <Pencil className="h-3 w-3" /> Editar
+                      <Pencil className="h-4 w-4" /> Editar
                     </button>
                     <button
                       type="button"
                       onClick={() => setPendingDelete(tipo)}
-                      className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-600 cursor-pointer"
+                      className="inline-flex items-center justify-center gap-1.5 min-h-11 px-3 text-sm font-bold text-rose-600 cursor-pointer"
                     >
-                      <Trash2 className="h-3 w-3" /> Eliminar
+                      <Trash2 className="h-4 w-4" /> Eliminar
                     </button>
                   </div>
                 )}
@@ -162,14 +162,14 @@ export function CatalogoTab({ tipos, canEdit, onChanged }: CatalogoTabProps) {
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
               placeholder="Nombre"
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm"
+              className="w-full min-h-12 px-4 py-3 border border-slate-200 rounded-xl text-base sm:text-sm"
             />
             <textarea
               value={descripcion}
               onChange={(e) => setDescripcion(e.target.value)}
               placeholder="Descripción"
               rows={3}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm resize-none"
+              className="w-full px-4 py-3 border border-slate-200 rounded-xl text-base sm:text-sm resize-none"
             />
             <FileImagePicker
               file={foto}
@@ -178,13 +178,13 @@ export function CatalogoTab({ tipos, canEdit, onChanged }: CatalogoTabProps) {
               label="Foto del EPP"
             />
             <div className="flex gap-2">
-              <button type="button" onClick={reset} className="flex-1 py-2.5 border rounded-xl text-sm font-bold cursor-pointer">
+              <button type="button" onClick={reset} className="flex-1 min-h-12 py-3 border rounded-xl text-sm font-bold cursor-pointer">
                 Cancelar
               </button>
               <button
                 type="submit"
                 disabled={saving}
-                className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold cursor-pointer disabled:opacity-50"
+                className="flex-1 min-h-12 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold cursor-pointer disabled:opacity-50"
               >
                 {saving ? "Guardando..." : "Guardar"}
               </button>
@@ -204,7 +204,7 @@ export function CatalogoTab({ tipos, canEdit, onChanged }: CatalogoTabProps) {
               <button
                 type="button"
                 onClick={() => setPendingDelete(null)}
-                className="flex-1 py-2.5 border rounded-xl text-sm font-bold cursor-pointer"
+                className="flex-1 min-h-12 py-3 border rounded-xl text-sm font-bold cursor-pointer"
               >
                 Cancelar
               </button>
@@ -212,7 +212,7 @@ export function CatalogoTab({ tipos, canEdit, onChanged }: CatalogoTabProps) {
                 type="button"
                 onClick={handleDelete}
                 disabled={saving}
-                className="flex-1 py-2.5 bg-rose-600 text-white rounded-xl text-sm font-bold cursor-pointer disabled:opacity-50"
+                className="flex-1 min-h-12 py-3 bg-rose-600 text-white rounded-xl text-sm font-bold cursor-pointer disabled:opacity-50"
               >
                 Eliminar
               </button>

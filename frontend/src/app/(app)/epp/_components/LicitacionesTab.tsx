@@ -135,9 +135,9 @@ export function LicitacionesTab({
           <button
             type="button"
             onClick={() => setShowForm((v) => !v)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl cursor-pointer"
+            className="inline-flex items-center justify-center gap-2 w-full sm:w-auto min-h-12 px-5 py-3 bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold rounded-xl cursor-pointer"
           >
-            <Plus className="h-4 w-4" />
+            <Plus className="h-5 w-5" />
             Nueva licitación
           </button>
         </div>
@@ -154,19 +154,19 @@ export function LicitacionesTab({
                 value={nuevoProv.nombre}
                 onChange={(e) => setNuevoProv((p) => ({ ...p, nombre: e.target.value }))}
                 placeholder="Nombre del proveedor"
-                className="px-3 py-2.5 border border-slate-200 rounded-xl text-sm"
+                className="min-h-12 px-4 py-3 border border-slate-200 rounded-xl text-base sm:text-sm"
               />
               <input
                 type="email"
                 value={nuevoProv.email}
                 onChange={(e) => setNuevoProv((p) => ({ ...p, email: e.target.value }))}
                 placeholder="correo@proveedor.com"
-                className="px-3 py-2.5 border border-slate-200 rounded-xl text-sm"
+                className="min-h-12 px-4 py-3 border border-slate-200 rounded-xl text-base sm:text-sm"
               />
               <button
                 type="submit"
                 disabled={savingProv}
-                className="bg-slate-900 text-white rounded-xl text-xs font-bold cursor-pointer disabled:opacity-50"
+                className="inline-flex items-center justify-center min-h-12 px-4 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold cursor-pointer disabled:opacity-50"
               >
                 {savingProv ? "Guardando..." : "Guardar y seleccionar"}
               </button>
@@ -184,7 +184,7 @@ export function LicitacionesTab({
                     type="button"
                     key={prov.id}
                     onClick={() => toggleProv(prov.id)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-bold cursor-pointer ${
+                    className={`min-h-11 px-4 py-2 rounded-full text-sm font-bold cursor-pointer ${
                       provIds.includes(prov.id)
                         ? "bg-blue-600 text-white"
                         : "bg-slate-100 text-slate-600"
@@ -210,14 +210,14 @@ export function LicitacionesTab({
               value={titulo}
               onChange={(e) => setTitulo(e.target.value)}
               placeholder="Título de la solicitud"
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-bold"
+              className="w-full min-h-12 px-4 py-3 border border-slate-200 rounded-xl text-base sm:text-sm font-bold"
             />
             <textarea
               value={descripcion}
               onChange={(e) => setDescripcion(e.target.value)}
               placeholder="Detalle o cantidades estimadas"
               rows={2}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm resize-none"
+              className="w-full px-4 py-3 border border-slate-200 rounded-xl text-base sm:text-sm resize-none"
             />
 
             <p className="text-[11px] font-semibold text-slate-500">
@@ -233,7 +233,7 @@ export function LicitacionesTab({
                     onChange={(e) =>
                       setItemIds((prev) => ({ ...prev, [tipo.id]: parseInt(e.target.value, 10) || 0 }))
                     }
-                    className="w-16 px-2 py-1 border rounded-lg text-sm"
+                    className="w-16 min-h-11 px-2 py-2 border rounded-lg text-base sm:text-sm"
                   />
                   <span className="text-sm font-semibold text-slate-700">{tipo.nombre}</span>
                 </label>
@@ -243,7 +243,7 @@ export function LicitacionesTab({
             <button
               type="submit"
               disabled={saving}
-              className="w-full py-3 bg-blue-600 text-white rounded-xl text-sm font-bold cursor-pointer disabled:opacity-50"
+              className="w-full min-h-12 py-3.5 bg-blue-600 text-white rounded-xl text-sm font-bold cursor-pointer disabled:opacity-50"
             >
               {saving ? "Creando..." : "Crear solicitud y generar enlaces"}
             </button>
@@ -296,25 +296,25 @@ export function LicitacionesTab({
                         </p>
                       </div>
                       {cot.url_carga && (
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
                             onClick={() => copyLink(cot.url_carga!)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 rounded-lg text-[11px] font-bold cursor-pointer"
+                            className="inline-flex items-center justify-center gap-1.5 min-h-11 px-3 py-2 bg-slate-100 rounded-xl text-sm font-bold cursor-pointer"
                           >
-                            <Copy className="h-3 w-3" /> Copiar
+                            <Copy className="h-4 w-4" /> Copiar
                           </button>
                           <a
                             href={mailto}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-[11px] font-bold"
+                            className="inline-flex items-center justify-center gap-1.5 min-h-11 px-3 py-2 bg-blue-50 text-blue-700 rounded-xl text-sm font-bold"
                           >
-                            <Send className="h-3 w-3" /> Mail
+                            <Send className="h-4 w-4" /> Mail
                           </a>
                           <a
                             href={wa}
                             target="_blank"
                             rel="noreferrer"
-                            className="px-2.5 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-[11px] font-bold"
+                            className="inline-flex items-center justify-center min-h-11 px-3 py-2 bg-emerald-50 text-emerald-700 rounded-xl text-sm font-bold"
                           >
                             WhatsApp
                           </a>

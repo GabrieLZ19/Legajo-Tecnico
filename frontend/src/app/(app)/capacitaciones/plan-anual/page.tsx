@@ -7,6 +7,7 @@ import {
   CalendarRange,
   Download,
   FileSpreadsheet,
+  FileText,
   Upload,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -45,6 +46,13 @@ export default function PlanAnualPage() {
     return Array.from(set).sort((a, b) => b - a);
   }, [aniosDisponibles, anio]);
 
+  const esPdf = useMemo(() => {
+    if (data?.tipo === "pdf") return true;
+    const nombre = data?.plan?.archivo_nombre?.toLowerCase() || "";
+    const mime = data?.plan?.archivo_mime?.toLowerCase() || "";
+    return nombre.endsWith(".pdf") || mime.includes("pdf");
+  }, [data]);
+
   const load = async (year: number) => {
     if (!empresa?.id) return;
     setLoading(true);
@@ -72,11 +80,13 @@ export default function PlanAnualPage() {
     if (!file || !empresa?.id) return;
 
     const name = file.name.toLowerCase();
-    if (!name.endsWith(".xls") && !name.endsWith(".xlsx")) {
+    const isExcel = name.endsWith(".xls") || name.endsWith(".xlsx");
+    const isPdf = name.endsWith(".pdf") || file.type === "application/pdf";
+    if (!isExcel && !isPdf) {
       showAlert(
         "warning",
         "Archivo inválido",
-        "Solo se permiten archivos Excel (.xls o .xlsx).",
+        "Solo se permiten archivos Excel (.xls o .xlsx) o PDF.",
       );
       return;
     }
@@ -108,7 +118,7 @@ export default function PlanAnualPage() {
       showAlert(
         "error",
         "Error al subir",
-        err.response?.data?.error || "No se pudo subir el Excel.",
+        err.response?.data?.error || "No se pudo subir el archivo.",
       );
     } finally {
       setUploading(false);
@@ -163,7 +173,7 @@ export default function PlanAnualPage() {
               Plan {anio}
             </h2>
             <p className="text-xs text-slate-500 font-semibold mt-1">
-              Registro anual en Excel. Se carga una vez por año (podés
+              Registro anual en Excel o PDF. Se carga una vez por año (podés
               reemplazarlo si hace falta).
             </p>
             {data?.plan && (
@@ -205,7 +215,7 @@ export default function PlanAnualPage() {
                 className="inline-flex items-center gap-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs"
               >
                 <Download className="h-3.5 w-3.5" />
-                Descargar Excel
+                {esPdf ? "Descargar PDF" : "Descargar Excel"}
               </a>
             )}
             {canUpload && (
@@ -213,7 +223,7 @@ export default function PlanAnualPage() {
                 <input
                   ref={fileRef}
                   type="file"
-                  accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  accept=".xls,.xlsx,.pdf,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                   className="hidden"
                   onChange={(e) => handleUpload(e.target.files?.[0] || null)}
                 />
@@ -227,8 +237,8 @@ export default function PlanAnualPage() {
                   {uploading
                     ? "Subiendo..."
                     : data?.plan
-                      ? "Reemplazar Excel"
-                      : "Subir Excel"}
+                      ? "Reemplazar archivo"
+                      : "Subir Excel o PDF"}
                 </button>
               </>
             )}
@@ -242,8 +252,8 @@ export default function PlanAnualPage() {
               Todavía no hay plan cargado para {anio}
             </p>
             <p className="text-xs text-slate-500 font-semibold max-w-md mx-auto">
-              Descargá la plantilla (columnas N°, Peligro, TEMA, PROPUESTA,
-              REAL), completála y subila acá.
+              Podés subir el Excel (columnas N°, Peligro, TEMA, PROPUESTA, REAL)
+              o un PDF del plan anual.
             </p>
           </div>
         )}
@@ -251,6 +261,20 @@ export default function PlanAnualPage() {
 
       {loading ? (
         <div className="h-48 bg-white border border-slate-200 rounded-2xl animate-pulse" />
+      ) : esPdf && data?.downloadUrl ? (
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
+            <FileText className="h-4 w-4 text-rose-600" />
+            <h3 className="text-sm font-bold text-slate-900">
+              {data.plan?.archivo_nombre || `Plan anual ${anio}`}
+            </h3>
+          </div>
+          <iframe
+            title={`Plan anual ${anio}`}
+            src={data.downloadUrl}
+            className="w-full h-[70vh] bg-slate-50"
+          />
+        </div>
       ) : data?.preview?.filas?.length ? (
         <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-100">
@@ -287,6 +311,16 @@ export default function PlanAnualPage() {
               </tbody>
             </table>
           </div>
+        </div>
+      ) : data?.plan ? (
+        <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center space-y-2">
+          <p className="text-sm font-bold text-slate-700">
+            El archivo quedó guardado
+          </p>
+          <p className="text-xs text-slate-500 font-semibold">
+            Descargalo para verlo. Si es un Excel con otro formato, la tabla
+            previa puede no mostrarse.
+          </p>
         </div>
       ) : null}
 

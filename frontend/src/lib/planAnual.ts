@@ -34,6 +34,7 @@ export interface PlanAnualResponse {
   plan: PlanAnualRecord | null;
   preview: { titulo?: string; filas: PlanAnualFila[] } | null;
   downloadUrl: string | null;
+  tipo: "pdf" | "excel" | null;
 }
 
 export async function listarAniosPlanAnual(empresaId: string) {
@@ -62,7 +63,9 @@ export async function subirPlanAnual(params: {
   form.append("anio", String(params.anio));
   form.append("archivo", params.archivo);
 
-  const { data } = await api.post("/capacitaciones/plan-anual", form);
+  const { data } = await api.post("/capacitaciones/plan-anual", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
   return data;
 }
 

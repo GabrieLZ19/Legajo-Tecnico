@@ -1,16 +1,53 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ChevronLeft,
   ChevronRight,
+  Maximize2,
+  Minimize2,
   Presentation,
   X,
 } from "lucide-react";
 import { Capacitacion, CapacitacionDiapositiva } from "@/types";
 import { useCapacitaciones } from "@/hooks/useCapacitaciones";
 import { normalizeDiapositivas } from "@/lib/cap-diapositivas";
+
+type FsDocument = Document & {
+  webkitFullscreenElement?: Element | null;
+  webkitExitFullscreen?: () => Promise<void> | void;
+};
+
+type FsElement = HTMLElement & {
+  webkitRequestFullscreen?: () => Promise<void> | void;
+};
+
+function getFullscreenElement(): Element | null {
+  const doc = document as FsDocument;
+  return document.fullscreenElement || doc.webkitFullscreenElement || null;
+}
+
+async function requestFullscreen(el: FsElement) {
+  if (el.requestFullscreen) {
+    await el.requestFullscreen();
+    return;
+  }
+  if (el.webkitRequestFullscreen) {
+    await el.webkitRequestFullscreen();
+  }
+}
+
+async function exitFullscreen() {
+  const doc = document as FsDocument;
+  if (document.exitFullscreen) {
+    await document.exitFullscreen();
+    return;
+  }
+  if (doc.webkitExitFullscreen) {
+    await doc.webkitExitFullscreen();
+  }
+}
 
 const slideHtmlClass =
   "cap-html-content-invert prose prose-invert max-w-4xl mx-auto text-left " +
@@ -38,6 +75,9 @@ export default function PresentarCapacitacionPage() {
   const [index, setIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const exitedFullscreenAt = useRef(0);
 
   // total = slides + QR final
   const total = slides.length + 1;
@@ -79,8 +119,39 @@ export default function PresentarCapacitacionPage() {
   }, [total]);
 
   const salir = useCallback(() => {
+    if (getFullscreenElement()) {
+      void exitFullscreen().catch(() => undefined);
+    }
     router.push(`/capacitaciones/${id}`);
   }, [router, id]);
+
+  const toggleFullscreen = useCallback(async () => {
+    try {
+      if (getFullscreenElement()) {
+        await exitFullscreen();
+        return;
+      }
+      const el = stageRef.current;
+      if (!el) return;
+      await requestFullscreen(el);
+    } catch {
+      // Algunos navegadores (p. ej. iOS) no permiten fullscreen en este elemento
+    }
+  }, []);
+
+  useEffect(() => {
+    const sync = () => {
+      const active = Boolean(getFullscreenElement());
+      setIsFullscreen(active);
+      if (!active) exitedFullscreenAt.current = Date.now();
+    };
+    document.addEventListener("fullscreenchange", sync);
+    document.addEventListener("webkitfullscreenchange", sync);
+    return () => {
+      document.removeEventListener("fullscreenchange", sync);
+      document.removeEventListener("webkitfullscreenchange", sync);
+    };
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -90,7 +161,14 @@ export default function PresentarCapacitacionPage() {
       } else if (e.key === "ArrowLeft" || e.key === "PageUp") {
         e.preventDefault();
         goPrev();
+      } else if (e.key === "f" || e.key === "F") {
+        e.preventDefault();
+        void toggleFullscreen();
       } else if (e.key === "Escape") {
+        // Esc sale de pantalla completa; no cerrar la presentación en el mismo toque
+        if (getFullscreenElement() || Date.now() - exitedFullscreenAt.current < 400) {
+          return;
+        }
         e.preventDefault();
         salir();
       } else if (e.key === "Home") {
@@ -103,7 +181,7 @@ export default function PresentarCapacitacionPage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [goNext, goPrev, salir, total]);
+  }, [goNext, goPrev, salir, toggleFullscreen, total]);
 
   if (loading) {
     return (
@@ -130,7 +208,10 @@ export default function PresentarCapacitacionPage() {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950 text-white flex flex-col">
+    <div
+      ref={stageRef}
+      className="fixed inset-0 z-50 bg-slate-950 text-white flex flex-col"
+    >
       {/* Top bar */}
       <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-white/10 bg-black/40 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
@@ -139,14 +220,34 @@ export default function PresentarCapacitacionPage() {
             {cap.titulo}
           </h1>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <span className="text-xs font-bold text-slate-400 tabular-nums">
             {index + 1} / {total}
           </span>
           <button
             type="button"
+            onClick={() => void toggleFullscreen()}
+            aria-pressed={isFullscreen}
+            className="inline-flex items-center gap-1.5 min-h-9 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-bold transition-colors"
+            title={
+              isFullscreen
+                ? "Salir de pantalla completa (Esc o F)"
+                : "Proyectar en pantalla completa (F)"
+            }
+          >
+            {isFullscreen ? (
+              <Minimize2 className="h-3.5 w-3.5" />
+            ) : (
+              <Maximize2 className="h-3.5 w-3.5" />
+            )}
+            <span className="hidden sm:inline">
+              {isFullscreen ? "Ventana" : "Pantalla completa"}
+            </span>
+          </button>
+          <button
+            type="button"
             onClick={salir}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-bold transition-colors"
+            className="inline-flex items-center gap-1.5 min-h-9 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-bold transition-colors"
             title="Salir (Esc)"
           >
             <X className="h-3.5 w-3.5" />
