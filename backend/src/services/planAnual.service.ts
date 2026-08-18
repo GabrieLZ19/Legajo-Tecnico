@@ -13,8 +13,33 @@ export type PlanAnualFila = {
   real?: string;
 };
 
+export type TipoPlanAnual = "pdf" | "excel";
+
 function currentYear(): number {
   return new Date().getFullYear();
+}
+
+export function tipoPlanAnual(
+  nombre?: string | null,
+  mime?: string | null,
+): TipoPlanAnual {
+  const n = (nombre || "").toLowerCase();
+  const m = (mime || "").toLowerCase();
+  if (n.endsWith(".pdf") || m.includes("pdf")) return "pdf";
+  return "excel";
+}
+
+function mimeDesdeArchivo(file: Express.Multer.File): string {
+  const tipo = tipoPlanAnual(file.originalname, file.mimetype);
+  if (tipo === "pdf") return "application/pdf";
+  const name = (file.originalname || "").toLowerCase();
+  if (name.endsWith(".xlsx")) {
+    return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  }
+  if (file.mimetype && file.mimetype !== "application/octet-stream") {
+    return file.mimetype;
+  }
+  return "application/vnd.ms-excel";
 }
 
 function parsePlanExcel(buffer: Buffer): {
@@ -41,7 +66,7 @@ function parsePlanExcel(buffer: Buffer): {
     if (!titulo && joined.includes("plan anual")) {
       titulo = row.find((c) => String(c).trim())?.toString();
     }
-    const hasN = row.some((c) => /^n°?$/i.test(String(c).trim()));
+    const hasN = row.some((c) => /^n[°ºo.]?$/i.test(String(c).trim()));
     const hasTema = row.some((c) => /^tema$/i.test(String(c).trim()));
     if (hasN && hasTema) {
       headerIdx = i;
@@ -72,7 +97,7 @@ function parsePlanExcel(buffer: Buffer): {
       .toLowerCase(),
   );
   const idx = {
-    n: header.findIndex((h) => /^n°?$/.test(h)),
+    n: header.findIndex((h) => /^n[°ºo.]?$/.test(h)),
     peligro: header.findIndex((h) => h.includes("peligro")),
     tema: header.findIndex((h) => h === "tema"),
     propuesta: header.findIndex((h) => h.includes("propuesta")),
@@ -187,8 +212,11 @@ export const planAnualService = {
         plan: null,
         preview: null,
         downloadUrl: null,
+        tipo: null as TipoPlanAnual | null,
       };
     }
+
+    const tipo = tipoPlanAnual(data.archivo_nombre, data.archivo_mime);
 
     const { data: signed, error: signError } = await supabaseAdmin.storage
       .from(BUCKET)
@@ -198,18 +226,20 @@ export const planAnualService = {
       console.error("Error firmando URL plan anual:", signError.message);
     }
 
-    // Preview: descargar y parsear
+    // Preview: descargar y parsear solo Excel
     let preview: { titulo?: string; filas: PlanAnualFila[] } | null = null;
-    try {
-      const { data: fileData, error: dlError } = await supabaseAdmin.storage
-        .from(BUCKET)
-        .download(data.archivo_path);
-      if (!dlError && fileData) {
-        const buffer = Buffer.from(await fileData.arrayBuffer());
-        preview = parsePlanExcel(buffer);
+    if (tipo === "excel") {
+      try {
+        const { data: fileData, error: dlError } = await supabaseAdmin.storage
+          .from(BUCKET)
+          .download(data.archivo_path);
+        if (!dlError && fileData) {
+          const buffer = Buffer.from(await fileData.arrayBuffer());
+          preview = parsePlanExcel(buffer);
+        }
+      } catch (e) {
+        console.error("Error parseando plan anual:", e);
       }
-    } catch (e) {
-      console.error("Error parseando plan anual:", e);
     }
 
     return {
@@ -217,6 +247,7 @@ export const planAnualService = {
       plan: data,
       preview,
       downloadUrl: signed?.signedUrl || null,
+      tipo,
     };
   },
 
@@ -232,8 +263,11 @@ export const planAnualService = {
       throw new Error("Año inválido");
     }
     if (!file?.buffer?.length) {
-      throw new Error("Debés adjuntar un archivo Excel");
+      throw new Error("Debés adjuntar un archivo Excel (.xls o .xlsx) o PDF");
     }
+
+    const tipo = tipoPlanAnual(file.originalname, file.mimetype);
+    file.mimetype = mimeDesdeArchivo(file);
 
     const safeName = file.originalname.replace(/[^\w.\-()\sÁÉÍÓÚáéíóúñÑ]/g, "_");
     const archivoPath = `${empresaId}/${anio}/${Date.now()}_${safeName}`;
@@ -287,7 +321,14 @@ export const planAnualService = {
       plan = data;
     }
 
-    const preview = parsePlanExcel(file.buffer);
-    return { plan, preview, anio };
+    let preview: { titulo?: string; filas: PlanAnualFila[] } | null = null;
+    if (tipo === "excel") {
+      try {
+        preview = parsePlanExcel(file.buffer);
+      } catch (e) {
+        console.error("Error parseando plan anual subido:", e);
+      }
+    }
+    return { plan, preview, anio, tipo };
   },
 };

@@ -23,7 +23,16 @@ router.post(
   "/plan-anual",
   requireAuth,
   requireRole("preventor", "admin"),
-  uploadExcel.single("archivo"),
+  (req, res, next) => {
+    uploadExcel.single("archivo")(req, res, (err) => {
+      if (err) {
+        return res.status(400).json({
+          error: err.message || "Debés adjuntar un archivo Excel (.xls o .xlsx) o PDF",
+        });
+      }
+      next();
+    });
+  },
   planAnualController.subir,
 );
 

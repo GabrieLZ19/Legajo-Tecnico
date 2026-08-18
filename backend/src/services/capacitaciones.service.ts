@@ -10,6 +10,18 @@ import {
   buildRegistroPdf,
 } from "./capacitacionRegistroExport.service";
 
+function esRespuestaMultiple(raw: unknown): boolean {
+  if (Array.isArray(raw)) return true;
+  if (typeof raw !== "string") return false;
+  const s = raw.trim();
+  if (s.startsWith("[")) return true;
+  try {
+    return Array.isArray(JSON.parse(s));
+  } catch {
+    return false;
+  }
+}
+
 export const capacitacionesService = {
   /**
    * Listar capacitaciones de la empresa
@@ -251,7 +263,7 @@ export const capacitacionesService = {
       .select(
         `
         id, titulo, temario, estado, fecha, con_evaluacion,
-        capacitacion_preguntas(id, enunciado, opciones, orden)
+        capacitacion_preguntas(id, enunciado, opciones, respuesta_correcta, orden)
       `,
       )
       .eq("id", id)
@@ -262,18 +274,28 @@ export const capacitacionesService = {
     if (data.estado !== "activa")
       return { error: "La capacitación no está activa", code: 400 };
 
-    if (!data.con_evaluacion) {
-      (data as any).capacitacion_preguntas = [];
-    } else if (data.capacitacion_preguntas) {
-      data.capacitacion_preguntas = data.capacitacion_preguntas.map(
-        (p: any) => ({
-          ...p,
+    const preguntas = !data.con_evaluacion
+      ? []
+      : (data.capacitacion_preguntas || []).map((p) => ({
+          id: p.id,
+          enunciado: p.enunciado,
+          opciones: p.opciones,
+          orden: p.orden,
           pregunta: p.enunciado,
-        }),
-      );
-    }
+          es_multiple: esRespuestaMultiple(p.respuesta_correcta),
+        }));
 
-    return { data };
+    return {
+      data: {
+        id: data.id,
+        titulo: data.titulo,
+        temario: data.temario,
+        estado: data.estado,
+        fecha: data.fecha,
+        con_evaluacion: data.con_evaluacion,
+        capacitacion_preguntas: preguntas,
+      },
+    };
   },
 
   /**

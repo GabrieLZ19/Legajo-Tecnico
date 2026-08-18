@@ -61,7 +61,7 @@ export const planAnualController = {
       if (!file) {
         return res
           .status(400)
-          .json({ error: "Debés adjuntar un archivo Excel (.xls o .xlsx)" });
+          .json({ error: "Debés adjuntar un archivo Excel (.xls o .xlsx) o PDF" });
       }
 
       const result = await planAnualService.subir({
