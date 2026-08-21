@@ -41,8 +41,18 @@ function readStoredProfile(): { user: Perfil | null; empresa: Empresa | null } {
 }
 
 function persistProfile(perfil: Perfil, empresa?: Empresa | null) {
-  Cookies.set("perfil", JSON.stringify(perfil), COOKIE_OPTS);
-  // Señal de sesión en el origen del frontend (middleware Next no ve la cookie de la API)
+  // Cookie liviana: el perfil completo puede superar el límite ~4KB del browser
+  const slim = {
+    id: perfil.id,
+    nombre_completo: perfil.nombre_completo,
+    username: perfil.username,
+    rol: perfil.rol,
+    empresa_id: perfil.empresa_id,
+    consultora_id: perfil.consultora_id,
+    activo: perfil.activo,
+    permisos_personalizados: perfil.permisos_personalizados ?? null,
+  };
+  Cookies.set("perfil", JSON.stringify(slim), COOKIE_OPTS);
   Cookies.set("lt_session", "1", COOKIE_OPTS);
   if (empresa) {
     Cookies.set("empresa", JSON.stringify(empresa), COOKIE_OPTS);
@@ -54,6 +64,14 @@ function clearClientSession() {
   Cookies.remove("perfil");
   Cookies.remove("empresa");
   Cookies.remove("lt_session");
+}
+
+function postLoginRedirect(path: string) {
+  // Navegación full para evitar races de soft-nav + cookies recién seteadas
+  if (typeof window !== "undefined") {
+    window.location.assign(path);
+    return;
+  }
 }
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
@@ -87,15 +105,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
     const restore = async () => {
       if (isLoginPage) {
-        // En login no hidratar perfil stale: evita “entrar” como admin sin JWT
-        clearClientSession();
+        // No borrar cookies aquí: un clear al montar login rompe el post-login
+        // cuando hay redirect de vuelta. Solo no hidratar UI desde perfil stale.
         setUser(null);
         setEmpresa(null);
         setLoading(false);
         return;
       }
       try {
-        // Solo confiar en /auth/me (cookie httpOnly de la API), no en perfil local
         const { data } = await api.get("/auth/me");
         if (cancelled) return;
         const stored = readStoredProfile();
@@ -149,7 +166,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         typeof window !== "undefined"
           ? new URLSearchParams(window.location.search).get("next")
           : null;
-      router.push(next && next.startsWith("/") ? next : "/dashboard");
+      const dest = next && next.startsWith("/") ? next : "/dashboard";
+      postLoginRedirect(dest);
     } catch (error: unknown) {
       const message =
         error && typeof error === "object" && "response" in error
@@ -176,15 +194,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         typeof window !== "undefined"
           ? new URLSearchParams(window.location.search).get("next")
           : null;
+      let dest = "/dashboard";
       if (next && next.startsWith("/")) {
-        router.push(next);
+        dest = next;
       } else if (perfil.rol === "ente_regulador") {
-        router.push("/ente/dashboard");
+        dest = "/ente/dashboard";
       } else if (perfil.rol === "admin") {
-        router.push("/admin/dashboard");
-      } else {
-        router.push("/dashboard");
+        dest = "/admin/dashboard";
       }
+      postLoginRedirect(dest);
     } catch (error: unknown) {
       const message =
         error && typeof error === "object" && "response" in error
