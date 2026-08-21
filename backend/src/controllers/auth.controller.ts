@@ -113,8 +113,24 @@ export const authController = {
     }
   },
   
-  async me(req: Request, res: Response) {
-    res.json({ user: req.user });
+  async me(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { data: perfil, error } = await supabaseAdmin
+        .from("perfiles")
+        .select(
+          "id, consultora_id, empresa_id, nombre_completo, username, rol, activo, created_at, permisos_personalizados",
+        )
+        .eq("id", req.user!.id)
+        .single();
+
+      if (error || !perfil || perfil.activo === false) {
+        return res.status(401).json({ error: "Sesión inválida" });
+      }
+
+      res.json({ user: perfil });
+    } catch (error) {
+      next(error);
+    }
   },
 
   async logout(_req: Request, res: Response) {

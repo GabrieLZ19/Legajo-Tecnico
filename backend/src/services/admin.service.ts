@@ -108,22 +108,29 @@ export const adminService = {
       rol: string;
       activo: boolean;
       empresa_id?: string;
-      permisos_personalizados?: any;
+      permisos_personalizados?: unknown;
     }
   ) {
     const { nombre_completo, username, rol, activo, empresa_id, permisos_personalizados } = userData;
 
+    const updatePayload: Record<string, unknown> = {
+      nombre_completo,
+      username,
+      rol,
+      activo,
+      empresa_id: rol === "dueno" ? empresa_id : null,
+    };
+
+    // Solo tocar permisos cuando el cliente los envía (evita borrarlos en ediciones parciales)
+    if (permisos_personalizados !== undefined) {
+      updatePayload.permisos_personalizados = permisos_personalizados;
+    }
+
     const { data, error } = await supabaseAdmin
       .from("perfiles")
-      .update({
-        nombre_completo,
-        username,
-        rol,
-        activo,
-        empresa_id: rol === "dueno" ? empresa_id : null,
-        permisos_personalizados,
-      })
+      .update(updatePayload)
       .eq("id", id)
+      .eq("consultora_id", consultoraId)
       .select()
       .single();
 
@@ -134,7 +141,15 @@ export const adminService = {
       accion: "EDITAR_USUARIO",
       entidad: "perfiles",
       entidad_id: id,
-      detalles: { activo, rol, nombre_completo, username },
+      detalles: {
+        activo,
+        rol,
+        nombre_completo,
+        username,
+        ...(permisos_personalizados !== undefined
+          ? { permisos_personalizados: true }
+          : {}),
+      },
       consultora_id: consultoraId,
     });
 

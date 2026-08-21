@@ -43,8 +43,79 @@ function limpiarHtmlParaPdf(html: string): string {
   return texto;
 }
 
+async function descargarPdfDesdeStorage(
+  publicUrl: string,
+): Promise<Buffer | null> {
+  const bucket = "informes_pdf";
+  const markers = [
+    `/storage/v1/object/public/${bucket}/`,
+    `/public/${bucket}/`,
+  ];
+
+  let path: string | null = null;
+  for (const marker of markers) {
+    const idx = publicUrl.indexOf(marker);
+    if (idx >= 0) {
+      path = decodeURIComponent(publicUrl.slice(idx + marker.length));
+      break;
+    }
+  }
+
+  if (!path) {
+    // Fallback: intentar bajar por URL pública
+    return descargarImagenBuffer(publicUrl);
+  }
+
+  const { data, error } = await supabaseAdmin.storage
+    .from(bucket)
+    .download(path);
+  if (error || !data) {
+    console.error("Error bajando PDF desde storage:", error?.message);
+    return descargarImagenBuffer(publicUrl);
+  }
+  return Buffer.from(await data.arrayBuffer());
+}
+
 export const pdfService = {
   async generarPdf(informeId: string): Promise<string> {
+    const result = await this.generarPdfCompleto(informeId);
+    return result.publicUrl;
+  },
+
+  /** Prefiere PDF ya generado en Storage; si no existe, lo genera. */
+  async obtenerPdfParaDescarga(
+    informeId: string,
+  ): Promise<{ buffer: Buffer; filename: string }> {
+    const { data: informe, error } = await supabaseAdmin
+      .from("informes_visita")
+      .select("id, numero_informe, url_pdf_generado")
+      .eq("id", informeId)
+      .single();
+
+    if (error || !informe) {
+      throw new Error(
+        `No se pudo obtener el informe para descargar el PDF: ${error?.message}`,
+      );
+    }
+
+    const filename = `constancia_visita_${informe.numero_informe || informeId}.pdf`;
+
+    if (informe.url_pdf_generado) {
+      const fromStorage = await descargarPdfDesdeStorage(
+        informe.url_pdf_generado,
+      );
+      if (fromStorage) {
+        return { buffer: fromStorage, filename };
+      }
+    }
+
+    const generated = await this.generarPdfCompleto(informeId);
+    return { buffer: generated.buffer, filename: generated.filename };
+  },
+
+  async generarPdfCompleto(
+    informeId: string,
+  ): Promise<{ publicUrl: string; buffer: Buffer; filename: string }> {
     // 1. Obtener informe completo con relaciones
     const { data: informe, error } = await supabaseAdmin
       .from("informes_visita")
@@ -75,6 +146,7 @@ export const pdfService = {
         try {
           const pdfBuffer = Buffer.concat(buffers);
           const filePath = `${informe.empresa_id}/informe_${informe.numero_informe}_${Date.now()}.pdf`;
+          const filename = `constancia_visita_${informe.numero_informe}.pdf`;
 
           // Subir a Supabase Storage
           const { error: uploadError } = await supabaseAdmin.storage
@@ -96,7 +168,11 @@ export const pdfService = {
             .update({ url_pdf_generado: publicUrlData.publicUrl })
             .eq("id", informeId);
 
-          resolve(publicUrlData.publicUrl);
+          resolve({
+            publicUrl: publicUrlData.publicUrl,
+            buffer: pdfBuffer,
+            filename,
+          });
         } catch (err) {
           reject(err);
         }

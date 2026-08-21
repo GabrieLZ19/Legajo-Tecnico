@@ -196,8 +196,13 @@ export const informesController = {
     try {
       const id = req.params.id as string;
       await assertInformeAccess(req.user!, id);
-      const url = await pdfService.generarPdf(id);
-      res.redirect(url);
+      const { buffer, filename } = await pdfService.obtenerPdfParaDescarga(id);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${filename}"`,
+      );
+      res.send(buffer);
     } catch (error) {
       next(error);
     }

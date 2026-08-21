@@ -52,6 +52,7 @@ export interface Perfil {
   rol: RolUsuario;
   activo: boolean;
   created_at: string;
+  permisos_personalizados?: unknown;
 }
 
 export interface InformeVisita {

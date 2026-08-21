@@ -96,7 +96,6 @@ export const planAccionController = {
           size: "A4",
           margin: 40,
           bufferPages: true,
-          autoPageBreak: false,
         });
 
         res.setHeader("Content-Type", "application/pdf");
@@ -108,12 +107,10 @@ export const planAccionController = {
 
         // --- DISEÑO ---
         // Cabecera Principal
-        doc
-          .fillColor("#1B365D")
-          .fontSize(22)
-          .text("Plan de Acción", { bold: true });
+        doc.fillColor("#1B365D").font("Helvetica-Bold").fontSize(22).text("Plan de Acción");
         doc
           .fillColor("#4B5563")
+          .font("Helvetica")
           .fontSize(9)
           .text(
             `Empresa: ${empresa?.razon_social || "N/A"}  |  CUIT: ${empresa?.cuit || "N/A"}  |  Generado: ${new Date().toLocaleDateString("es-AR")}`,
@@ -141,10 +138,12 @@ export const planAccionController = {
           .fill();
         doc
           .fillColor("#D97706")
+          .font("Helvetica-Bold")
           .fontSize(16)
-          .text(String(pendientes), 50, startY + 10, { bold: true });
+          .text(String(pendientes), 50, startY + 10);
         doc
           .fillColor("#92400E")
+          .font("Helvetica")
           .fontSize(8)
           .text("Pendientes / Atendidas", 50, startY + 28);
 
@@ -161,12 +160,12 @@ export const planAccionController = {
           .fill();
         doc
           .fillColor("#059669")
+          .font("Helvetica-Bold")
           .fontSize(16)
-          .text(String(cumplidas), 40 + cardWidth + cardGap + 10, startY + 10, {
-            bold: true,
-          });
+          .text(String(cumplidas), 40 + cardWidth + cardGap + 10, startY + 10);
         doc
           .fillColor("#065F46")
+          .font("Helvetica")
           .fontSize(8)
           .text("Cumplidas", 40 + cardWidth + cardGap + 10, startY + 28);
 
@@ -183,15 +182,16 @@ export const planAccionController = {
           .fill();
         doc
           .fillColor("#1F2937")
+          .font("Helvetica-Bold")
           .fontSize(16)
           .text(
             String(total),
             40 + (cardWidth + cardGap) * 2 + 10,
             startY + 10,
-            { bold: true },
           );
         doc
           .fillColor("#374151")
+          .font("Helvetica")
           .fontSize(8)
           .text(
             "Total de acciones",
@@ -204,8 +204,9 @@ export const planAccionController = {
         // Título de la Tabla
         doc
           .fillColor("#1B365D")
+          .font("Helvetica-Bold")
           .fontSize(12)
-          .text("Listado de Medidas Correctivas", { bold: true });
+          .text("Listado de Medidas Correctivas");
         doc.moveDown(0.5);
 
         // Tabla de Acciones
@@ -213,12 +214,12 @@ export const planAccionController = {
 
         // Dibujar Cabecera de Tabla
         doc.rect(40, currentY, 515, 20).fillColor("#1E3A8A").fill();
-        doc.fillColor("#FFFFFF").fontSize(8);
-        doc.text("#", 48, currentY + 6, { bold: true });
-        doc.text("ACCIÓN DE MEJORA", 70, currentY + 6, { bold: true });
-        doc.text("RESPONSABLE", 260, currentY + 6, { bold: true });
-        doc.text("ORIGEN / SECTOR / FECHA", 370, currentY + 6, { bold: true });
-        doc.text("ESTADO", 490, currentY + 6, { bold: true });
+        doc.fillColor("#FFFFFF").font("Helvetica-Bold").fontSize(8);
+        doc.text("#", 48, currentY + 6);
+        doc.text("ACCIÓN DE MEJORA", 70, currentY + 6);
+        doc.text("RESPONSABLE", 260, currentY + 6);
+        doc.text("ORIGEN / SECTOR / FECHA", 370, currentY + 6);
+        doc.text("ESTADO", 490, currentY + 6);
 
         currentY += 20;
 
@@ -229,14 +230,12 @@ export const planAccionController = {
             currentY = 40;
             // Redibujar cabecera en la nueva página
             doc.rect(40, currentY, 515, 20).fillColor("#1E3A8A").fill();
-            doc.fillColor("#FFFFFF").fontSize(8);
-            doc.text("#", 48, currentY + 6, { bold: true });
-            doc.text("ACCIÓN DE MEJORA", 70, currentY + 6, { bold: true });
-            doc.text("RESPONSABLE", 260, currentY + 6, { bold: true });
-            doc.text("ORIGEN / SECTOR / FECHA", 370, currentY + 6, {
-              bold: true,
-            });
-            doc.text("ESTADO", 490, currentY + 6, { bold: true });
+            doc.fillColor("#FFFFFF").font("Helvetica-Bold").fontSize(8);
+            doc.text("#", 48, currentY + 6);
+            doc.text("ACCIÓN DE MEJORA", 70, currentY + 6);
+            doc.text("RESPONSABLE", 260, currentY + 6);
+            doc.text("ORIGEN / SECTOR / FECHA", 370, currentY + 6);
+            doc.text("ESTADO", 490, currentY + 6);
             currentY += 20;
           }
 
@@ -297,7 +296,8 @@ export const planAccionController = {
 
           doc
             .fillColor(colorEstado)
-            .text(a.estado.toUpperCase(), 490, currentY + 10, { bold: true });
+            .font("Helvetica-Bold")
+            .text(a.estado.toUpperCase(), 490, currentY + 10);
 
           currentY += 28;
         });
