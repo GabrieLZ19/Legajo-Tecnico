@@ -7,17 +7,20 @@ import { assertAccionAccess, assertEmpresaAccess } from "../middlewares/empresaA
 export const planAccionController = {
   async listar(req: Request, res: Response, next: NextFunction) {
     try {
-      const { empresaId, estado } = req.query;
+      const { empresaId, estado, limit: limitRaw, offset: offsetRaw } = req.query;
       if (!empresaId) {
         return res.status(400).json({ error: "empresaId es requerido" });
       }
 
       await assertEmpresaAccess(req.user!, empresaId as string);
-      const acciones = await planAccionService.listarAcciones(
+      const limit = limitRaw ? Number(limitRaw) : 10;
+      const offset = offsetRaw ? Number(offsetRaw) : 0;
+      const result = await planAccionService.listarAcciones(
         empresaId as string,
         estado as EstadoAccion | undefined,
+        { limit, offset },
       );
-      res.json(acciones);
+      res.json(result);
     } catch (error) {
       next(error);
     }
@@ -51,7 +54,7 @@ export const planAccionController = {
       }
 
       await assertEmpresaAccess(req.user!, empresaId as string);
-      const acciones = await planAccionService.listarAcciones(
+      const acciones = await planAccionService.listarTodas(
         empresaId as string,
       );
 
