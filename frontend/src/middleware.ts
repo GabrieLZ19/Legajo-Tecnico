@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const AUTH_COOKIE = "lt_token";
-const LEGACY_TOKEN = "token";
+/**
+ * En deploy el JWT vive en cookie httpOnly del dominio de la API (cross-site).
+ * En el frontend solo tenemos señales de sesión en cookies del propio origen
+ * (`perfil` / `lt_session`), setadas tras login exitoso.
+ */
+const SESSION_MARKERS = ["lt_session", "perfil", "lt_token", "token"] as const;
 
 const PUBLIC_PREFIXES = [
   "/login",
@@ -21,16 +25,12 @@ function isPublicPath(pathname: string): boolean {
 }
 
 function hasSessionCookie(req: NextRequest): boolean {
-  return Boolean(
-    req.cookies.get(AUTH_COOKIE)?.value ||
-      req.cookies.get(LEGACY_TOKEN)?.value,
-  );
+  return SESSION_MARKERS.some((name) => Boolean(req.cookies.get(name)?.value));
 }
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Assets / Next internals
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||
@@ -43,12 +43,8 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Rutas de app / admin / ente requieren cookie de sesión
   if (!hasSessionCookie(req)) {
-    const login =
-      pathname.startsWith("/admin") || pathname.startsWith("/login-admin")
-        ? "/login-admin"
-        : "/login";
+    const login = pathname.startsWith("/admin") ? "/login-admin" : "/login";
     const url = req.nextUrl.clone();
     url.pathname = login;
     url.searchParams.set("next", pathname);

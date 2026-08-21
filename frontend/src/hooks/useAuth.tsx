@@ -42,6 +42,8 @@ function readStoredProfile(): { user: Perfil | null; empresa: Empresa | null } {
 
 function persistProfile(perfil: Perfil, empresa?: Empresa | null) {
   Cookies.set("perfil", JSON.stringify(perfil), COOKIE_OPTS);
+  // Señal de sesión en el origen del frontend (middleware Next no ve la cookie de la API)
+  Cookies.set("lt_session", "1", COOKIE_OPTS);
   if (empresa) {
     Cookies.set("empresa", JSON.stringify(empresa), COOKIE_OPTS);
   }
@@ -51,6 +53,7 @@ function clearClientSession() {
   Cookies.remove("token");
   Cookies.remove("perfil");
   Cookies.remove("empresa");
+  Cookies.remove("lt_session");
 }
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
@@ -137,7 +140,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       const { perfil, empresa: empData } = response.data;
       Cookies.remove("token");
       applySession(perfil, empData ?? null);
-      router.push("/dashboard");
+      const next =
+        typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("next")
+          : null;
+      router.push(next && next.startsWith("/") ? next : "/dashboard");
     } catch (error: unknown) {
       const message =
         error && typeof error === "object" && "response" in error
@@ -160,7 +167,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       Cookies.remove("empresa");
       setEmpresa(null);
       setUser(perfil);
-      if (perfil.rol === "ente_regulador") {
+      const next =
+        typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("next")
+          : null;
+      if (next && next.startsWith("/")) {
+        router.push(next);
+      } else if (perfil.rol === "ente_regulador") {
         router.push("/ente/dashboard");
       } else if (perfil.rol === "admin") {
         router.push("/admin/dashboard");
