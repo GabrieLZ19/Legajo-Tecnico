@@ -357,13 +357,19 @@ export const eppService = {
       throw new HttpError(500, "No se pudieron registrar las entregas");
     }
 
-    const pdfUrl = await this.generarYGuardarPdf(user, rows);
-    const mapped = rows.map((e) => ({
-      ...mapEntrega(e),
-      pdf_url: pdfUrl,
-    }));
+    // PDF en background: la entrega queda registrada aunque el PDF tarde
+    void this.generarYGuardarPdf(user, rows).catch((err) => {
+      console.error("Error generando PDF de entrega EPP:", err);
+    });
 
-    return { success: true, entregas: mapped, pdf_url: pdfUrl };
+    const mapped = rows.map((e) => mapEntrega(e));
+
+    return {
+      success: true,
+      entregas: mapped,
+      pdf_url: null,
+      pdf_generando: true,
+    };
   },
 
   async generarYGuardarPdf(_user: AuthUser, entregas: EntregaRow[]): Promise<string> {

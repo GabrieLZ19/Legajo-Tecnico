@@ -4,6 +4,7 @@ import compression from "compression";
 import helmet from "helmet";
 import { env } from "./config/env";
 import { errorHandler } from "./middlewares/errorHandler";
+import { requireCsrfHeader } from "./middlewares/csrf";
 
 // Importar rutas (Stubs)
 import authRoutes from "./routes/auth.routes";
@@ -36,6 +37,7 @@ app.use(
   }),
 );
 app.use(compression());
+app.use(requireCsrfHeader);
 // Límite alto: diapositivas con imágenes embebidas (base64) pueden superar 100kb
 app.use(express.json({ limit: "15mb" }));
 app.use(express.urlencoded({ extended: true, limit: "15mb" }));
