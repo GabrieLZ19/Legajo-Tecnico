@@ -27,22 +27,14 @@ function toInputDate(d: Date) {
 export default function InformesPage() {
   const { user, empresa } = useAuth();
   const { showAlert } = useAlert();
-  const {
-    data: informes,
-    isLoading,
-    eliminarInforme,
-    isDeleting,
-  } = useInformes(empresa?.id);
-
-  // Sin filtros activos por defecto → se ven todos los informes
+  const PAGE_SIZE = 20;
+  const [page, setPage] = useState(0);
+  // Filtros client-side: ampliar página para no “perder” resultados
   const [searchTerm, setSearchTerm] = useState("");
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
   const [estado, setEstado] = useState<string>("todos");
   const [lugar, setLugar] = useState<string>("todos");
-
-  const canCreate = canWriteAppModule(user, "informes");
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const hasActiveFilters =
     !!searchTerm.trim() ||
@@ -51,12 +43,27 @@ export default function InformesPage() {
     estado !== "todos" ||
     lugar !== "todos";
 
+  const {
+    data: informes,
+    isLoading,
+    total,
+    eliminarInforme,
+    isDeleting,
+  } = useInformes(empresa?.id, {
+    limit: hasActiveFilters ? 200 : PAGE_SIZE,
+    offset: hasActiveFilters ? 0 : page * PAGE_SIZE,
+  });
+
+  const canCreate = canWriteAppModule(user, "informes");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
   const clearFilters = () => {
     setSearchTerm("");
     setFechaDesde("");
     setFechaHasta("");
     setEstado("todos");
     setLugar("todos");
+    setPage(0);
   };
 
   const applyEsteMes = () => {
@@ -580,6 +587,36 @@ export default function InformesPage() {
           <p className="text-sm font-semibold text-slate-400">
             No se encontraron informes de visita para los filtros aplicados.
           </p>
+        </div>
+      )}
+
+      {!hasActiveFilters && total > PAGE_SIZE && (
+        <div className="flex items-center justify-between gap-3 bg-white border border-slate-200 rounded-2xl px-4 py-3 shadow-2xs">
+          <p className="text-xs font-semibold text-slate-500">
+            Mostrando {Math.min(page * PAGE_SIZE + 1, total)}–
+            {Math.min((page + 1) * PAGE_SIZE, total)} de {total}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={page === 0 || isLoading}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+            >
+              Anterior
+            </button>
+            <span className="text-xs font-bold text-slate-600">
+              Pág. {page + 1} / {Math.max(1, Math.ceil(total / PAGE_SIZE))}
+            </span>
+            <button
+              type="button"
+              disabled={(page + 1) * PAGE_SIZE >= total || isLoading}
+              onClick={() => setPage((p) => p + 1)}
+              className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+            >
+              Siguiente
+            </button>
+          </div>
         </div>
       )}
 

@@ -7,12 +7,14 @@ import FirmaCanvas from "@/components/FirmaCanvas";
 import { useQueryClient } from "@tanstack/react-query";
 import { ShieldAlert, ArrowLeft } from "lucide-react";
 import { useAlert } from "@/context/AlertContext";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function FirmaInformePage() {
   const { id } = useParams();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { showAlert } = useAlert();
+  const { user } = useAuth();
   const { data: informe, isLoading, error } = useInformeDetalle(id as string);
   const [loading, setLoading] = useState(false);
 
@@ -41,19 +43,28 @@ export default function FirmaInformePage() {
     );
   }
 
+  const estado = informe.estado_firma;
+  const needsPreventor =
+    estado === "borrador" || estado === "pendiente_preventor";
+  const needsDueno = estado === "pendiente_dueno";
+  const rol = user?.rol;
+  const canSignPreventor =
+    needsPreventor && (rol === "preventor" || rol === "admin");
+  const canSignDueno = needsDueno && (rol === "dueno" || rol === "admin");
+  const canSign = canSignPreventor || canSignDueno;
+
   const handleSaveSignature = async (base64: string) => {
+    if (!canSign) return;
     setLoading(true);
     try {
-      const endpoint =
-        informe.estado_firma === "borrador"
-          ? `/informes/${id}/firma-preventor`
-          : `/informes/${id}/firma-dueno`;
+      const endpoint = canSignPreventor
+        ? `/informes/${id}/firma-preventor`
+        : `/informes/${id}/firma-dueno`;
 
       await firmarInforme(endpoint, {
         firma_base64: base64,
       });
 
-      // Invalidar cache y volver al detalle del informe
       queryClient.invalidateQueries({ queryKey: ["informe", id] });
       queryClient.invalidateQueries({ queryKey: ["informes"] });
 
@@ -69,10 +80,7 @@ export default function FirmaInformePage() {
     }
   };
 
-  const isBorrador = informe.estado_firma === "borrador";
-  const isPteDueno = informe.estado_firma === "pendiente_dueno";
-
-  if (!isBorrador && !isPteDueno) {
+  if (!needsPreventor && !needsDueno) {
     return (
       <div className="bg-white border border-slate-200 rounded-xl p-8 text-center space-y-4 max-w-md mx-auto">
         <ShieldAlert className="h-12 w-12 text-amber-500 mx-auto" />
@@ -81,6 +89,29 @@ export default function FirmaInformePage() {
           Este informe ya ha sido firmado y no requiere firmas adicionales en
           esta fase.
         </p>
+        <button
+          onClick={() => router.push(`/informes/${id}`)}
+          className="inline-flex items-center gap-1.5 px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg text-sm font-semibold transition-colors cursor-pointer"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Volver al detalle
+        </button>
+      </div>
+    );
+  }
+
+  if (!canSign) {
+    const mensaje = needsDueno
+      ? "Este informe ya fue firmado por el preventor. Solo el dueño de la empresa (o un administrador) puede completar la firma de conformidad."
+      : "Solo el preventor (o un administrador) puede firmar esta etapa del informe.";
+
+    return (
+      <div className="bg-white border border-slate-200 rounded-xl p-8 text-center space-y-4 max-w-md mx-auto">
+        <ShieldAlert className="h-12 w-12 text-amber-500 mx-auto" />
+        <h2 className="text-lg font-bold text-slate-800">
+          No podés firmar esta etapa
+        </h2>
+        <p className="text-sm text-slate-500">{mensaje}</p>
         <button
           onClick={() => router.push(`/informes/${id}`)}
           className="inline-flex items-center gap-1.5 px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg text-sm font-semibold transition-colors cursor-pointer"
@@ -114,7 +145,7 @@ export default function FirmaInformePage() {
           onSave={handleSaveSignature}
           onCancel={() => router.push(`/informes/${id}`)}
           title={
-            isBorrador
+            canSignPreventor
               ? "Firma del Profesional (Preventor)"
               : "Firma de Conformidad (Dueño de Empresa)"
           }

@@ -60,6 +60,7 @@ export default function DashboardPage() {
   );
   const { data: informes, isLoading: loadingInformes } = useInformes(
     empresa?.id,
+    { limit: 100 },
   );
 
   const canCreate = canWriteAppModule(user, "informes");
@@ -102,9 +103,42 @@ export default function DashboardPage() {
       }
     }) || [];
 
-  // Informes pendientes de firma (especialmente prioritarios para el dueño)
+  // Informes que requieren acción del usuario actual vs. solo seguimiento
+  const rol = user?.rol;
   const informesPendientesFirma =
-    informes?.filter((inf) => inf.estado_firma === "pendiente_dueno") || [];
+    informes?.filter((inf) => {
+      if (inf.estado_firma === "pendiente_dueno") {
+        return rol === "dueno" || rol === "admin" || rol === "preventor";
+      }
+      if (
+        inf.estado_firma === "borrador" ||
+        inf.estado_firma === "pendiente_preventor"
+      ) {
+        return rol === "preventor" || rol === "admin";
+      }
+      return false;
+    }) || [];
+
+  const pendientesMiFirma = informesPendientesFirma.filter((inf) => {
+    if (inf.estado_firma === "pendiente_dueno") {
+      return rol === "dueno" || rol === "admin";
+    }
+    return rol === "preventor" || rol === "admin";
+  });
+
+  const tituloPendientesFirma =
+    pendientesMiFirma.length > 0
+      ? pendientesMiFirma.length === 1
+        ? "Tienes 1 informe pendiente de tu firma"
+        : `Tienes ${pendientesMiFirma.length} informes pendientes de tu firma`
+      : informesPendientesFirma.length === 1
+        ? "1 informe esperando firma del dueño"
+        : `${informesPendientesFirma.length} informes esperando firma del dueño`;
+
+  const subtituloPendientesFirma =
+    pendientesMiFirma.length > 0
+      ? "Revisá la constancia de visita y confirmá la conformidad con tu firma digital."
+      : "Ya firmaste como preventor. El dueño de la empresa debe completar la conformidad.";
 
   return (
     <div className="space-y-8">
@@ -143,55 +177,89 @@ export default function DashboardPage() {
         <div className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-2xs space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600 shrink-0">
+              <div
+                className={`h-10 w-10 rounded-xl border flex items-center justify-center shrink-0 ${
+                  pendientesMiFirma.length > 0
+                    ? "bg-amber-500/10 border-amber-500/20 text-amber-600"
+                    : "bg-slate-100 border-slate-200 text-slate-500"
+                }`}
+              >
                 <AlertTriangle className="h-5 w-5" />
               </div>
               <div>
                 <h2 className="text-base font-bold text-slate-900">
-                  {informesPendientesFirma.length === 1
-                    ? "Tienes 1 informe pendiente de tu firma"
-                    : `Tienes ${informesPendientesFirma.length} informes pendientes de tu firma`}
+                  {tituloPendientesFirma}
                 </h2>
                 <p className="text-xs font-medium text-slate-500 mt-0.5">
-                  Revisá la constancia de visita y confirmá la conformidad con
-                  tu firma digital.
+                  {subtituloPendientesFirma}
                 </p>
               </div>
             </div>
-            <span className="hidden sm:inline-flex text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200/60 px-3 py-1 rounded-full">
-              Requiere acción
+            <span
+              className={`hidden sm:inline-flex text-xs font-bold px-3 py-1 rounded-full border ${
+                pendientesMiFirma.length > 0
+                  ? "text-amber-700 bg-amber-50 border-amber-200/60"
+                  : "text-slate-600 bg-slate-50 border-slate-200"
+              }`}
+            >
+              {pendientesMiFirma.length > 0
+                ? "Requiere acción"
+                : "En seguimiento"}
             </span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-            {informesPendientesFirma.map((inf) => (
-              <Link
-                key={inf.id}
-                href={`/informes/${inf.id}`}
-                className="bg-slate-50/70 hover:bg-white border border-slate-200 hover:border-amber-400/80 p-4 rounded-xl shadow-2xs hover:shadow-md transition-all flex items-center justify-between group cursor-pointer"
-              >
-                <div className="min-w-0 pr-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-slate-800 group-hover:text-blue-600 transition-colors">
-                      Informe N° {String(inf.numero_informe).padStart(6, "0")}
-                    </span>
-                    <span className="text-[10px] font-bold text-amber-700 bg-amber-100/70 px-2 py-0.5 rounded-md border border-amber-200/50">
-                      Pte. Firma
-                    </span>
+            {informesPendientesFirma.map((inf) => {
+              const pteDueno = inf.estado_firma === "pendiente_dueno";
+              const puedoFirmar =
+                pteDueno
+                  ? rol === "dueno" || rol === "admin"
+                  : rol === "preventor" || rol === "admin";
+              const badgeLabel = pteDueno ? "Pte. Dueño" : "Pte. Preventor";
+              const ctaLabel = puedoFirmar ? "Ver y Firmar" : "Ver informe";
+
+              return (
+                <Link
+                  key={inf.id}
+                  href={`/informes/${inf.id}`}
+                  className="bg-slate-50/70 hover:bg-white border border-slate-200 hover:border-amber-400/80 p-4 rounded-xl shadow-2xs hover:shadow-md transition-all flex items-center justify-between group cursor-pointer"
+                >
+                  <div className="min-w-0 pr-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-slate-800 group-hover:text-blue-600 transition-colors">
+                        Informe N°{" "}
+                        {String(inf.numero_informe).padStart(6, "0")}
+                      </span>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                          puedoFirmar
+                            ? "text-amber-700 bg-amber-100/70 border-amber-200/50"
+                            : "text-slate-600 bg-slate-100 border-slate-200"
+                        }`}
+                      >
+                        {badgeLabel}
+                      </span>
+                    </div>
+                    <p className="text-xs font-medium text-slate-500 truncate mt-1">
+                      {inf.lugar_visita || "Planta"} •{" "}
+                      {new Date(inf.fecha_hora_visita).toLocaleDateString(
+                        "es-AR",
+                      )}
+                    </p>
                   </div>
-                  <p className="text-xs font-medium text-slate-500 truncate mt-1">
-                    {inf.lugar_visita || "Planta"} •{" "}
-                    {new Date(inf.fecha_hora_visita).toLocaleDateString(
-                      "es-AR",
-                    )}
-                  </p>
-                </div>
-                <div className="inline-flex items-center gap-1.5 bg-slate-900 group-hover:bg-amber-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-all shrink-0 shadow-2xs">
-                  <span>Ver y Firmar</span>
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </div>
-              </Link>
-            ))}
+                  <div
+                    className={`inline-flex items-center gap-1.5 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-all shrink-0 shadow-2xs ${
+                      puedoFirmar
+                        ? "bg-slate-900 group-hover:bg-amber-500"
+                        : "bg-slate-600 group-hover:bg-blue-600"
+                    }`}
+                  >
+                    <span>{ctaLabel}</span>
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         </div>
       )}

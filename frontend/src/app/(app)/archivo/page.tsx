@@ -36,7 +36,7 @@ const MESES = [
 
 export default function ArchivoPage() {
   const { empresa } = useAuth();
-  const { data: informes, isLoading } = useInformes(empresa?.id);
+  const { data: informes, isLoading } = useInformes(empresa?.id, { limit: 200 });
 
   // Estados de navegación del explorador
   const [currentYear, setCurrentYear] = useState<number | null>(null);

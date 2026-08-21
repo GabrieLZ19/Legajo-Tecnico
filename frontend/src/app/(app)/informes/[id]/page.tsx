@@ -207,6 +207,20 @@ export default function InformeDetallePage() {
   const firmaP = informe.firmas_informe?.find((f) => f.tipo === "preventor");
   const firmaD = informe.firmas_informe?.find((f) => f.tipo === "dueno");
 
+  const nombrePreventor =
+    firmaP?.firmante?.nombre_completo ||
+    informe.preventor?.nombre_completo ||
+    null;
+  const nombreDueno =
+    firmaD?.firmante?.nombre_completo ||
+    informe.dueno_empresa?.nombre_completo ||
+    informe.empresas?.contacto ||
+    null;
+  const etiquetaEmpresa =
+    informe.empresas?.razon_social ||
+    empresa?.razon_social ||
+    "Dueño de empresa";
+
   return (
     <div className="space-y-6">
       {/* Botón Volver y Título Principal */}
@@ -254,7 +268,9 @@ export default function InformeDetallePage() {
                 </button>
               </>
             )}
-          {preventorFirmado && !duenoFirmado && (
+          {preventorFirmado &&
+            !duenoFirmado &&
+            (user?.rol === "dueno" || user?.rol === "admin") && (
             <button
               onClick={() => router.push(`/informes/${id}/firma`)}
               className="inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-all shadow-md shadow-amber-900/10 cursor-pointer"
@@ -262,6 +278,11 @@ export default function InformeDetallePage() {
               <PenTool className="h-3.5 w-3.5" />
               Firmar Dueño
             </button>
+          )}
+          {preventorFirmado && !duenoFirmado && user?.rol === "preventor" && (
+            <span className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-800 font-bold px-4 py-2.5 rounded-xl text-xs border border-amber-100">
+              Pendiente firma del dueño
+            </span>
           )}
           {canWriteAppModule(user, "informes") && (
             <button
@@ -734,11 +755,13 @@ export default function InformeDetallePage() {
                 >
                   <PenTool className="h-4 w-4" />
                 </div>
-                <span className="text-xs font-black text-slate-800">
-                  {duenoFirmado ? "M. Ríos" : "Pendiente"}
+                <span className="text-xs font-black text-slate-800 break-words px-1">
+                  {duenoFirmado
+                    ? nombreDueno || "Firmado"
+                    : nombreDueno || "Pendiente"}
                 </span>
-                <span className="text-[9px] text-slate-400 font-bold">
-                  Responsable Empresa
+                <span className="text-[9px] text-slate-400 font-bold break-words px-1">
+                  {etiquetaEmpresa}
                 </span>
                 {!duenoFirmado && (
                   <button
@@ -761,11 +784,13 @@ export default function InformeDetallePage() {
                 >
                   <PenTool className="h-4 w-4" />
                 </div>
-                <span className="text-xs font-black text-slate-800">
-                  {preventorFirmado ? "D. Ludueña" : "Pendiente"}
+                <span className="text-xs font-black text-slate-800 break-words px-1">
+                  {preventorFirmado
+                    ? nombrePreventor || "Firmado"
+                    : nombrePreventor || "Pendiente"}
                 </span>
                 <span className="text-[9px] text-slate-400 font-bold">
-                  Prof. Seguridad
+                  Preventor
                 </span>
               </div>
             </div>

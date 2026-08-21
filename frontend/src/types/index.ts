@@ -101,6 +101,11 @@ export interface FirmaInforme {
   firma_url?: string;
   firmado_at: string;
   ip_address?: string;
+  firmante?: {
+    id: string;
+    nombre_completo: string;
+    rol: RolUsuario;
+  } | null;
 }
 
 export interface InformeVisita {
@@ -124,6 +129,21 @@ export interface InformeVisita {
   puntos_mejora?: PuntoMejora[];
   acciones_mejora?: AccionMejora[];
   firmas_informe?: FirmaInforme[];
+  empresas?: {
+    id: string;
+    razon_social: string;
+    contacto?: string | null;
+  } | null;
+  preventor?: {
+    id: string;
+    nombre_completo: string;
+    rol: RolUsuario;
+  } | null;
+  dueno_empresa?: {
+    id: string;
+    nombre_completo: string;
+    rol: RolUsuario;
+  } | null;
 }
 
 export interface MetricasDashboard {

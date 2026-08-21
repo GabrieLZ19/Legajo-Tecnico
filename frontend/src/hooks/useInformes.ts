@@ -2,14 +2,38 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { InformeVisita } from '../types';
 
-export const useInformes = (empresaId?: string) => {
-  const queryClient = useQueryClient();
+export type InformesListPage = {
+  items: InformeVisita[];
+  total: number;
+  limit: number;
+  offset: number;
+};
 
-  const query = useQuery<InformeVisita[]>({
-    queryKey: ['informes', empresaId],
+type UseInformesOpts = {
+  limit?: number;
+  offset?: number;
+};
+
+export const useInformes = (empresaId?: string, opts?: UseInformesOpts) => {
+  const queryClient = useQueryClient();
+  const limit = opts?.limit ?? 50;
+  const offset = opts?.offset ?? 0;
+
+  const query = useQuery<InformesListPage>({
+    queryKey: ['informes', empresaId, limit, offset],
     queryFn: async () => {
-      const { data } = await api.get(`/informes?empresaId=${empresaId}`);
-      return data;
+      const { data } = await api.get('/informes', {
+        params: { empresaId, limit, offset },
+      });
+      if (Array.isArray(data)) {
+        return {
+          items: data as InformeVisita[],
+          total: data.length,
+          limit,
+          offset,
+        };
+      }
+      return data as InformesListPage;
     },
     enabled: !!empresaId,
   });
@@ -63,6 +87,11 @@ export const useInformes = (empresaId?: string) => {
 
   return {
     ...query,
+    /** Lista de la página actual (compat con consumidores existentes) */
+    data: query.data?.items,
+    total: query.data?.total ?? 0,
+    limit: query.data?.limit ?? limit,
+    offset: query.data?.offset ?? offset,
     crearInforme: crearMutation.mutateAsync,
     isCreating: crearMutation.isPending,
     editarInforme: editarMutation.mutateAsync,
