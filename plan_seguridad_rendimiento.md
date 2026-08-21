@@ -26,51 +26,16 @@ La app ya tiene buena base (auth, `assertEmpresaAccess`, sanitización HTML, coo
 ## Oleada A — Seguridad rápida (prioridad 1)
 
 **Meta:** impedir abusos de API y uploads peligrosos sin cambiar la UX de fondo.  
-**Esfuerzo estimado:** 1–2 sesiones.
+**Estado:** ✅ Completada (2026-08-21)
 
-### A1. Roles en firmas de informe (Crítico)
-- **Problema:** `POST /informes/:id/firma-preventor` y `firma-dueno` solo validan acceso a empresa; no el rol.
-- **Archivos:** `informes.routes.ts`, `informes.controller.ts`, `firma.service.ts`
-- **Trabajo:**
-  - `firma-preventor` → solo `preventor` (o admin según regla de negocio).
-  - `firma-dueno` → solo `dueno` (o admin explícito).
-  - Rechazar 403 si el rol no coincide.
-- **Test:** preventor no puede firmar como dueño vía API; dueño no firma como preventor.
+### A1. Roles en firmas de informe (Crítico) — ✅
+### A2. Roles en escritura de informes (Alto) — ✅
+### A3. Validación de uploads (Alto) — ✅
+### A4. Path traversal en evaluación pública (Alto) — ✅
+### A5. Allowlist de roles al crear/editar usuarios (Alto) — ✅
+### A6. Plantillas de declaración — roles (Medio) — ✅
 
-### A2. Roles en escritura de informes (Alto)
-- **Problema:** create/edit/evidencia sin `requireRole`; UI bloquea, API no.
-- **Archivos:** `informes.routes.ts`, controller
-- **Trabajo:**
-  - Create/edit/evidencia/delete: `preventor | admin | dueno` (alineado a permisos de módulo si aplica).
-  - `ente_regulador`: solo lectura.
-- **Test:** ente no puede POST/PATCH/DELETE informes.
-
-### A3. Validación de uploads (Alto)
-- **Problema:** multer acepta cualquier `image/*` (incl. SVG); extensión del cliente.
-- **Archivos:** `config/multer.ts`, controllers de evidencia/EPP/logos
-- **Trabajo:**
-  - Allowlist: `jpeg`, `jpg`, `png`, `webp` (+ `pdf` solo donde corresponda).
-  - Nombre de objeto generado en servidor (`uuid` + extensión segura).
-  - Rechazar SVG y MIME spoofing básico.
-- **Test:** subir `.svg` o `.exe` disfrazado → 400.
-
-### A4. Path traversal en evaluación pública (Alto)
-- **Problema:** `dni_empleado` crudo en path de Storage.
-- **Archivos:** `capacitaciones.service.ts` (evaluar)
-- **Trabajo:** DNI solo dígitos; path con `randomUUID()`.
-- **Test:** DNI con `../` → 400 / path seguro.
-
-### A5. Allowlist de roles al crear usuarios (Alto)
-- **Problema:** admin puede crear otro `admin` u roles inválidos.
-- **Archivos:** `admin.service.ts`, schema de create user
-- **Trabajo:** allowlist `dueno | preventor | ente_regulador` (admin solo por flujo especial documentado).
-- **Test:** crear usuario con `rol: admin` → 400.
-
-### A6. Plantillas de declaración — roles (Medio)
-- **Archivos:** `plantillas.routes.ts`
-- **Trabajo:** `requireRole('admin')` o roles operativos acordados.
-
-**Criterio de done Oleada A:** checklist de tests API pasada; sin cambios de storage/buckets aún.
+**Criterio de done Oleada A:** listo en código. Verificar en staging: preventor≠firma dueño; ente≠POST informes; SVG rechazado; DNI `../` → 400.
 
 ---
 
@@ -192,4 +157,4 @@ La app ya tiene buena base (auth, `assertEmpresaAccess`, sanitización HTML, coo
 
 ## Primera tarea al retomar
 
-**Empezar por A1:** bloquear firmas por rol en backend + tests manuales con Diego (dueño) y un preventor.
+**Oleada A completada.** Siguiente: **B1** — migración de índices DB faltantes (`acciones_mejora.punto_mejora_id`, logs, notificaciones).

@@ -3,6 +3,9 @@ import { logService } from "./log.service";
 import { notificacionService } from "./notificacion.service";
 import { storageService } from "./storage.service";
 import { HttpError } from "../utils/httpError";
+import { RolUsuario } from "../types/database";
+
+const ROLES_CREABLES: RolUsuario[] = ["dueno", "preventor", "ente_regulador"];
 
 export const adminService = {
   async listarUsuarios(consultoraId: string) {
@@ -30,6 +33,12 @@ export const adminService = {
     const { email, password, username, nombre_completo, rol, empresa_id } = userData;
     if (!consultoraIdToken) {
       throw new HttpError(403, "El usuario no tiene consultora asignada");
+    }
+    if (!ROLES_CREABLES.includes(rol as RolUsuario)) {
+      throw new HttpError(
+        400,
+        "Rol inválido. Solo se pueden crear dueño, preventor o ente regulador.",
+      );
     }
     const consultora_id = consultoraIdToken;
 
@@ -112,6 +121,26 @@ export const adminService = {
     }
   ) {
     const { nombre_completo, username, rol, activo, empresa_id, permisos_personalizados } = userData;
+
+    const { data: actual, error: errActual } = await supabaseAdmin
+      .from("perfiles")
+      .select("rol")
+      .eq("id", id)
+      .eq("consultora_id", consultoraId)
+      .maybeSingle();
+
+    if (errActual) throw errActual;
+    if (!actual) throw new HttpError(404, "Usuario no encontrado");
+
+    const rolPermitido =
+      ROLES_CREABLES.includes(rol as RolUsuario) ||
+      (rol === "admin" && actual.rol === "admin");
+    if (!rolPermitido) {
+      throw new HttpError(
+        400,
+        "Rol inválido. No se puede asignar ese rol desde el panel.",
+      );
+    }
 
     const updatePayload: Record<string, unknown> = {
       nombre_completo,

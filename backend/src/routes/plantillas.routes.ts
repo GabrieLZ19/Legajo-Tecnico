@@ -1,15 +1,26 @@
 import { Router } from 'express';
-import { requireAuth } from '../middlewares/auth';
+import { requireAuth, requireRole } from '../middlewares/auth';
 import { plantillasController } from '../controllers/plantillas.controller';
 
 const router = Router();
 
-// Requerir autenticación
 router.use(requireAuth);
 
 router.get('/', plantillasController.listarPlantillas);
-router.post('/', plantillasController.crearPlantilla);
-router.put('/:id', plantillasController.actualizarPlantilla);
-router.delete('/:id', plantillasController.eliminarPlantilla);
+router.post(
+  '/',
+  requireRole('preventor', 'admin', 'dueno'),
+  plantillasController.crearPlantilla,
+);
+router.put(
+  '/:id',
+  requireRole('preventor', 'admin', 'dueno'),
+  plantillasController.actualizarPlantilla,
+);
+router.delete(
+  '/:id',
+  requireRole('preventor', 'admin', 'dueno'),
+  plantillasController.eliminarPlantilla,
+);
 
 export default router;

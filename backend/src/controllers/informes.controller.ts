@@ -5,6 +5,8 @@ import { supabaseAdmin } from '../config/supabase';
 import { storageService } from '../services/storage.service';
 import { pdfService } from '../services/pdf.service';
 import { assertEmpresaAccess, assertInformeAccess, requireConsultoraId } from '../middlewares/empresaAccess';
+import { safeExtensionFromUpload } from '../config/multer';
+import { randomUUID } from 'crypto';
 
 export const informesController = {
   async crearInforme(req: Request, res: Response, next: NextFunction) {
@@ -87,14 +89,6 @@ export const informesController = {
       const id = req.params.id as string;
       await assertInformeAccess(req.user!, id);
 
-      // Solo roles operativos pueden eliminar (no ente regulador)
-      const rol = req.user!.rol;
-      if (rol !== "admin" && rol !== "preventor" && rol !== "dueno") {
-        return res.status(403).json({
-          error: "No tenés permiso para eliminar informes de visita",
-        });
-      }
-
       await informeService.eliminar(id);
       res.json({ success: true, message: "Informe eliminado con éxito" });
     } catch (error) {
@@ -164,11 +158,10 @@ export const informesController = {
 
       const urls: string[] = [];
       for (const file of uploadFiles) {
-        const ext = file.originalname.split('.').pop();
-        const rand = Math.random().toString(36).substring(7);
-        const path = punto_mejora_id 
-          ? `${informeId}/${punto_mejora_id}_${Date.now()}_${rand}.${ext}`
-          : `${informeId}/general_${Date.now()}_${rand}.${ext}`;
+        const ext = safeExtensionFromUpload(file);
+        const path = punto_mejora_id
+          ? `${informeId}/${punto_mejora_id}_${Date.now()}_${randomUUID().slice(0, 8)}.${ext}`
+          : `${informeId}/general_${Date.now()}_${randomUUID().slice(0, 8)}.${ext}`;
 
         await storageService.subirArchivo('evidencia_visitas', path, file);
         const evidenciaUrl = storageService.obtenerUrlPublica('evidencia_visitas', path);

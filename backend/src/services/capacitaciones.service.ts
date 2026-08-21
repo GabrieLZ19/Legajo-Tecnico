@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "../config/supabase";
 import QRCode from "qrcode";
+import { randomUUID } from "crypto";
 import {
   CapacitacionDiapositiva,
   ensureDiapositivas,
@@ -346,6 +347,10 @@ export const capacitacionesService = {
     if (!nombre_empleado?.trim() || !dni_empleado?.trim()) {
       throw new Error("Nombre y DNI son obligatorios");
     }
+    const dniLimpio = String(dni_empleado).replace(/\D/g, "");
+    if (!/^\d{7,8}$/.test(dniLimpio)) {
+      throw new Error("DNI inválido. Debe tener 7 u 8 dígitos.");
+    }
     if (!firma || typeof firma !== "string" || !firma.startsWith("data:image/")) {
       throw new Error("La firma es obligatoria");
     }
@@ -433,7 +438,7 @@ export const capacitacionesService = {
     if (firma) {
       const base64Data = firma.replace(/^data:image\/\w+;base64,/, "");
       const buffer = Buffer.from(base64Data, "base64");
-      const firmaPath = `capacitaciones/${id}/${dni_empleado}_${Date.now()}.png`;
+      const firmaPath = `capacitaciones/${id}/${dniLimpio}_${Date.now()}_${randomUUID().slice(0, 8)}.png`;
 
       const { error: storageError } = await supabaseAdmin.storage
         .from("firmas_digitales")
@@ -457,7 +462,7 @@ export const capacitacionesService = {
       .insert({
         capacitacion_id: id,
         nombre_empleado,
-        documento: dni_empleado,
+        documento: dniLimpio,
         sector: sector || null,
         puntaje,
         firma_url: firmaUrl,
