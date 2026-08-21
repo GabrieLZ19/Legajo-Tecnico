@@ -42,37 +42,21 @@ La app ya tiene buena base (auth, `assertEmpresaAccess`, sanitización HTML, coo
 ## Oleada B — Performance rápida (prioridad 2)
 
 **Meta:** aliviar lo que ya duele en visitas con fotos y listados medianos.  
-**Esfuerzo estimado:** 1–2 sesiones.
+**Estado:** 🟡 En progreso (B1–B4)
 
-### B1. Índices DB faltantes (Medio → Alto impacto/costo bajo)
-- **Migración Supabase** con índices sugeridos por advisor, al menos:
-  - `acciones_mejora (punto_mejora_id)`
-  - `logs_actividad (consultora_id, created_at DESC)`
-  - `notificaciones (consultora_id, created_at DESC)` y/o `(usuario_id)`
-  - FKs calientes EPP/capacitaciones según advisor
-- **Opcional misma oleada:** RLS `auth.uid()` → `(select auth.uid())` en políticas flagged.
-- **Test:** `EXPLAIN` o advisor performance sin el lint de FK sin índice en tablas críticas.
+### B1. Índices DB faltantes — ✅
+- Migración aplicada: `add_performance_indexes_oleada_b1`
 
-### B2. Batch en create/edit de informes (Alto)
-- **Archivos:** `informe.service.ts`
-- **Trabajo:** inserts/updates de puntos y acciones en batch (menos round-trips).
-- **Test:** crear informe con 10 observaciones < tiempo baseline.
+### B2. Batch en create de informes — ✅
+- Puntos + acciones en insert batch (crear).
 
-### B3. Uploads de evidencia en paralelo (Alto)
-- **Backend:** `subirEvidencia` — subir archivos con concurrencia limitada (3–5).
-- **Frontend:** `nuevo`/`editar` — pool de uploads o un solo multipart multi-file.
-- Ya existe `compressImage.ts` — asegurar todos los caminos de foto lo usan.
-- **Test:** 5 fotos desde móvil sin timeout 20s (timeouts ya subidos en evidencia).
+### B3. Uploads de evidencia en paralelo — ✅
+- Backend `Promise.all` en subir evidencia; frontend `mapPool` (3) en nuevo/editar.
 
-### B4. Timeouts axios en firma / PDF / EPP (Alto)
-- **Archivos:** hooks de firma, EPP, api client
-- **Trabajo:** 60–120s en rutas pesadas; botones disabled mientras `isPending`.
-- **Test:** firmar con red lenta no dispara doble submit.
+### B4. Timeouts axios en firma / PDF — ✅
+- `firmarInforme` timeout 120s.
 
-### B5. Dynamic import de TipTap / Recharts (Alto)
-- **Archivos:** `RichTextEditor`, `admin/metricas`, diapositivas
-- **Trabajo:** `next/dynamic` con `ssr: false` donde aplique.
-- **Test:** Lighthouse/bundle: chunk separado; páginas sin editor no cargan TipTap.
+### B5. Dynamic import de TipTap / Recharts — ⏳ pendiente
 
 **Criterio de done Oleada B:** guardar visita con varias fotos estable; listados con índices OK; firma sin doble click por timeout.
 
@@ -157,4 +141,4 @@ La app ya tiene buena base (auth, `assertEmpresaAccess`, sanitización HTML, coo
 
 ## Primera tarea al retomar
 
-**Oleada A completada.** Siguiente: **B1** — migración de índices DB faltantes (`acciones_mejora.punto_mejora_id`, logs, notificaciones).
+**Siguiente:** **B5** — `next/dynamic` para TipTap/Recharts. Luego Oleada C (PDF async / storage privado).

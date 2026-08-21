@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { useAlert } from "@/context/AlertContext";
 import { PhotoSourcePicker } from "@/components/PhotoSourcePicker";
+import { mapPool } from "@/lib/mapPool";
 
 export default function EditarInformePage() {
   const router = useRouter();
@@ -422,17 +423,16 @@ export default function EditarInformePage() {
       const obsConImagenNueva = observacionesCargadas.filter(
         (obs) => obs.imagenFile,
       );
-      for (const obs of obsConImagenNueva) {
+      await mapPool(obsConImagenNueva, 3, async (obs) => {
         const pmCreado = updatedInforme.puntos_mejora?.find(
           (pm: any) => pm.id === obs.id || pm.detalle === obs.detalle,
         );
-        if (pmCreado) {
-          const formData = new FormData();
-          formData.append("evidencia", obs.imagenFile!);
-          formData.append("punto_mejora_id", pmCreado.id);
-          await subirEvidenciaInforme(id, formData);
-        }
-      }
+        if (!pmCreado) return;
+        const formData = new FormData();
+        formData.append("evidencia", obs.imagenFile!);
+        formData.append("punto_mejora_id", pmCreado.id);
+        await subirEvidenciaInforme(id, formData);
+      });
 
       // Ir al detalle con datos frescos; el alert no debe bloquear la navegación
       router.replace(`/informes/${id}`);

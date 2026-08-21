@@ -108,6 +108,9 @@ export const firmarInforme = async (
   endpoint: string,
   payload: { firma_base64: string },
 ) => {
-  const { data } = await api.post(endpoint, payload);
+  const { data } = await api.post(endpoint, payload, {
+    // Generación de PDF post-firma puede demorar
+    timeout: 120000,
+  });
   return data;
 };

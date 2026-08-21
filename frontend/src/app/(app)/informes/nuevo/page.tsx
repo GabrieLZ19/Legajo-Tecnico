@@ -25,6 +25,7 @@ import {
 
 import { useAlert } from "@/context/AlertContext";
 import { PhotoSourcePicker } from "@/components/PhotoSourcePicker";
+import { mapPool } from "@/lib/mapPool";
 
 export default function NuevoInformePage() {
   const { empresa } = useAuth();
@@ -351,18 +352,16 @@ export default function NuevoInformePage() {
       const obsConImagen = observacionesCargadas.filter(
         (obs) => obs.imagenFile,
       );
-      for (const obs of obsConImagen) {
+      await mapPool(obsConImagen, 3, async (obs) => {
         const pmCreado = res.puntos_mejora?.find(
           (pm: any) => pm.detalle === obs.detalle,
         );
-        if (pmCreado) {
-          const formData = new FormData();
-          formData.append("evidencia", obs.imagenFile!);
-          formData.append("punto_mejora_id", pmCreado.id);
-
-          await subirEvidenciaInforme(res.id, formData);
-        }
-      }
+        if (!pmCreado) return;
+        const formData = new FormData();
+        formData.append("evidencia", obs.imagenFile!);
+        formData.append("punto_mejora_id", pmCreado.id);
+        await subirEvidenciaInforme(res.id, formData);
+      });
 
       // 5. Redirigir a la firma
       router.push(`/informes/${res.id}/firma`);

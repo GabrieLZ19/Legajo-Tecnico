@@ -119,38 +119,45 @@ export const informeService = {
         if (errPeligros) throw errPeligros;
       }
 
-      // 4. Insertar puntos de mejora y acciones
+      // 4. Insertar puntos de mejora y acciones (batch)
       if (data.puntos_mejora && data.puntos_mejora.length > 0) {
-        for (let i = 0; i < data.puntos_mejora.length; i++) {
-          const pm = data.puntos_mejora[i];
-          const { data: puntoInsertado, error: errPunto } = await supabaseAdmin
-            .from("puntos_mejora")
-            .insert({
-              informe_id: informe.id,
-              numero_item: i + 1,
-              detalle: pm.detalle,
-              orden: i,
-            })
-            .select()
-            .single();
+        const puntosToInsert = data.puntos_mejora.map((pm, i) => ({
+          informe_id: informe.id,
+          numero_item: i + 1,
+          detalle: pm.detalle,
+          orden: i,
+        }));
 
-          if (errPunto) throw errPunto;
+        const { data: puntosInsertados, error: errPuntos } = await supabaseAdmin
+          .from("puntos_mejora")
+          .insert(puntosToInsert)
+          .select("id, orden");
 
-          if (pm.acciones && pm.acciones.length > 0) {
-            const accionesToInsert = pm.acciones.map((acc) => ({
-              informe_id: informe.id,
-              empresa_id: data.empresa_id,
-              punto_mejora_id: puntoInsertado.id,
-              numero_item: i + 1,
-              descripcion: acc.descripcion,
-              responsable: acc.responsable || null,
-              estado: "pendiente",
-            }));
-            const { error: errAcc } = await supabaseAdmin
-              .from("acciones_mejora")
-              .insert(accionesToInsert);
-            if (errAcc) throw errAcc;
-          }
+        if (errPuntos || !puntosInsertados) throw errPuntos;
+
+        const porOrden = new Map(
+          puntosInsertados.map((p) => [p.orden, p.id] as const),
+        );
+
+        const accionesToInsert = data.puntos_mejora.flatMap((pm, i) => {
+          const puntoId = porOrden.get(i);
+          if (!puntoId || !pm.acciones?.length) return [];
+          return pm.acciones.map((acc) => ({
+            informe_id: informe.id,
+            empresa_id: data.empresa_id,
+            punto_mejora_id: puntoId,
+            numero_item: i + 1,
+            descripcion: acc.descripcion,
+            responsable: acc.responsable || null,
+            estado: "pendiente" as const,
+          }));
+        });
+
+        if (accionesToInsert.length > 0) {
+          const { error: errAcc } = await supabaseAdmin
+            .from("acciones_mejora")
+            .insert(accionesToInsert);
+          if (errAcc) throw errAcc;
         }
       }
 
@@ -204,13 +211,15 @@ export const informeService = {
       console.error("No se pudo listar evidencias al eliminar informe:", err);
     }
 
-    for (const path of paths) {
-      try {
-        await storageService.eliminarArchivo("evidencia_visitas", path);
-      } catch (err) {
-        console.error(`Error limpiando evidencia ${path}:`, err);
-      }
-    }
+    await Promise.all(
+      [...paths].map(async (path) => {
+        try {
+          await storageService.eliminarArchivo("evidencia_visitas", path);
+        } catch (err) {
+          console.error(`Error limpiando evidencia ${path}:`, err);
+        }
+      }),
+    );
 
     const { error } = await supabaseAdmin
       .from("informes_visita")

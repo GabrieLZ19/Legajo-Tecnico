@@ -156,17 +156,18 @@ export const informesController = {
         }
       }
 
-      const urls: string[] = [];
-      for (const file of uploadFiles) {
-        const ext = safeExtensionFromUpload(file);
-        const path = punto_mejora_id
-          ? `${informeId}/${punto_mejora_id}_${Date.now()}_${randomUUID().slice(0, 8)}.${ext}`
-          : `${informeId}/general_${Date.now()}_${randomUUID().slice(0, 8)}.${ext}`;
+      const uploaded = await Promise.all(
+        uploadFiles.map(async (file) => {
+          const ext = safeExtensionFromUpload(file);
+          const path = punto_mejora_id
+            ? `${informeId}/${punto_mejora_id}_${Date.now()}_${randomUUID().slice(0, 8)}.${ext}`
+            : `${informeId}/general_${Date.now()}_${randomUUID().slice(0, 8)}.${ext}`;
 
-        await storageService.subirArchivo('evidencia_visitas', path, file);
-        const evidenciaUrl = storageService.obtenerUrlPublica('evidencia_visitas', path);
-        urls.push(evidenciaUrl);
-      }
+          await storageService.subirArchivo('evidencia_visitas', path, file);
+          return storageService.obtenerUrlPublica('evidencia_visitas', path);
+        }),
+      );
+      const urls = uploaded;
 
       let dbError;
       if (punto_mejora_id) {
