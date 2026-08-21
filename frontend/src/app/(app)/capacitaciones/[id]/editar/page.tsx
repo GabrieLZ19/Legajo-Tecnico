@@ -16,7 +16,17 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useAlert } from "@/context/AlertContext";
-import DiapositivasEditor from "@/components/DiapositivasEditor";
+import dynamic from "next/dynamic";
+
+const DiapositivasEditor = dynamic(
+  () => import("@/components/DiapositivasEditor"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-48 rounded-xl border border-slate-200 bg-slate-50 animate-pulse" />
+    ),
+  },
+);
 import { useCapacitaciones } from "@/hooks/useCapacitaciones";
 import {
   mapPlantillaPreguntasToForm,

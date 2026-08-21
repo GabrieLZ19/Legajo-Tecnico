@@ -56,7 +56,9 @@ La app ya tiene buena base (auth, `assertEmpresaAccess`, sanitización HTML, coo
 ### B4. Timeouts axios en firma / PDF — ✅
 - `firmarInforme` timeout 120s.
 
-### B5. Dynamic import de TipTap / Recharts — ⏳ pendiente
+### B5. Dynamic import de TipTap / Recharts — ✅ (TipTap)
+- `RichTextEditor` y `DiapositivasEditor` cargan con `next/dynamic` (`ssr: false`).
+- Recharts en métricas: pendiente fino (menor impacto que TipTap).
 
 **Criterio de done Oleada B:** guardar visita con varias fotos estable; listados con índices OK; firma sin doble click por timeout.
 
@@ -141,4 +143,4 @@ La app ya tiene buena base (auth, `assertEmpresaAccess`, sanitización HTML, coo
 
 ## Primera tarea al retomar
 
-**Siguiente:** **B5** — `next/dynamic` para TipTap/Recharts. Luego Oleada C (PDF async / storage privado).
+**Oleada B casi completa.** Siguiente: **Oleada C** — empezar por **C2 (PDF async)** o **C1 (storage privado)**.

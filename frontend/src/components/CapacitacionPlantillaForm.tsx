@@ -2,7 +2,17 @@
 
 import React from "react";
 import { Plus, Trash2, X } from "lucide-react";
-import DiapositivasEditor from "@/components/DiapositivasEditor";
+import dynamic from "next/dynamic";
+
+const DiapositivasEditor = dynamic(
+  () => import("@/components/DiapositivasEditor"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-48 rounded-xl border border-slate-200 bg-slate-50 animate-pulse" />
+    ),
+  },
+);
 import { PreguntaPlantillaForm } from "@/hooks/useCapacitacionPlantillas";
 import { CapacitacionDiapositiva } from "@/types";
 

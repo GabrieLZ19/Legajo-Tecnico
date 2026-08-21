@@ -1,9 +1,16 @@
 "use client";
 
 import React from "react";
+import dynamic from "next/dynamic";
 import { Plus, Trash2 } from "lucide-react";
-import RichTextEditor from "@/components/RichTextEditor";
 import { CapacitacionDiapositiva } from "@/types";
+
+const RichTextEditor = dynamic(() => import("@/components/RichTextEditor"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-40 rounded-xl border border-slate-200 bg-slate-50 animate-pulse" />
+  ),
+});
 
 interface DiapositivasEditorProps {
   diapositivas: CapacitacionDiapositiva[];
