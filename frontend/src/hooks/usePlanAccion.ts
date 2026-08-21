@@ -2,17 +2,60 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { AccionMejora, EstadoAccion } from '../types';
 
-export const usePlanAccion = (empresaId?: string, estado?: EstadoAccion) => {
-  const queryClient = useQueryClient();
+export type PlanAccionListPage = {
+  items: AccionMejora[];
+  total: number;
+  limit: number;
+  offset: number;
+  resumen: {
+    total: number;
+    cumplidas: number;
+    pendientes: number;
+    atendidas: number;
+  };
+};
 
-  const query = useQuery<AccionMejora[]>({
-    queryKey: ['plan-accion', empresaId, estado],
+type UsePlanAccionOpts = {
+  limit?: number;
+  offset?: number;
+};
+
+export const usePlanAccion = (
+  empresaId?: string,
+  estado?: EstadoAccion,
+  opts?: UsePlanAccionOpts,
+) => {
+  const queryClient = useQueryClient();
+  const limit = opts?.limit ?? 10;
+  const offset = opts?.offset ?? 0;
+
+  const query = useQuery<PlanAccionListPage>({
+    queryKey: ['plan-accion', empresaId, estado, limit, offset],
     queryFn: async () => {
-      const url = estado 
-        ? `/plan-accion?empresaId=${empresaId}&estado=${estado}`
-        : `/plan-accion?empresaId=${empresaId}`;
-      const { data } = await api.get(url);
-      return data;
+      const { data } = await api.get('/plan-accion', {
+        params: {
+          empresaId,
+          ...(estado ? { estado } : {}),
+          limit,
+          offset,
+        },
+      });
+      if (Array.isArray(data)) {
+        const items = data as AccionMejora[];
+        return {
+          items,
+          total: items.length,
+          limit,
+          offset,
+          resumen: {
+            total: items.length,
+            cumplidas: items.filter((a) => a.estado === 'cumplida').length,
+            pendientes: items.filter((a) => a.estado === 'pendiente').length,
+            atendidas: items.filter((a) => a.estado === 'atendida').length,
+          },
+        };
+      }
+      return data as PlanAccionListPage;
     },
     enabled: !!empresaId,
   });
@@ -30,6 +73,11 @@ export const usePlanAccion = (empresaId?: string, estado?: EstadoAccion) => {
 
   return {
     ...query,
+    data: query.data?.items,
+    total: query.data?.total ?? 0,
+    limit: query.data?.limit ?? limit,
+    offset: query.data?.offset ?? offset,
+    resumen: query.data?.resumen,
     actualizarEstado: actualizarMutation.mutateAsync,
     isUpdating: actualizarMutation.isPending,
   };
@@ -53,4 +101,3 @@ export const exportarPlanAccion = async (
   );
   return response.data as Blob;
 };
-

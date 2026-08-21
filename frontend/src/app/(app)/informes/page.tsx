@@ -27,7 +27,7 @@ function toInputDate(d: Date) {
 export default function InformesPage() {
   const { user, empresa } = useAuth();
   const { showAlert } = useAlert();
-  const PAGE_SIZE = 20;
+  const PAGE_SIZE = 10;
   const [page, setPage] = useState(0);
   // Filtros client-side: ampliar página para no “perder” resultados
   const [searchTerm, setSearchTerm] = useState("");

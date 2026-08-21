@@ -17,6 +17,8 @@ import {
 export default function PlanAccionPage() {
   const { user, empresa } = useAuth();
   const { showAlert } = useAlert();
+  const PAGE_SIZE = 10;
+  const [page, setPage] = useState(0);
   const [filterEstado, setFilterEstado] = useState<EstadoAccion | "todos">(
     "todos",
   );
@@ -27,10 +29,13 @@ export default function PlanAccionPage() {
   const {
     data: acciones,
     isLoading,
+    total,
+    resumen,
     actualizarEstado,
   } = usePlanAccion(
     empresa?.id,
     filterEstado === "todos" ? undefined : filterEstado,
+    { limit: PAGE_SIZE, offset: page * PAGE_SIZE },
   );
 
   const handleStatusChange = async (id: string, nuevoEstado: EstadoAccion) => {
@@ -106,11 +111,10 @@ export default function PlanAccionPage() {
     }
   };
 
-  // Cálculos para las tarjetas de estadísticas
-  const totalAcciones = acciones?.length || 0;
-  const cumplidas =
-    acciones?.filter((a) => a.estado === "cumplida").length || 0;
-  const pendientes = totalAcciones - cumplidas;
+  // Tarjetas: resumen global de la empresa (no solo la página actual)
+  const totalAcciones = resumen?.total ?? 0;
+  const cumplidas = resumen?.cumplidas ?? 0;
+  const pendientes = (resumen?.pendientes ?? 0) + (resumen?.atendidas ?? 0);
 
   return (
     <div className="space-y-6">
@@ -130,7 +134,7 @@ export default function PlanAccionPage() {
           <button
             onClick={handleExportExcel}
             disabled={
-              exportingExcel || isLoading || !acciones || acciones.length === 0
+              exportingExcel || isLoading || !resumen || resumen.total === 0
             }
             className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-50 hover:bg-emerald-150/80 border border-emerald-250 text-emerald-700 font-bold rounded-xl text-xs transition-all shadow-2xs hover:shadow-xs disabled:opacity-50 cursor-pointer w-full"
           >
@@ -145,7 +149,7 @@ export default function PlanAccionPage() {
           <button
             onClick={handleExportPDF}
             disabled={
-              exportingPdf || isLoading || !acciones || acciones.length === 0
+              exportingPdf || isLoading || !resumen || resumen.total === 0
             }
             className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-rose-50 hover:bg-rose-150/80 border border-rose-250 text-rose-700 font-bold rounded-xl text-xs transition-all shadow-2xs hover:shadow-xs disabled:opacity-50 cursor-pointer w-full"
           >
@@ -195,7 +199,10 @@ export default function PlanAccionPage() {
           (est) => (
             <button
               key={est}
-              onClick={() => setFilterEstado(est)}
+              onClick={() => {
+                setFilterEstado(est);
+                setPage(0);
+              }}
               className={`flex-1 text-center py-1.5 px-2.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
                 filterEstado === est
                   ? "bg-slate-900 text-white shadow-xs"
@@ -260,7 +267,7 @@ export default function PlanAccionPage() {
                       >
                         {/* Número */}
                         <td className="px-6 py-4 whitespace-nowrap text-xs font-bold text-slate-400 font-sans">
-                          {index + 1}
+                          {page * PAGE_SIZE + index + 1}
                         </td>
 
                         {/* Acción de Mejora */}
@@ -351,7 +358,7 @@ export default function PlanAccionPage() {
                 >
                   <div className="space-y-1">
                     <span className="text-[10px] font-bold text-slate-400">
-                      ÍTEM {index + 1}
+                      ÍTEM {page * PAGE_SIZE + index + 1}
                     </span>
                     <h3 className="text-sm font-black text-slate-900 font-sans leading-snug flex items-center gap-2 flex-wrap">
                       <Link
@@ -416,6 +423,36 @@ export default function PlanAccionPage() {
               );
             })}
           </div>
+
+          {total > PAGE_SIZE && (
+            <div className="flex items-center justify-between gap-3 bg-white border border-slate-200 rounded-2xl px-4 py-3 shadow-2xs">
+              <p className="text-xs font-semibold text-slate-500">
+                Mostrando {Math.min(page * PAGE_SIZE + 1, total)}–
+                {Math.min((page + 1) * PAGE_SIZE, total)} de {total}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={page === 0 || isLoading}
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                >
+                  Anterior
+                </button>
+                <span className="text-xs font-bold text-slate-600">
+                  Pág. {page + 1} / {Math.max(1, Math.ceil(total / PAGE_SIZE))}
+                </span>
+                <button
+                  type="button"
+                  disabled={(page + 1) * PAGE_SIZE >= total || isLoading}
+                  onClick={() => setPage((p) => p + 1)}
+                  className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-2xs">
