@@ -52,8 +52,10 @@ api.interceptors.response.use(
         Cookies.remove("token");
         Cookies.remove("perfil");
         Cookies.remove("empresa");
+        Cookies.remove("lt_session");
         if (typeof window !== "undefined") {
-          window.location.href = "/login";
+          const goAdmin = path.startsWith("/admin") || path.startsWith("/ente");
+          window.location.href = goAdmin ? "/login-admin" : "/login";
         }
       }
     }

@@ -59,8 +59,12 @@ export default function AdminDashboardPage() {
     refetch,
   } = useAdminDashboard(selectedEmpresaId || undefined);
 
-  const empresasLista = empresas as DashboardEmpresa[];
-  const informesLista = informes as DashboardInforme[];
+  const informesLista = Array.isArray(informes)
+    ? (informes as DashboardInforme[])
+    : [];
+  const empresasLista = Array.isArray(empresas)
+    ? (empresas as DashboardEmpresa[])
+    : [];
   const metricsData = metrics as AdminDashboardMetrics | undefined;
 
   const selectedEmpresa =

@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 /**
- * En deploy el JWT vive en cookie httpOnly del dominio de la API (cross-site).
- * En el frontend solo tenemos señales de sesión en cookies del propio origen
- * (`perfil` / `lt_session`), setadas tras login exitoso.
+ * Señal de sesión en el origen del frontend (lt_session).
+ * No usamos `perfil` solo: puede quedar cookie stale y abrir rutas sin JWT válido.
+ * El JWT real vive en cookie httpOnly del dominio de la API.
  */
-const SESSION_MARKERS = ["lt_session", "perfil", "lt_token", "token"] as const;
+const SESSION_MARKERS = ["lt_session", "lt_token", "token"] as const;
 
 const PUBLIC_PREFIXES = [
   "/login",

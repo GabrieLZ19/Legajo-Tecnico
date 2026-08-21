@@ -87,18 +87,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
     const restore = async () => {
       if (isLoginPage) {
+        // En login no hidratar perfil stale: evita “entrar” como admin sin JWT
+        clearClientSession();
+        setUser(null);
+        setEmpresa(null);
         setLoading(false);
         return;
       }
       try {
-        const stored = readStoredProfile();
-        // Cookie primero (rápido); luego permisos frescos desde el servidor
-        if (stored.user) {
-          setUser(stored.user);
-          setEmpresa(stored.empresa);
-        }
+        // Solo confiar en /auth/me (cookie httpOnly de la API), no en perfil local
         const { data } = await api.get("/auth/me");
         if (cancelled) return;
+        const stored = readStoredProfile();
         applySession(data.user as Perfil, stored.empresa);
       } catch {
         if (cancelled) return;
@@ -120,7 +120,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           const stored = readStoredProfile();
           applySession(data.user as Perfil, stored.empresa);
         })
-        .catch(() => undefined);
+        .catch(() => {
+          if (cancelled) return;
+          clearClientSession();
+          setUser(null);
+          setEmpresa(null);
+        });
     };
     window.addEventListener("focus", onFocus);
 
@@ -193,11 +198,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const logout = () => {
+    const wasAdmin = user?.rol === "admin" || user?.rol === "ente_regulador";
     void api.post("/auth/logout").catch(() => undefined);
     clearClientSession();
     setUser(null);
     setEmpresa(null);
-    router.push("/login");
+    router.push(wasAdmin ? "/login-admin" : "/login");
   };
 
   const cambiarEmpresaContexto = (nuevaEmpresa: Empresa) => {

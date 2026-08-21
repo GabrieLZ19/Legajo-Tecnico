@@ -26,15 +26,22 @@ export function useAdminDashboard(empresaId?: string, fechaDesde?: string, fecha
     }
   });
 
-  // Query 3: List of all reports
+  // Query 3: List of reports (respuesta paginada { items, total })
   const informesQuery = useQuery({
     queryKey: ['adminInformes', empresaId],
     queryFn: async () => {
       const response = await api.get('/informes', {
-        params: empresaId ? { empresaId } : {}
+        params: {
+          ...(empresaId ? { empresaId } : {}),
+          limit: 100,
+          offset: 0,
+        },
       });
-      return response.data;
-    }
+      const data = response.data;
+      if (Array.isArray(data)) return data;
+      if (data && Array.isArray(data.items)) return data.items;
+      return [];
+    },
   });
 
   return {
