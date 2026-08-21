@@ -639,6 +639,12 @@ export const eppService = {
     if (licitacion && licitacion.estado !== "abierta") {
       throw new HttpError(410, "Esta licitación ya no acepta cotizaciones");
     }
+    if (
+      licitacion?.fecha_cierre &&
+      new Date(licitacion.fecha_cierre).getTime() < Date.now()
+    ) {
+      throw new HttpError(410, "El plazo de cotización expiró");
+    }
 
     return {
       ...cotizacion,
@@ -665,7 +671,9 @@ export const eppService = {
   ) {
     const { data: cotizacion, error } = await supabaseAdmin
       .from("epp_licitacion_cotizaciones")
-      .select("id, licitacion_id, estado, epp_licitaciones(comision_porcentaje, estado)")
+      .select(
+        "id, licitacion_id, estado, epp_licitaciones(comision_porcentaje, estado, fecha_cierre)",
+      )
       .eq("token_publico", token)
       .maybeSingle();
 
@@ -676,6 +684,12 @@ export const eppService = {
 
     if (!licitacion || licitacion.estado !== "abierta") {
       throw new HttpError(410, "Esta licitación ya no acepta cotizaciones");
+    }
+    if (
+      licitacion.fecha_cierre &&
+      new Date(licitacion.fecha_cierre).getTime() < Date.now()
+    ) {
+      throw new HttpError(410, "El plazo de cotización expiró");
     }
 
     const comisionPct = Number(licitacion.comision_porcentaje ?? 0);

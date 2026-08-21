@@ -11,11 +11,36 @@ import {
 } from "../types/database";
 
 function pathFromEvidenciaUrl(url: string | null | undefined): string | null {
-  if (!url) return null;
-  const marker = "/storage/v1/object/public/evidencia_visitas/";
-  const idx = url.indexOf(marker);
-  if (idx === -1) return null;
-  return decodeURIComponent(url.slice(idx + marker.length));
+  const parsed = storageService.parseStorageUrl(url);
+  if (!parsed || parsed.bucket !== "evidencia_visitas") return null;
+  return parsed.path;
+}
+
+async function firmarUrlsInforme<T extends Record<string, any>>(informe: T): Promise<T> {
+  const puntos = await Promise.all(
+    (informe.puntos_mejora || []).map(async (pm: any) => ({
+      ...pm,
+      evidencia_url: await storageService.signUrl(pm.evidencia_url),
+    })),
+  );
+
+  const firmas = await Promise.all(
+    (informe.firmas_informe || []).map(async (f: any) => ({
+      ...f,
+      firma_url: await storageService.signUrl(f.firma_url),
+    })),
+  );
+
+  const evidencias = await storageService.signUrls(informe.evidencias_urls || []);
+
+  return {
+    ...informe,
+    puntos_mejora: puntos,
+    firmas_informe: firmas,
+    evidencias_urls: evidencias.filter(Boolean) as string[],
+    evidencia_url: await storageService.signUrl(informe.evidencia_url),
+    url_pdf_generado: await storageService.signUrl(informe.url_pdf_generado),
+  };
 }
 
 export const informeService = {
@@ -234,39 +259,118 @@ export const informeService = {
     return { success: true };
   },
 
-  async listarPorEmpresa(empresaId: string) {
-    const { data, error } = await supabaseAdmin
+  async listarPorEmpresa(
+    empresaId: string,
+    opts?: { limit?: number; offset?: number },
+  ) {
+    const limit = Math.min(Math.max(opts?.limit ?? 50, 1), 200);
+    const offset = Math.max(opts?.offset ?? 0, 0);
+
+    const { data, error, count } = await supabaseAdmin
       .from("informes_visita")
-      .select("*")
+      .select("*", { count: "exact" })
       .eq("empresa_id", empresaId)
-      .order("fecha_hora_visita", { ascending: false });
+      .order("numero_informe", { ascending: false })
+      .range(offset, offset + limit - 1);
 
     if (error) throw error;
-    return data;
+
+    const items = await Promise.all(
+      (data || []).map(async (inf) => ({
+        ...inf,
+        url_pdf_generado: await storageService.signUrl(inf.url_pdf_generado),
+      })),
+    );
+
+    return { items, total: count ?? items.length, limit, offset };
   },
 
-  async listarPorEmpresas(empresaIds: string[]) {
-    const { data, error } = await supabaseAdmin
+  async listarPorEmpresas(
+    empresaIds: string[],
+    opts?: { limit?: number; offset?: number },
+  ) {
+    const limit = Math.min(Math.max(opts?.limit ?? 50, 1), 200);
+    const offset = Math.max(opts?.offset ?? 0, 0);
+
+    const { data, error, count } = await supabaseAdmin
       .from("informes_visita")
-      .select("*, empresas(razon_social)")
+      .select("*, empresas(razon_social)", { count: "exact" })
       .in("empresa_id", empresaIds)
-      .order("fecha_hora_visita", { ascending: false });
+      .order("fecha_hora_visita", { ascending: false })
+      .range(offset, offset + limit - 1);
 
     if (error) throw error;
-    return data;
+
+    const items = await Promise.all(
+      (data || []).map(async (inf) => ({
+        ...inf,
+        url_pdf_generado: await storageService.signUrl(inf.url_pdf_generado),
+      })),
+    );
+
+    return { items, total: count ?? items.length, limit, offset };
   },
 
   async obtenerPorId(id: string) {
     const { data: informe, error: errInf } = await supabaseAdmin
       .from("informes_visita")
       .select(
-        "*, peligros_detectados(*), puntos_mejora(*), acciones_mejora(*), firmas_informe(*)",
+        `
+        *,
+        peligros_detectados(*),
+        puntos_mejora(*),
+        acciones_mejora(*),
+        firmas_informe(*),
+        empresas(id, razon_social, contacto),
+        preventor:perfiles!informes_visita_preventor_id_fkey(id, nombre_completo, rol)
+      `,
       )
       .eq("id", id)
       .single();
 
     if (errInf) throw errInf;
-    return informe;
+
+    const firmanteIds = (informe.firmas_informe || [])
+      .map((f: { firmante_id: string }) => f.firmante_id)
+      .filter(Boolean);
+
+    const firmantesById = new Map<
+      string,
+      { id: string; nombre_completo: string; rol: string }
+    >();
+
+    if (firmanteIds.length > 0) {
+      const { data: firmantes } = await supabaseAdmin
+        .from("perfiles")
+        .select("id, nombre_completo, rol")
+        .in("id", firmanteIds);
+      for (const p of firmantes || []) {
+        firmantesById.set(p.id, p);
+      }
+    }
+
+    const { data: duenoEmpresa } = await supabaseAdmin
+      .from("perfiles")
+      .select("id, nombre_completo, rol")
+      .eq("empresa_id", informe.empresa_id)
+      .eq("rol", "dueno")
+      .eq("activo", true)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    const firmasEnriquecidas = (informe.firmas_informe || []).map(
+      (f: { firmante_id: string }) => ({
+        ...f,
+        firmante: firmantesById.get(f.firmante_id) || null,
+      }),
+    );
+
+    return firmarUrlsInforme({
+      ...informe,
+      firmas_informe: firmasEnriquecidas,
+      dueno_empresa: duenoEmpresa || null,
+    });
   },
 
   async editarBorrador(

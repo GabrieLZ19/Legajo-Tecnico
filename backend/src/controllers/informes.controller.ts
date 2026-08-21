@@ -24,13 +24,19 @@ export const informesController = {
 
   async listarInformes(req: Request, res: Response, next: NextFunction) {
     try {
-      const { empresaId } = req.query;
+      const { empresaId, limit: limitRaw, offset: offsetRaw } = req.query;
       const user = req.user;
+      const limit = limitRaw ? Number(limitRaw) : 50;
+      const offset = offsetRaw ? Number(offsetRaw) : 0;
+      const pageOpts = { limit, offset };
 
       if (empresaId) {
         await assertEmpresaAccess(req.user!, empresaId as string);
-        const informes = await informeService.listarPorEmpresa(empresaId as string);
-        return res.json(informes);
+        const result = await informeService.listarPorEmpresa(
+          empresaId as string,
+          pageOpts,
+        );
+        return res.json(result);
       }
 
       if (user?.rol === 'admin') {
@@ -42,16 +48,19 @@ export const informesController = {
         
         const empresaIds = empresas?.map(e => e.id) || [];
         if (empresaIds.length === 0) {
-          return res.json([]);
+          return res.json({ items: [], total: 0, limit, offset });
         }
-        const informes = await informeService.listarPorEmpresas(empresaIds);
-        return res.json(informes);
+        const result = await informeService.listarPorEmpresas(empresaIds, pageOpts);
+        return res.json(result);
       }
 
       // Si es otro rol y tiene empresa_id asignado
       if (user?.empresa_id) {
-        const informes = await informeService.listarPorEmpresa(user.empresa_id);
-        return res.json(informes);
+        const result = await informeService.listarPorEmpresa(
+          user.empresa_id,
+          pageOpts,
+        );
+        return res.json(result);
       }
 
       return res.status(400).json({ error: 'empresaId es requerido en query' });

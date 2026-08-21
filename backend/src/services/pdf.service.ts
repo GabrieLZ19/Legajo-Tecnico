@@ -1,17 +1,10 @@
 import PDFDocument from "pdfkit";
 import { supabaseAdmin } from "../config/supabase";
+import { storageService } from "./storage.service";
 
-// Helper para descargar una imagen a Buffer
+// Helper para descargar una imagen a Buffer (soporta buckets privados)
 async function descargarImagenBuffer(url: string): Promise<Buffer | null> {
-  try {
-    const response = await fetch(url);
-    if (!response.ok) return null;
-    const arrayBuffer = await response.arrayBuffer();
-    return Buffer.from(arrayBuffer);
-  } catch (error) {
-    console.error(`Error descargando imagen desde ${url}:`, error);
-    return null;
-  }
+  return storageService.downloadBuffer(url);
 }
 
 function limpiarHtmlParaPdf(html: string): string {
@@ -46,34 +39,7 @@ function limpiarHtmlParaPdf(html: string): string {
 async function descargarPdfDesdeStorage(
   publicUrl: string,
 ): Promise<Buffer | null> {
-  const bucket = "informes_pdf";
-  const markers = [
-    `/storage/v1/object/public/${bucket}/`,
-    `/public/${bucket}/`,
-  ];
-
-  let path: string | null = null;
-  for (const marker of markers) {
-    const idx = publicUrl.indexOf(marker);
-    if (idx >= 0) {
-      path = decodeURIComponent(publicUrl.slice(idx + marker.length));
-      break;
-    }
-  }
-
-  if (!path) {
-    // Fallback: intentar bajar por URL pública
-    return descargarImagenBuffer(publicUrl);
-  }
-
-  const { data, error } = await supabaseAdmin.storage
-    .from(bucket)
-    .download(path);
-  if (error || !data) {
-    console.error("Error bajando PDF desde storage:", error?.message);
-    return descargarImagenBuffer(publicUrl);
-  }
-  return Buffer.from(await data.arrayBuffer());
+  return storageService.downloadBuffer(publicUrl);
 }
 
 export const pdfService = {
