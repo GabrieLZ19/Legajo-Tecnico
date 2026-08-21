@@ -6,6 +6,7 @@ import {
   useInformeDetalle,
   descargarInformePdf,
   subirEvidenciaInforme,
+  useInformes,
 } from "@/hooks/useInformes";
 import { actualizarEstadoPlanAccion } from "@/hooks/usePlanAccion";
 import { useQueryClient } from "@tanstack/react-query";
@@ -17,6 +18,7 @@ import {
   assertDownloadBlob,
   triggerBrowserDownload,
 } from "@/lib/downloadBlob";
+import { PhotoSourcePicker } from "@/components/PhotoSourcePicker";
 import {
   Calendar,
   User,
@@ -33,6 +35,7 @@ import {
   Copy,
   Check,
   Mail,
+  Trash2,
 } from "lucide-react";
 
 export default function InformeDetallePage() {
@@ -42,12 +45,14 @@ export default function InformeDetallePage() {
   const queryClient = useQueryClient();
   const { showAlert } = useAlert();
   const { data: informe, isLoading, error } = useInformeDetalle(id as string);
-  const { user } = useAuth();
+  const { user, empresa } = useAuth();
+  const { eliminarInforme, isDeleting } = useInformes(empresa?.id);
 
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [copied, setCopied] = useState(false);
   const [highlightedActionId, setHighlightedActionId] = useState<string | null>(
     null,
@@ -139,13 +144,7 @@ export default function InformeDetallePage() {
     );
   }
 
-  const handleFileChange = async (
-    puntoMejoraId: string,
-    e: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const handleFileChange = async (puntoMejoraId: string, file: File) => {
     setUploadingId(puntoMejoraId);
     const formData = new FormData();
     formData.append("evidencia", file);
@@ -162,6 +161,28 @@ export default function InformeDetallePage() {
       );
     } finally {
       setUploadingId(null);
+    }
+  };
+
+  const handleEliminarVisita = async () => {
+    try {
+      await eliminarInforme(id);
+      showAlert(
+        "success",
+        "Visita eliminada",
+        "El informe de visita se eliminó correctamente.",
+      );
+      router.push("/informes");
+    } catch (err: any) {
+      showAlert(
+        "error",
+        "No se pudo eliminar",
+        err.response?.data?.error ||
+          err.message ||
+          "Ocurrió un error al eliminar la visita.",
+      );
+    } finally {
+      setConfirmDelete(false);
     }
   };
 
@@ -203,6 +224,9 @@ export default function InformeDetallePage() {
                 Informe N° {String(informe.numero_informe).padStart(6, "0")}
               </h1>
             </div>
+            <p className="text-sm font-bold text-slate-800 mt-1">
+              {informe.actividad?.trim() || "Relevamiento general"}
+            </p>
             <p className="text-xs text-slate-500 font-bold mt-0.5">
               {informe.lugar_visita || "Planta"} — {fechaFormateada} ·{" "}
               {horaFormateada}
@@ -211,7 +235,7 @@ export default function InformeDetallePage() {
         </div>
 
         {/* Acciones Rápidas */}
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {!preventorFirmado && canWriteAppModule(user, "informes") && (
               <>
                 <button
@@ -237,6 +261,16 @@ export default function InformeDetallePage() {
             >
               <PenTool className="h-3.5 w-3.5" />
               Firmar Dueño
+            </button>
+          )}
+          {canWriteAppModule(user, "informes") && (
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+              className="inline-flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold px-4 py-2.5 rounded-xl text-xs transition-all border border-rose-100 cursor-pointer"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Eliminar
             </button>
           )}
         </div>
@@ -450,7 +484,11 @@ export default function InformeDetallePage() {
                         )}
 
                         {canWriteAppModule(user, "informes") && (
-                          <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg transition-colors border border-slate-200">
+                          <PhotoSourcePicker
+                            disabled={uploadingId === pm.id}
+                            onSelect={(file) => handleFileChange(pm.id, file)}
+                            triggerClassName="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg transition-colors border border-slate-200 disabled:opacity-50"
+                          >
                             {uploadingId === pm.id ? (
                               <>
                                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -466,14 +504,7 @@ export default function InformeDetallePage() {
                                 </span>
                               </>
                             )}
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              disabled={uploadingId === pm.id}
-                              onChange={(e) => handleFileChange(pm.id, e)}
-                            />
-                          </label>
+                          </PhotoSourcePicker>
                         )}
                       </div>
 
@@ -897,6 +928,54 @@ export default function InformeDetallePage() {
           </div>
         </div>
       )}
+
+      {confirmDelete ? (
+        <div className="fixed inset-0 z-50 bg-slate-900/45 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl border border-slate-100 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="font-black text-slate-900 text-sm">
+                  ¿Eliminar esta visita?
+                </h3>
+                <p className="text-xs text-slate-500 font-semibold mt-1 leading-relaxed">
+                  Se borrará el informe N°{" "}
+                  {String(informe.numero_informe).padStart(6, "0")}, sus
+                  observaciones, acciones y fotos. Esta acción no se puede
+                  deshacer.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setConfirmDelete(false)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-xs font-black hover:bg-slate-50 cursor-pointer disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => void handleEliminarVisita()}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black cursor-pointer disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Eliminando…
+                  </>
+                ) : (
+                  "Eliminar"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

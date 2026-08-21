@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 
 import { useAlert } from "@/context/AlertContext";
+import { PhotoSourcePicker } from "@/components/PhotoSourcePicker";
 
 export default function NuevoInformePage() {
   const { empresa } = useAuth();
@@ -310,9 +311,11 @@ export default function NuevoInformePage() {
       setError("No hay ninguna empresa asociada a la sesión.");
       return;
     }
+    if (loading) return;
 
     setLoading(true);
     setError(null);
+    let createdId: string | null = null;
 
     try {
       // 1. Combinar fecha y hora
@@ -342,6 +345,7 @@ export default function NuevoInformePage() {
 
       // 3. Guardar informe
       const res = await crearInforme(payload);
+      createdId = res.id;
 
       // 4. Si hay imágenes en las observaciones, subirlas vinculándolas al desvío correspondiente
       const obsConImagen = observacionesCargadas.filter(
@@ -363,6 +367,14 @@ export default function NuevoInformePage() {
       // 5. Redirigir a la firma
       router.push(`/informes/${res.id}/firma`);
     } catch (err: any) {
+      // Si el informe ya se creó pero falló la subida de fotos, no reintentar crear otro
+      if (createdId) {
+        setError(
+          "El informe se guardó, pero falló la subida de alguna foto. Podés completarlas desde Editar.",
+        );
+        router.push(`/informes/${createdId}/editar`);
+        return;
+      }
       setError(
         err.response?.data?.error ||
           err.message ||
@@ -849,24 +861,18 @@ export default function NuevoInformePage() {
                       </button>
                     </div>
                   ) : (
-                    <label className="border-2 border-dashed border-slate-200 hover:border-blue-500 hover:bg-blue-50/25 rounded-xl h-20 w-20 flex flex-col items-center justify-center gap-1 transition-all cursor-pointer relative shrink-0">
+                    <PhotoSourcePicker
+                      onSelect={(file) => {
+                        setObsImagenFile(file);
+                        setObsPreviewUrl(URL.createObjectURL(file));
+                      }}
+                      triggerClassName="border-2 border-dashed border-slate-200 hover:border-blue-500 hover:bg-blue-50/25 rounded-xl h-20 w-20 flex flex-col items-center justify-center gap-1 transition-all cursor-pointer shrink-0"
+                    >
                       <Camera className="h-5 w-5 text-slate-400" />
                       <span className="text-[8px] font-bold text-slate-400">
                         Subir
                       </span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            setObsImagenFile(file);
-                            setObsPreviewUrl(URL.createObjectURL(file));
-                          }
-                        }}
-                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                      />
-                    </label>
+                    </PhotoSourcePicker>
                   )}
                   <div className="text-xs text-slate-400">
                     Sube una foto que evidencie el desvío.

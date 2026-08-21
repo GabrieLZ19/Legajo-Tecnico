@@ -28,6 +28,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { useAlert } from "@/context/AlertContext";
+import { PhotoSourcePicker } from "@/components/PhotoSourcePicker";
 
 export default function EditarInformePage() {
   const router = useRouter();
@@ -36,10 +37,14 @@ export default function EditarInformePage() {
   const { showAlert } = useAlert();
   const { user, empresa } = useAuth();
   const { editarInforme } = useInformes(empresa?.id);
-  const { data: informe, isLoading: loadingInforme } = useInformeDetalle(id);
+  // Evitar que un refetch (focus) pise el formulario / contenteditable mientras se edita
+  const { data: informe, isLoading: loadingInforme } = useInformeDetalle(id, {
+    refetchOnWindowFocus: false,
+  });
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const formHydratedForId = useRef<string | null>(null);
 
   // Campos del formulario principal
   const [lugar, setLugar] = useState("");
@@ -177,62 +182,77 @@ export default function EditarInformePage() {
     }
   };
 
-  // Cargar datos del informe
+  // Cargar datos del informe una sola vez (no pisar ediciones locales con refetch)
   useEffect(() => {
-    if (informe) {
-      // Validar si ya está firmado para impedir edición
-      const preventorFirmado = informe.firmas_informe?.some(
-        (f) => f.tipo === "preventor",
+    if (!informe) return;
+
+    const preventorFirmado = informe.firmas_informe?.some(
+      (f) => f.tipo === "preventor",
+    );
+    if (preventorFirmado) {
+      showAlert(
+        "warning",
+        "Acceso denegado",
+        "No se pueden editar informes que ya han sido firmados.",
       );
-      if (preventorFirmado) {
-        showAlert(
-          "warning",
-          "Acceso denegado",
-          "No se pueden editar informes que ya han sido firmados.",
-        );
-        router.push(`/informes/${id}`);
-        return;
-      }
+      router.push(`/informes/${id}`);
+      return;
+    }
 
-      setLugar(informe.lugar_visita || "");
-      setActividad(informe.actividad || "");
+    if (formHydratedForId.current === informe.id) return;
+    formHydratedForId.current = informe.id;
 
-      const dateObj = new Date(informe.fecha_hora_visita);
-      setFecha(dateObj.toISOString().split("T")[0]);
+    setLugar(informe.lugar_visita || "");
+    setActividad(informe.actividad || "");
 
-      const hours = String(dateObj.getHours()).padStart(2, "0");
-      const minutes = String(dateObj.getMinutes()).padStart(2, "0");
-      setHora(`${hours}:${minutes}`);
+    const dateObj = new Date(informe.fecha_hora_visita);
+    setFecha(dateObj.toISOString().split("T")[0]);
 
-      // Inicializar observaciones cargadas estructuradas
-      if (informe.puntos_mejora) {
-        const loadedObs = informe.puntos_mejora.map((pm: any) => {
-          const matchingAccs =
-            informe.acciones_mejora?.filter(
-              (acc: any) => acc.punto_mejora_id === pm.id,
-            ) || [];
-          return {
-            id_temp: pm.id,
-            id: pm.id,
-            detalle: pm.detalle,
-            acciones: matchingAccs.map((acc: any) => ({
-              id: acc.id,
-              descripcion: acc.descripcion,
-              responsable: acc.responsable || "",
-            })),
-            evidencia_url: pm.evidencia_url || undefined,
-          };
-        });
-        setObservacionesCargadas(loadedObs);
-      }
+    const hours = String(dateObj.getHours()).padStart(2, "0");
+    const minutes = String(dateObj.getMinutes()).padStart(2, "0");
+    setHora(`${hours}:${minutes}`);
 
-      if (editorRef.current) {
-        editorRef.current.innerHTML = sanitizeRichHtml(
-          informe.declaracion_legal || "",
-        );
-      }
+    if (informe.puntos_mejora) {
+      const loadedObs = informe.puntos_mejora.map((pm: any) => {
+        const matchingAccs =
+          informe.acciones_mejora?.filter(
+            (acc: any) => acc.punto_mejora_id === pm.id,
+          ) || [];
+        return {
+          id_temp: pm.id,
+          id: pm.id,
+          detalle: pm.detalle,
+          acciones: matchingAccs.map((acc: any) => ({
+            id: acc.id,
+            descripcion: acc.descripcion,
+            responsable: acc.responsable || "",
+          })),
+          evidencia_url: pm.evidencia_url || undefined,
+        };
+      });
+      setObservacionesCargadas(loadedObs);
+    }
+
+    if (editorRef.current) {
+      editorRef.current.innerHTML = sanitizeRichHtml(
+        informe.declaracion_legal || "",
+      );
     }
   }, [informe, id, router, showAlert]);
+
+  // Si cambia el id de ruta, permitir rehidratar el formulario
+  useEffect(() => {
+    formHydratedForId.current = null;
+  }, [id]);
+
+  // Cuando el editor monta después de hidratar estado, aplicar declaración si quedó pendiente
+  useEffect(() => {
+    if (!informe || formHydratedForId.current !== informe.id) return;
+    if (!editorRef.current) return;
+    if (editorRef.current.innerHTML.trim()) return;
+    if (!informe.declaracion_legal) return;
+    editorRef.current.innerHTML = sanitizeRichHtml(informe.declaracion_legal);
+  }, [informe, loadingInforme]);
 
   // Actualizar los estados activos de la barra de herramientas
   const updateToolbarState = () => {
@@ -370,28 +390,25 @@ export default function EditarInformePage() {
       setError("No hay ninguna empresa asociada a la sesión.");
       return;
     }
+    if (loading) return;
 
     setLoading(true);
     setError(null);
 
     try {
-      // 1. Combinar fecha y hora
       const dateObj = new Date(`${fecha}T${hora}:00`);
-
-      // Obtener el texto editado de la declaración legal
       const finalDeclaracion = editorRef.current?.innerHTML || "";
 
-      // 2. Armar el payload de actualización con desvíos/puntos de mejora
       const payload = {
         actividad: actividad,
         fecha_hora_visita: dateObj.toISOString(),
         lugar_visita: lugar,
         declaracion_legal: finalDeclaracion,
-        observaciones: "", // ya no se usa texto plano, pero enviamos vacío
+        observaciones: "",
         puntos_mejora: observacionesCargadas.map((obs) => ({
-          id: obs.id, // ID en base de datos si ya existía
+          id: obs.id,
           detalle: obs.detalle,
-          evidencia_url: obs.evidencia_url, // conservar URL existente si ya tenía
+          evidencia_url: obs.evidencia_url,
           acciones: obs.acciones.map((a) => ({
             id: a.id,
             descripcion: a.descripcion,
@@ -400,10 +417,8 @@ export default function EditarInformePage() {
         })),
       };
 
-      // 3. Guardar cambios
       const updatedInforme = await editarInforme({ id, data: payload as any });
 
-      // 4. Si hay imágenes nuevas seleccionadas durante la edición, subirlas
       const obsConImagenNueva = observacionesCargadas.filter(
         (obs) => obs.imagenFile,
       );
@@ -415,17 +430,17 @@ export default function EditarInformePage() {
           const formData = new FormData();
           formData.append("evidencia", obs.imagenFile!);
           formData.append("punto_mejora_id", pmCreado.id);
-
           await subirEvidenciaInforme(id, formData);
         }
       }
 
+      // Ir al detalle con datos frescos; el alert no debe bloquear la navegación
+      router.replace(`/informes/${id}`);
       showAlert(
         "success",
         "Informe actualizado",
         "Los cambios se guardaron correctamente.",
       );
-      router.push(`/informes/${id}`);
     } catch (err: any) {
       setError(
         err.response?.data?.error ||
@@ -510,6 +525,7 @@ export default function EditarInformePage() {
                   required
                   value={actividad}
                   onChange={(e) => setActividad(e.target.value)}
+                  placeholder="Ej. Relevamiento general"
                   className="block w-full px-4 py-3 border border-slate-200 rounded-xl bg-brand-input-bg text-slate-700 placeholder-slate-450 focus:outline-hidden focus:ring-2 focus:ring-blue-600/25 focus:border-blue-600 text-xs font-bold transition-all"
                 />
               </div>
@@ -917,24 +933,18 @@ export default function EditarInformePage() {
                       </button>
                     </div>
                   ) : (
-                    <label className="border-2 border-dashed border-slate-200 hover:border-blue-500 hover:bg-blue-50/25 rounded-xl h-20 w-20 flex flex-col items-center justify-center gap-1 transition-all cursor-pointer relative shrink-0">
+                    <PhotoSourcePicker
+                      onSelect={(file) => {
+                        setObsImagenFile(file);
+                        setObsPreviewUrl(URL.createObjectURL(file));
+                      }}
+                      triggerClassName="border-2 border-dashed border-slate-200 hover:border-blue-500 hover:bg-blue-50/25 rounded-xl h-20 w-20 flex flex-col items-center justify-center gap-1 transition-all cursor-pointer shrink-0"
+                    >
                       <Camera className="h-5 w-5 text-slate-400" />
                       <span className="text-[8px] font-bold text-slate-400">
                         Subir
                       </span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            setObsImagenFile(file);
-                            setObsPreviewUrl(URL.createObjectURL(file));
-                          }
-                        }}
-                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                      />
-                    </label>
+                    </PhotoSourcePicker>
                   )}
                   <div className="text-xs text-slate-400">
                     Sube una foto que evidencie el desvío.
