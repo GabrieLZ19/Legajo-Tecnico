@@ -15,7 +15,9 @@ export type AdminUsuarioFormValues = {
 export type AdminUsuarioUpdateValues = Omit<
   AdminUsuarioFormValues,
   "email" | "password"
->;
+> & {
+  permisos_personalizados?: AdminUsuario["permisos_personalizados"];
+};
 
 export function useAdminUsuarios() {
   const queryClient = useQueryClient();
@@ -63,13 +65,19 @@ export function useAdminUsuarios() {
       id: string;
       payload: AdminUsuarioUpdateValues;
     }) => {
-      const response = await api.put(`/admin/usuarios/${id}`, {
+      const body: Record<string, unknown> = {
         nombre_completo: payload.nombre_completo,
         username: payload.username,
         rol: payload.rol,
         activo: payload.activo,
         empresa_id: payload.rol === "dueno" ? payload.empresa_id : null,
-      });
+      };
+
+      if (payload.permisos_personalizados !== undefined) {
+        body.permisos_personalizados = payload.permisos_personalizados;
+      }
+
+      const response = await api.put(`/admin/usuarios/${id}`, body);
       return response.data as AdminUsuario;
     },
     onSuccess: invalidate,

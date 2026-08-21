@@ -1,24 +1,40 @@
-'use client';
+"use client";
 
-import React from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { Home, FileText, CheckSquare, HardHat, GraduationCap } from 'lucide-react';
+import React from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  Home,
+  FileText,
+  CheckSquare,
+  HardHat,
+  GraduationCap,
+  type LucideIcon,
+} from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  getVisibleAppNavModules,
+  type AppModuleKey,
+} from "@/lib/moduleAccess";
 
-import { useAuth } from '@/hooks/useAuth';
+const MODULE_ICONS: Record<AppModuleKey, LucideIcon> = {
+  informes: FileText,
+  planAccion: CheckSquare,
+  epp: HardHat,
+  capacitaciones: GraduationCap,
+};
 
 export const BottomNav: React.FC = () => {
   const pathname = usePathname();
   const { user } = useAuth();
 
   const navItems = [
-    { name: 'Inicio', href: '/dashboard', icon: Home },
-    { name: 'Informes', href: '/informes', icon: FileText },
-    { name: 'Plan', href: '/plan-accion', icon: CheckSquare },
-    ...(user?.rol !== "dueno" && user?.rol !== "ente_regulador" ? [
-      { name: 'EPP', href: '/epp', icon: HardHat },
-      { name: 'Capacit.', href: '/capacitaciones', icon: GraduationCap },
-    ] : []),
+    { name: "Inicio", href: "/dashboard", icon: Home },
+    ...getVisibleAppNavModules(user).map((mod) => ({
+      name: mod.shortLabel,
+      href: mod.href,
+      icon: MODULE_ICONS[mod.key],
+    })),
   ];
 
   return (
@@ -33,10 +49,12 @@ export const BottomNav: React.FC = () => {
               key={item.href}
               href={item.href}
               className={`flex flex-col items-center justify-center w-full h-full text-xs font-medium transition-colors ${
-                isActive ? 'text-blue-600' : 'text-slate-500 hover:text-slate-800'
+                isActive
+                  ? "text-blue-600"
+                  : "text-slate-500 hover:text-slate-800"
               }`}
             >
-              <Icon className={`h-5 w-5 mb-1 ${isActive ? 'stroke-2' : ''}`} />
+              <Icon className={`h-5 w-5 mb-1 ${isActive ? "stroke-2" : ""}`} />
               {item.name}
             </Link>
           );
@@ -45,4 +63,5 @@ export const BottomNav: React.FC = () => {
     </nav>
   );
 };
+
 export default BottomNav;

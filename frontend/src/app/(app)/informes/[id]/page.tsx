@@ -12,6 +12,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAlert } from "@/context/AlertContext";
 import { useAuth } from "@/hooks/useAuth";
 import { sanitizeRichHtml } from "@/lib/sanitizeHtml";
+import { canWriteAppModule } from "@/lib/moduleAccess";
+import {
+  assertDownloadBlob,
+  triggerBrowserDownload,
+} from "@/lib/downloadBlob";
 import {
   Calendar,
   User,
@@ -76,17 +81,11 @@ export default function InformeDetallePage() {
     setDownloadingPdf(true);
     try {
       const pdfData = await descargarInformePdf(id);
-      const blob = new Blob([pdfData], { type: "application/pdf" });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute(
-        "download",
+      const blob = await assertDownloadBlob(pdfData, "pdf");
+      triggerBrowserDownload(
+        blob,
         `constancia_visita_${informe?.numero_informe || id}.pdf`,
       );
-      document.body.appendChild(link);
-      link.click();
-      link.parentNode?.removeChild(link);
       showAlert(
         "success",
         "Descarga exitosa",
@@ -94,12 +93,11 @@ export default function InformeDetallePage() {
       );
     } catch (err) {
       console.error(err);
-
-      showAlert(
-        "error",
-        "Error al descargar",
-        "No se pudo generar o descargar el PDF del informe.",
-      );
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : "No se pudo generar o descargar el PDF del informe.";
+      showAlert("error", "Error al descargar", message);
     } finally {
       setDownloadingPdf(false);
     }
@@ -214,8 +212,7 @@ export default function InformeDetallePage() {
 
         {/* Acciones Rápidas */}
         <div className="flex gap-2">
-          {!preventorFirmado &&
-            (user?.rol === "preventor" || user?.rol === "admin") && (
+          {!preventorFirmado && canWriteAppModule(user, "informes") && (
               <>
                 <button
                   onClick={() => router.push(`/informes/${id}/editar`)}
@@ -452,8 +449,7 @@ export default function InformeDetallePage() {
                           </div>
                         )}
 
-                        {(user?.rol === "preventor" ||
-                          user?.rol === "admin") && (
+                        {canWriteAppModule(user, "informes") && (
                           <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg transition-colors border border-slate-200">
                             {uploadingId === pm.id ? (
                               <>

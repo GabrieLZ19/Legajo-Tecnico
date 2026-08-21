@@ -2,6 +2,8 @@ import type { RolUsuario } from "@/types";
 
 export type AccessLevel = "total" | "lectura" | "oculto";
 
+export const ACCESS_LEVELS: AccessLevel[] = ["total", "lectura", "oculto"];
+
 export type RoleOption = {
   value: RolUsuario;
   label: string;
@@ -213,4 +215,42 @@ export function getAccessBadgeClasses(access: AccessLevel) {
     case "oculto":
       return "bg-slate-50 text-slate-500 border border-slate-200";
   }
+}
+
+/** Une defaults del rol con lo guardado (por si se agregan módulos nuevos). */
+export function resolveModulePermissions(
+  rol: RolUsuario,
+  saved?: RoleModulePermission[] | null,
+): RoleModulePermission[] {
+  const defaults = MODULE_PERMISSIONS[rol] || [];
+  if (!saved || !Array.isArray(saved) || saved.length === 0) {
+    return defaults.map((item) => ({ ...item }));
+  }
+
+  return defaults.map((item) => {
+    const match = saved.find((entry) => entry.module === item.module);
+    if (!match) return { ...item };
+    const access =
+      match.access === "total" ||
+      match.access === "lectura" ||
+      match.access === "oculto"
+        ? match.access
+        : item.access;
+    return { ...item, access };
+  });
+}
+
+export function permissionsAreEqual(
+  a: RoleModulePermission[],
+  b: RoleModulePermission[],
+) {
+  if (a.length !== b.length) return false;
+  return a.every((item, index) => {
+    const other = b[index];
+    return (
+      item.module === other.module &&
+      item.access === other.access &&
+      item.description === other.description
+    );
+  });
 }

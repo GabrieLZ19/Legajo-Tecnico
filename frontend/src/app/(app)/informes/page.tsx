@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useInformes } from "@/hooks/useInformes";
 import Link from "next/link";
 import { Plus, Calendar, Search, Filter, Folder } from "lucide-react";
+import { canWriteAppModule } from "@/lib/moduleAccess";
 
 export default function InformesPage() {
   const { user, empresa } = useAuth();
@@ -33,7 +34,7 @@ export default function InformesPage() {
   const [appliedEstado, setAppliedEstado] = useState<string>("todos");
   const [appliedLugar, setAppliedLugar] = useState<string>("todos");
 
-  const canCreate = user?.rol === "preventor" || user?.rol === "admin";
+  const canCreate = canWriteAppModule(user, "informes");
 
   // Obtener todos los lugares únicos para el filtro
   const lugaresUnicos = Array.from(

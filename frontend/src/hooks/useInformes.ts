@@ -56,8 +56,11 @@ export const useInformeDetalle = (id: string) => {
 };
 
 export const descargarInformePdf = async (id: string) => {
-  const response = await api.get(`/informes/${id}/pdf`, { responseType: 'blob' });
-  return response.data;
+  const response = await api.get(`/informes/${id}/pdf`, {
+    responseType: "blob",
+    timeout: 60000,
+  });
+  return response.data as Blob;
 };
 
 export const subirEvidenciaInforme = async (id: string, formData: FormData) => {

@@ -14,13 +14,14 @@ import {
 import { CapacitacionPlantilla } from "@/types";
 import { useAuth } from "@/hooks/useAuth";
 import { useCapacitacionPlantillas } from "@/hooks/useCapacitacionPlantillas";
+import { canWriteAppModule } from "@/lib/moduleAccess";
 
 export default function BibliotecaEmpresaPage() {
   const { empresa, user } = useAuth();
   const { listarPlantillas, eliminarPlantilla } = useCapacitacionPlantillas();
   const [plantillas, setPlantillas] = useState<CapacitacionPlantilla[]>([]);
   const [loading, setLoading] = useState(true);
-  const canManage = user?.rol === "preventor" || user?.rol === "admin";
+  const canManage = canWriteAppModule(user, "capacitaciones");
 
   const load = async () => {
     if (!empresa?.id) return;

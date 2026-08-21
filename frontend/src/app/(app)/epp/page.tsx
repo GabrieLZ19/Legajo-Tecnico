@@ -18,6 +18,7 @@ import { useAlert } from "@/context/AlertContext";
 import { CatalogoTab } from "./_components/CatalogoTab";
 import { PersonalTab } from "./_components/PersonalTab";
 import { LicitacionesTab } from "./_components/LicitacionesTab";
+import { canWriteAppModule } from "@/lib/moduleAccess";
 
 type Tab = "entregas" | "personal" | "catalogo" | "licitaciones";
 
@@ -48,7 +49,7 @@ export default function EppPage() {
   const [loading, setLoading] = useState(true);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
-  const canCreate = user?.rol === "preventor" || user?.rol === "admin";
+  const canCreate = canWriteAppModule(user, "epp");
 
   const fetchData = async () => {
     if (!empresa?.id) return;

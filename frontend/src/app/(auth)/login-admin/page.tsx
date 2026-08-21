@@ -36,11 +36,11 @@ export default function LoginAdminPage() {
       <div className="bg-white rounded-4xl px-8 py-10 max-w-105 w-full shadow-2xl relative z-10 space-y-8">
         {/* Encabezado */}
         <div className="text-center space-y-3">
-          <div className="h-14 w-14 rounded-2xl overflow-hidden flex items-center justify-center shadow-lg mx-auto bg-slate-100">
+          <div className="h-14 w-14 rounded-2xl overflow-hidden flex items-center justify-center shadow-lg mx-auto bg-white">
             <img
               src="/login.jpg"
               alt="Logo"
-              className="h-full w-full object-cover"
+              className="h-full w-full object-contain"
             />
           </div>
           <div className="space-y-1">

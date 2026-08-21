@@ -132,3 +132,19 @@ table.cap-table th {
   font-weight: 700;
 }
 
+/* Base natural de la diapositiva: sin tope de tamaño.
+   El JS aplica transform:scale para llenar el viewport. */
+.cap-html-content-invert.cap-slide-fullscreen {
+  max-width: none !important;
+}
+
+.cap-html-content-invert.cap-slide-fullscreen img {
+  width: auto !important;
+  height: auto !important;
+  max-width: none !important;
+  max-height: none !important;
+  object-fit: contain;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+

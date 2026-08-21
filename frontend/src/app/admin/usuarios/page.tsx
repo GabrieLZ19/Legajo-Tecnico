@@ -310,7 +310,7 @@ export default function AdminUsuariosPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_360px]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(340px,440px)]">
         <div className="space-y-5">
           <div className="flex flex-wrap gap-2">
             {roleFilters.map((filter) => (
@@ -339,7 +339,20 @@ export default function AdminUsuariosPage() {
           />
         </div>
 
-        <PermissionsPanel usuario={selectedUsuario} />
+        <PermissionsPanel
+          usuario={selectedUsuario}
+          onSaved={(updated) => {
+            setSelectedUsuarioId(updated.id);
+            showAlert(
+              "success",
+              "Permisos guardados",
+              `Se actualizó el alcance de ${updated.nombre_completo || updated.username}.`,
+            );
+          }}
+          onError={(message) => {
+            showAlert("error", "No se pudieron guardar", message);
+          }}
+        />
       </div>
 
 

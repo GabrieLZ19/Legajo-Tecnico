@@ -15,7 +15,43 @@ import {
   Award,
   HardHat,
   ClipboardList,
+  type LucideIcon,
 } from "lucide-react";
+import {
+  canWriteAppModule,
+  getVisibleAppNavModules,
+  type AppModuleKey,
+} from "@/lib/moduleAccess";
+
+const MODULE_CARD_META: Record<
+  AppModuleKey,
+  { title: string; icon: LucideIcon; iconWrap: string; iconColor: string }
+> = {
+  informes: {
+    title: "Informe de Visita",
+    icon: ClipboardList,
+    iconWrap: "bg-blue-50",
+    iconColor: "text-blue-600",
+  },
+  planAccion: {
+    title: "Plan de Acción",
+    icon: CheckSquare,
+    iconWrap: "bg-blue-50",
+    iconColor: "text-blue-600",
+  },
+  epp: {
+    title: "Entrega de EPP",
+    icon: HardHat,
+    iconWrap: "bg-emerald-50",
+    iconColor: "text-emerald-600",
+  },
+  capacitaciones: {
+    title: "Capacitaciones",
+    icon: GraduationCap,
+    iconWrap: "bg-purple-50",
+    iconColor: "text-purple-600",
+  },
+};
 
 export default function DashboardPage() {
   const { user, empresa } = useAuth();
@@ -26,7 +62,8 @@ export default function DashboardPage() {
     empresa?.id,
   );
 
-  const canCreate = user?.rol === "preventor" || user?.rol === "admin";
+  const canCreate = canWriteAppModule(user, "informes");
+  const visibleModules = getVisibleAppNavModules(user);
   const firstName = user?.nombre_completo?.split(" ")[0] || "Usuario";
 
   const pct = loadingMetrics ? 0 : metricas?.porcentaje_cumplimiento || 0;
@@ -74,7 +111,7 @@ export default function DashboardPage() {
       {/* Encabezado Bienvenida */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="h-12 w-12 overflow-hidden rounded-xl bg-slate-50 border border-slate-200 shadow-2xs shrink-0 select-none">
+          <div className="h-12 w-12 overflow-hidden rounded-xl bg-white border border-slate-200 shadow-2xs shrink-0 select-none">
             <img
               src="/login.jpg"
               alt="Logo Legajo Técnico"
@@ -245,87 +282,37 @@ export default function DashboardPage() {
           <h2 className="text-lg font-bold text-slate-900">
             Módulos habilitados
           </h2>
-          <span className="text-xs font-bold text-slate-400">Según CUIT</span>
+          <span className="text-xs font-bold text-slate-400">
+            Según permisos
+          </span>
         </div>
 
-        <div
-          className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${user?.rol !== "dueno" ? "lg:grid-cols-4" : ""}`}
-        >
-          {/* Route to Informes */}
-          <Link
-            href="/informes"
-            className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between h-36 cursor-pointer"
-          >
-            <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
-              <ClipboardList className="h-6 w-6" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-slate-800">
-                Informe de Visita
-              </h3>
-              <span className="inline-flex mt-2 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-emerald-100">
-                Habilitado
-              </span>
-            </div>
-          </Link>
-
-          {/* Entrega de EPP (Solo para preventor y admin) */}
-          {user?.rol !== "dueno" && (
-            <Link
-              href="/epp"
-              className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between h-36 cursor-pointer"
-            >
-              <div className="h-10 w-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
-                <HardHat className="h-6 w-6" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-800">
-                  Entrega de EPP
-                </h3>
-                <span className="inline-flex mt-2 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-emerald-100">
-                  Habilitado
-                </span>
-              </div>
-            </Link>
-          )}
-
-          {/* Plan de Acción */}
-          <Link
-            href="/plan-accion"
-            className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between h-36 cursor-pointer"
-          >
-            <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
-              <CheckSquare className="h-6 w-6" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-slate-800">
-                Plan de Acción
-              </h3>
-              <span className="inline-flex mt-2 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-emerald-100">
-                Habilitado
-              </span>
-            </div>
-          </Link>
-
-          {/* Capacitaciones (Solo para preventor y admin) */}
-          {user?.rol !== "dueno" && (
-            <Link
-              href="/capacitaciones"
-              className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between h-36 cursor-pointer"
-            >
-              <div className="h-10 w-10 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600">
-                <GraduationCap className="h-6 w-6" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-800">
-                  Capacitaciones
-                </h3>
-                <span className="inline-flex mt-2 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-emerald-100">
-                  Habilitado
-                </span>
-              </div>
-            </Link>
-          )}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {visibleModules.map((mod) => {
+            const meta = MODULE_CARD_META[mod.key];
+            const Icon = meta.icon;
+            return (
+              <Link
+                key={mod.key}
+                href={mod.href}
+                className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between h-36 cursor-pointer"
+              >
+                <div
+                  className={`h-10 w-10 rounded-xl ${meta.iconWrap} flex items-center justify-center ${meta.iconColor}`}
+                >
+                  <Icon className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800">
+                    {meta.title}
+                  </h3>
+                  <span className="inline-flex mt-2 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-emerald-100">
+                    Habilitado
+                  </span>
+                </div>
+              </Link>
+            );
+          })}
         </div>
       </div>
 

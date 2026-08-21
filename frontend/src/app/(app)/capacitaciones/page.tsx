@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { useCapacitaciones } from "@/hooks/useCapacitaciones";
+import { canWriteAppModule } from "@/lib/moduleAccess";
 
 export default function CapacitacionesPage() {
   const { user, empresa } = useAuth();
@@ -24,7 +25,7 @@ export default function CapacitacionesPage() {
   const [loading, setLoading] = useState(true);
   const [filtroEstado, setFiltroEstado] = useState<string>("todas");
 
-  const canCreate = user?.rol === "preventor" || user?.rol === "admin";
+  const canCreate = canWriteAppModule(user, "capacitaciones");
   const canViewPlan = !!user;
 
   useEffect(() => {

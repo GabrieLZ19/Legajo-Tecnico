@@ -20,6 +20,7 @@ import {
   subirPlanAnual,
   descargarPlantillaPlanAnual,
 } from "@/lib/planAnual";
+import { canWriteAppModule } from "@/lib/moduleAccess";
 
 const currentYear = new Date().getFullYear();
 
@@ -28,7 +29,7 @@ export default function PlanAnualPage() {
   const { showAlert } = useAlert();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const canUpload = user?.rol === "preventor" || user?.rol === "admin";
+  const canUpload = canWriteAppModule(user, "capacitaciones");
 
   const [anio, setAnio] = useState(currentYear);
   const [aniosDisponibles, setAniosDisponibles] = useState<PlanAnualAnioItem[]>(

@@ -9,6 +9,12 @@ import Link from "next/link";
 import { Empresa } from "@/types";
 import { LogOut, Building2, ChevronDown } from "lucide-react";
 import { NotificationBell } from "@/components/notification-bell";
+import {
+  canWriteAppModule,
+  getVisibleAppNavModules,
+  isPathBlockedByPermissions,
+  isWritePathBlockedByPermissions,
+} from "@/lib/moduleAccess";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, empresa, loading, logout, cambiarEmpresaContexto } = useAuth();
@@ -25,23 +31,29 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [user, loading, router]);
 
-  // Protección de rutas según el rol
+  // Protección de rutas según permisos personalizados / rol
   useEffect(() => {
-    if (!loading && user) {
-      if (user.rol === "ente_regulador") {
-        const isEppRoute = pathname.startsWith("/epp");
-        const isCapacitacionesRoute = pathname.startsWith("/capacitaciones");
-        const isInformeNuevoRoute = pathname.endsWith("/informes/nuevo");
-        const isInformeEditarRoute = pathname.endsWith("/editar");
+    if (loading || !user || !pathname) return;
 
-        if (
-          isEppRoute ||
-          isCapacitacionesRoute ||
-          isInformeNuevoRoute ||
-          isInformeEditarRoute
-        ) {
-          router.replace("/dashboard");
-        }
+    if (isPathBlockedByPermissions(user, pathname)) {
+      router.replace("/dashboard");
+      return;
+    }
+
+    if (isWritePathBlockedByPermissions(user, pathname)) {
+      router.replace("/dashboard");
+      return;
+    }
+
+    // Compat: ente sin escritura en informes sigue bloqueado de altas/edición
+    if (
+      user.rol === "ente_regulador" &&
+      !canWriteAppModule(user, "informes")
+    ) {
+      const isInformeNuevoRoute = pathname.endsWith("/informes/nuevo");
+      const isInformeEditarRoute = pathname.endsWith("/editar");
+      if (isInformeNuevoRoute || isInformeEditarRoute) {
+        router.replace("/dashboard");
       }
     }
   }, [user, loading, pathname, router]);
@@ -106,15 +118,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   };
 
   const navItems = [
-    { name: "Inicio", href: "/dashboard" },
-    { name: "Informes", href: "/informes" },
-    { name: "Plan de Acción", href: "/plan-accion" },
-    ...(user?.rol !== "dueno" && user?.rol !== "ente_regulador"
-      ? [
-          { name: "EPP", href: "/epp", disabled: false },
-          { name: "Capacitaciones", href: "/capacitaciones", disabled: false },
-        ]
-      : []),
+    { name: "Inicio", href: "/dashboard", disabled: false },
+    ...getVisibleAppNavModules(user).map((mod) => ({
+      name: mod.label,
+      href: mod.href,
+      disabled: false,
+    })),
   ];
 
   const handleSeleccionarEmpresa = (emp: Empresa) => {
@@ -135,26 +144,26 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen flex flex-col bg-slate-50">
       {/* Header Desktop & Mobile */}
       <header className="sticky top-0 bg-white border-b border-slate-200 z-40 shadow-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-10 h-16 flex items-center gap-3 lg:gap-5">
           {/* Logo */}
           <Link
             href="/dashboard"
             className="flex items-center gap-2 shrink-0 hover:opacity-90 transition-opacity cursor-pointer select-none"
           >
-            <div className="h-9 w-9 rounded-lg overflow-hidden flex items-center justify-center shadow-xs bg-slate-100">
+            <div className="h-9 w-9 rounded-lg overflow-hidden flex items-center justify-center shadow-xs bg-white">
               <img
                 src="/login.jpg"
                 alt="Logo"
-                className="h-full w-full object-cover"
+                className="h-full w-full object-contain"
               />
             </div>
-            <span className="font-bold text-[#1e3a8a] text-sm sm:text-md md:text-lg block">
+            <span className="font-bold text-[#1e3a8a] text-sm lg:text-base whitespace-nowrap">
               Legajo Técnico
             </span>
           </Link>
 
           {/* Navigation Links (Desktop) */}
-          <nav className="hidden md:flex items-center space-x-1 ml-6">
+          <nav className="hidden md:flex items-center gap-0.5 lg:gap-1 min-w-0 flex-1">
             {navItems.map((item) => {
               const isActive = pathname
                 ? pathname === item.href || pathname.startsWith(item.href + "/")
@@ -163,7 +172,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <Link
                   key={item.name}
                   href={item.href}
-                  className={`px-3 py-2 rounded-md text-sm font-semibold transition-all ${
+                  className={`px-2.5 lg:px-3 py-2 rounded-md text-sm font-semibold whitespace-nowrap transition-all ${
                     item.disabled
                       ? "text-slate-400 cursor-not-allowed"
                       : isActive
@@ -179,28 +188,31 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </nav>
 
           {/* Right Side Info */}
-          <div className="flex items-center gap-3 ml-auto">
+          <div className="flex items-center gap-2 lg:gap-3 shrink-0 ml-auto">
             {/* Company Selector / Pill */}
             {localEmpresa && (
-              <div className="hidden lg:flex relative">
+              <div className="hidden xl:flex relative max-w-[280px]">
                 <button
                   onClick={() =>
                     puedeSeleccionarEmpresa &&
                     setShowEmpresaSelector(!showEmpresaSelector)
                   }
-                  className={`flex items-center gap-2 bg-slate-100 border border-slate-200 px-3.5 py-1.5 rounded-full text-xs font-semibold text-slate-700 transition-all ${
+                  className={`flex items-center gap-2 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-full text-xs font-semibold text-slate-700 transition-all max-w-full ${
                     puedeSeleccionarEmpresa
                       ? "hover:bg-slate-200 hover:border-slate-300 cursor-pointer"
                       : ""
                   }`}
+                  title={`${localEmpresa.razon_social} · ${localEmpresa.cuit}`}
                 >
-                  <Building2 className="h-3.5 w-3.5 text-blue-600" />
-                  <span>{localEmpresa.razon_social}</span>
-                  <span className="text-slate-300">•</span>
-                  <span className="text-slate-500">{localEmpresa.cuit}</span>
+                  <Building2 className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                  <span className="truncate">{localEmpresa.razon_social}</span>
+                  <span className="text-slate-300 shrink-0">•</span>
+                  <span className="text-slate-500 shrink-0 tabular-nums">
+                    {localEmpresa.cuit}
+                  </span>
                   {puedeSeleccionarEmpresa && (
                     <ChevronDown
-                      className={`h-3.5 w-3.5 text-slate-400 transition-transform ${showEmpresaSelector ? "rotate-180" : ""}`}
+                      className={`h-3.5 w-3.5 text-slate-400 shrink-0 transition-transform ${showEmpresaSelector ? "rotate-180" : ""}`}
                     />
                   )}
                 </button>
@@ -259,12 +271,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {/* User Avatar & Name */}
             <Link
               href="/configuracion"
-              className="flex items-center gap-2 border-l border-slate-200 pl-3 hover:text-blue-600 transition-colors cursor-pointer"
+              className="flex items-center gap-2 border-l border-slate-200 pl-2.5 lg:pl-3 hover:text-blue-600 transition-colors cursor-pointer min-w-0"
             >
               <div className="h-8 w-8 rounded-full bg-brand-primary text-white flex items-center justify-center text-xs font-bold shrink-0">
                 {getInitials(user.nombre_completo || "Usuario")}
               </div>
-              <span className="text-sm font-bold text-slate-800 hidden sm:block">
+              <span className="text-sm font-bold text-slate-800 hidden 2xl:block truncate max-w-[160px]">
                 {user.nombre_completo}
               </span>
             </Link>
@@ -272,7 +284,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {/* Logout */}
             <button
               onClick={logout}
-              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer shrink-0"
               title="Cerrar sesión"
             >
               <LogOut className="h-4 w-4" />
@@ -282,7 +294,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24 md:pb-8">
+      <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 xl:px-10 py-6 pb-24 md:pb-8">
         {children}
       </main>
 

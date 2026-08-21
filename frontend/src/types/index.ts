@@ -42,7 +42,11 @@ export interface Perfil {
   rol: RolUsuario;
   activo: boolean;
   created_at: string;
-  permisos_personalizados?: any;
+  permisos_personalizados?: Array<{
+    module: string;
+    access: "total" | "lectura" | "oculto";
+    description: string;
+  }> | null;
 }
 
 export interface AdminUsuario extends Perfil {

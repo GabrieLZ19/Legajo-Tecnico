@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { sanitizeRichHtml } from "@/lib/sanitizeHtml";
 import {
@@ -62,6 +62,20 @@ const slideHtmlClass =
   "[&_table]:my-4 [&_table]:w-full " +
   "text-xl md:text-2xl leading-relaxed text-slate-100";
 
+/** Base de medición en fullscreen; el scale real lo aplica el contenedor. */
+const slideHtmlFullscreenClass =
+  "cap-html-content-invert cap-slide-fullscreen prose prose-invert max-w-none w-max mx-auto text-center " +
+  "[&_ul]:list-disc [&_ul]:pl-6 [&_ul]:my-3 [&_ul]:space-y-2 [&_ul]:text-left " +
+  "[&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:my-3 [&_ol]:space-y-2 [&_ol]:text-left " +
+  "[&_p]:mb-3 " +
+  "[&_h1]:text-4xl [&_h1]:font-black [&_h1]:mb-4 " +
+  "[&_h2]:text-3xl [&_h2]:font-bold [&_h2]:mb-3 " +
+  "[&_h3]:text-2xl [&_h3]:font-bold [&_h3]:mb-2 " +
+  "[&_strong]:font-bold [&_em]:italic " +
+  "[&_img]:rounded-2xl [&_img]:mx-auto [&_img]:shadow-2xl [&_img]:block " +
+  "[&_table]:my-4 [&_table]:w-full " +
+  "text-xl md:text-2xl leading-relaxed text-slate-100";
+
 export default function PresentarCapacitacionPage() {
   const params = useParams();
   const id = params.id as string;
@@ -77,12 +91,30 @@ export default function PresentarCapacitacionPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [slideScale, setSlideScale] = useState(1);
+  const [slideReady, setSlideReady] = useState(true);
   const stageRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const exitedFullscreenAt = useRef(0);
 
   // total = slides + QR final
   const total = slides.length + 1;
   const isQrSlide = index === slides.length;
+  const fitKey = `${index}-${isFullscreen}-${isQrSlide}`;
+  const [fitTrack, setFitTrack] = useState(fitKey);
+
+  // Ocultar de inmediato al cambiar slide/fullscreen para no pintar el tamaño sin escalar
+  if (fitTrack !== fitKey) {
+    setFitTrack(fitKey);
+    if (isFullscreen && !isQrSlide) {
+      setSlideReady(false);
+      setSlideScale(1);
+    } else {
+      setSlideReady(true);
+      setSlideScale(1);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -184,6 +216,109 @@ export default function PresentarCapacitacionPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [goNext, goPrev, salir, toggleFullscreen, total]);
 
+  /** Escala el slide para llenar el área útil (como un proyector). */
+  const measureSlideScale = useCallback((): number | null => {
+    const viewport = viewportRef.current;
+    const content = contentRef.current;
+    if (!viewport || !content) return null;
+    if (!isFullscreen || isQrSlide) return 1;
+
+    const pad = 16;
+    const vw = Math.max(0, viewport.clientWidth - pad * 2);
+    const vh = Math.max(0, viewport.clientHeight - pad * 2);
+    const cw = content.offsetWidth;
+    const ch = content.offsetHeight;
+    if (vw < 1 || vh < 1 || cw < 1 || ch < 1) return null;
+
+    return Math.min(Math.max(Math.min(vw / cw, vh / ch), 0.2), 6);
+  }, [isFullscreen, isQrSlide]);
+
+  const applySlideScale = useCallback(
+    (next: number) => {
+      setSlideScale(next);
+      const el = contentRef.current;
+      if (el && isFullscreen && !isQrSlide) {
+        el.style.transform = `scale(${next})`;
+        el.style.transformOrigin = "center center";
+        el.style.opacity = "1";
+      }
+      setSlideReady(true);
+    },
+    [isFullscreen, isQrSlide],
+  );
+
+  useLayoutEffect(() => {
+    if (!isFullscreen || isQrSlide) {
+      const el = contentRef.current;
+      if (el) {
+        el.style.transform = "";
+        el.style.opacity = "";
+      }
+      setSlideScale(1);
+      setSlideReady(true);
+      return;
+    }
+
+    const content = contentRef.current;
+    if (content) {
+      content.style.opacity = "0";
+      content.style.transform = "scale(1)";
+      content.style.transformOrigin = "center center";
+    }
+
+    const tryApply = () => {
+      const next = measureSlideScale();
+      if (next == null) return false;
+      applySlideScale(next);
+      return true;
+    };
+
+    if (tryApply()) return;
+
+    const imgs = Array.from(content?.querySelectorAll("img") ?? []);
+    const pending = imgs.filter((img) => !img.complete);
+    if (pending.length === 0) {
+      // Dimensiones aún no disponibles: reintentar en el próximo frame
+      const rafId = requestAnimationFrame(() => {
+        if (!tryApply()) applySlideScale(1);
+      });
+      return () => cancelAnimationFrame(rafId);
+    }
+
+    let cancelled = false;
+    const onImg = () => {
+      if (cancelled) return;
+      if (pending.every((img) => img.complete)) {
+        if (!tryApply()) applySlideScale(1);
+      }
+    };
+    pending.forEach((img) => {
+      img.addEventListener("load", onImg);
+      img.addEventListener("error", onImg);
+    });
+
+    return () => {
+      cancelled = true;
+      pending.forEach((img) => {
+        img.removeEventListener("load", onImg);
+        img.removeEventListener("error", onImg);
+      });
+    };
+  }, [applySlideScale, isFullscreen, isQrSlide, index, measureSlideScale, slides]);
+
+  useEffect(() => {
+    if (!isFullscreen || isQrSlide) return;
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+
+    const ro = new ResizeObserver(() => {
+      const next = measureSlideScale();
+      if (next != null) applySlideScale(next);
+    });
+    ro.observe(viewport);
+    return () => ro.disconnect();
+  }, [applySlideScale, isFullscreen, isQrSlide, measureSlideScale]);
+
   if (loading) {
     return (
       <div className="fixed inset-0 z-50 bg-slate-950 flex flex-col items-center justify-center text-slate-300">
@@ -258,13 +393,34 @@ export default function PresentarCapacitacionPage() {
       </div>
 
       {/* Slide content */}
-      <div className="flex-1 overflow-y-auto flex items-center justify-center px-4 sm:px-10 py-8">
+      <div
+        ref={viewportRef}
+        className={`flex-1 min-h-0 flex items-center justify-center ${
+          isFullscreen
+            ? "overflow-hidden px-2 py-2"
+            : "overflow-y-auto px-4 sm:px-10 py-8"
+        }`}
+      >
         {isQrSlide ? (
-          <div className="flex flex-col items-center gap-6 text-center max-w-lg">
-            <h2 className="text-3xl sm:text-4xl font-black tracking-tight">
+          <div
+            className={`flex flex-col items-center gap-6 text-center ${
+              isFullscreen ? "max-w-3xl" : "max-w-lg"
+            }`}
+          >
+            <h2
+              className={`font-black tracking-tight ${
+                isFullscreen
+                  ? "text-4xl sm:text-5xl lg:text-6xl"
+                  : "text-3xl sm:text-4xl"
+              }`}
+            >
               {cap?.con_evaluacion === false ? "Firma de asistencia" : "Evaluación"}
             </h2>
-            <p className="text-slate-300 text-base sm:text-lg font-medium">
+            <p
+              className={`text-slate-300 font-medium ${
+                isFullscreen ? "text-lg sm:text-xl" : "text-base sm:text-lg"
+              }`}
+            >
               {cap?.con_evaluacion === false
                 ? "Escaneá el código QR para firmar y registrar la asistencia"
                 : "Escaneá el código QR para completar la evaluación"}
@@ -277,22 +433,47 @@ export default function PresentarCapacitacionPage() {
                     ? "QR de asistencia"
                     : "QR de evaluación"
                 }
-                className="w-64 h-64 sm:w-80 sm:h-80 rounded-2xl bg-white p-4 shadow-2xl"
+                className={`rounded-2xl bg-white p-4 shadow-2xl ${
+                  isFullscreen
+                    ? "w-[min(28rem,70vw)] h-[min(28rem,70vw)] max-h-[calc(100dvh-14rem)]"
+                    : "w-64 h-64 sm:w-80 sm:h-80"
+                }`}
               />
             ) : (
-              <div className="w-64 h-64 sm:w-80 sm:h-80 rounded-2xl bg-white/10 flex items-center justify-center text-slate-400 text-sm font-semibold">
+              <div
+                className={`rounded-2xl bg-white/10 flex items-center justify-center text-slate-400 text-sm font-semibold ${
+                  isFullscreen
+                    ? "w-[min(28rem,70vw)] h-[min(28rem,70vw)]"
+                    : "w-64 h-64 sm:w-80 sm:h-80"
+                }`}
+              >
                 QR no disponible
               </div>
             )}
             {qrData?.url && (
-              <p className="text-sm sm:text-base text-blue-300 font-mono break-all px-2">
+              <p
+                className={`text-blue-300 font-mono break-all px-2 ${
+                  isFullscreen ? "text-base sm:text-lg" : "text-sm sm:text-base"
+                }`}
+              >
                 {qrData.url}
               </p>
             )}
           </div>
         ) : (
           <div
-            className={slideHtmlClass}
+            ref={contentRef}
+            className={isFullscreen ? slideHtmlFullscreenClass : slideHtmlClass}
+            style={
+              isFullscreen
+                ? {
+                    transform: `scale(${slideScale})`,
+                    transformOrigin: "center center",
+                    opacity: slideReady ? 1 : 0,
+                    willChange: "transform, opacity",
+                  }
+                : undefined
+            }
             dangerouslySetInnerHTML={{
               __html: sanitizeRichHtml(slides[index]?.contenido || ""),
             }}

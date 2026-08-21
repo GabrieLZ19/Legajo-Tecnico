@@ -40,11 +40,17 @@ export const actualizarEstadoPlanAccion = async (id: string, estado: EstadoAccio
   return data;
 };
 
-export const exportarPlanAccion = async (empresaId: string, format: 'csv' | 'pdf') => {
-
-  const response = await api.get(`/plan-accion/export?empresaId=${empresaId}&format=${format}`, {
-    responseType: 'blob',
-  });
-  return response.data;
+export const exportarPlanAccion = async (
+  empresaId: string,
+  format: "csv" | "pdf",
+) => {
+  const response = await api.get(
+    `/plan-accion/export?empresaId=${empresaId}&format=${format}`,
+    {
+      responseType: "blob",
+      timeout: 60000,
+    },
+  );
+  return response.data as Blob;
 };
 

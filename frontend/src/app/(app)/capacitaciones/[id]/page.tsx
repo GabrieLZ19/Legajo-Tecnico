@@ -33,6 +33,7 @@ import { useRouter } from "next/navigation";
 import { useAlert } from "@/context/AlertContext";
 import { useCapacitaciones } from "@/hooks/useCapacitaciones";
 import CapacitacionRegistroFirmas from "@/components/CapacitacionRegistroFirmas";
+import { canWriteAppModule } from "@/lib/moduleAccess";
 
 const esCorrecto = (respuestaCorrecta: any, optIdx: number) => {
   if (respuestaCorrecta === undefined || respuestaCorrecta === null)
@@ -85,8 +86,8 @@ export default function DetalleCapacitacionPage() {
   const [exportingExcel, setExportingExcel] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
 
-  const canDelete = user?.rol === "preventor" || user?.rol === "admin";
-  const canManage = user?.rol === "preventor" || user?.rol === "admin";
+  const canManage = canWriteAppModule(user, "capacitaciones");
+  const canDelete = canManage;
 
   // Compartir
   const [showShareModal, setShowShareModal] = useState(false);
@@ -664,7 +665,7 @@ export default function DetalleCapacitacionPage() {
 
       <CapacitacionRegistroFirmas
         cap={cap}
-        canEdit={!!canManage || user?.rol === "dueno"}
+        canEdit={canManage}
         onSaved={setCap}
         onSave={async (payload) => {
           const updated = await actualizarRegistroCapacitacion(id, payload);

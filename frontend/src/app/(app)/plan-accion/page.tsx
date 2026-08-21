@@ -8,15 +8,21 @@ import { usePlanAccion, exportarPlanAccion } from "@/hooks/usePlanAccion";
 import { EstadoAccion } from "@/types";
 import { FileSpreadsheet, FileText, Loader } from "lucide-react";
 import { useAlert } from "@/context/AlertContext";
+import { canWriteAppModule } from "@/lib/moduleAccess";
+import {
+  assertDownloadBlob,
+  triggerBrowserDownload,
+} from "@/lib/downloadBlob";
 
 export default function PlanAccionPage() {
-  const { empresa } = useAuth();
+  const { user, empresa } = useAuth();
   const { showAlert } = useAlert();
   const [filterEstado, setFilterEstado] = useState<EstadoAccion | "todos">(
     "todos",
   );
   const [exportingExcel, setExportingExcel] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const canEdit = canWriteAppModule(user, "planAccion");
 
   const {
     data: acciones,
@@ -49,14 +55,11 @@ export default function PlanAccionPage() {
     setExportingExcel(true);
     try {
       const data = await exportarPlanAccion(empresa.id, "csv");
-
-      const url = window.URL.createObjectURL(new Blob([data]));
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", `plan_de_accion_${empresa.cuit}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      link.parentNode?.removeChild(link);
+      const blob = await assertDownloadBlob(data);
+      triggerBrowserDownload(
+        new Blob([blob], { type: "text/csv;charset=utf-8" }),
+        `plan_de_accion_${empresa.cuit}.csv`,
+      );
       showAlert(
         "success",
         "Exportación exitosa",
@@ -66,7 +69,9 @@ export default function PlanAccionPage() {
       showAlert(
         "error",
         "Error al exportar",
-        "No se pudo exportar el plan de acción a Excel.",
+        err instanceof Error
+          ? err.message
+          : "No se pudo exportar el plan de acción a Excel.",
       );
     } finally {
       setExportingExcel(false);
@@ -78,17 +83,11 @@ export default function PlanAccionPage() {
     setExportingPdf(true);
     try {
       const data = await exportarPlanAccion(empresa.id, "pdf");
-
-      const url = window.URL.createObjectURL(
-        new Blob([data], { type: "application/pdf" }),
+      const blob = await assertDownloadBlob(data, "pdf");
+      triggerBrowserDownload(
+        blob,
+        `plan_de_accion_${empresa.cuit}.pdf`,
       );
-
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", `plan_de_accion_${empresa.cuit}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.parentNode?.removeChild(link);
       showAlert(
         "success",
         "Exportación exitosa",
@@ -98,7 +97,9 @@ export default function PlanAccionPage() {
       showAlert(
         "error",
         "Error al exportar",
-        "No se pudo exportar el plan de acción a PDF.",
+        err instanceof Error
+          ? err.message
+          : "No se pudo exportar el plan de acción a PDF.",
       );
     } finally {
       setExportingPdf(false);
@@ -288,10 +289,13 @@ export default function PlanAccionPage() {
                         <td className="px-6 py-4 whitespace-nowrap">
                           <select
                             value={acc.estado}
+                            disabled={!canEdit}
                             onChange={(e) =>
                               handleStatusChange(acc.id, e.target.value as any)
                             }
-                            className={`text-[10px] font-black px-3 py-1.5 rounded-full border border-transparent outline-hidden cursor-pointer transition-all ${
+                            className={`text-[10px] font-black px-3 py-1.5 rounded-full border border-transparent outline-hidden transition-all ${
+                              canEdit ? "cursor-pointer" : "cursor-not-allowed opacity-80"
+                            } ${
                               acc.estado === "cumplida"
                                 ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100/70 hover:border-emerald-200"
                                 : acc.estado === "atendida"
@@ -374,10 +378,13 @@ export default function PlanAccionPage() {
 
                     <select
                       value={acc.estado}
+                      disabled={!canEdit}
                       onChange={(e) =>
                         handleStatusChange(acc.id, e.target.value as any)
                       }
-                      className={`text-[10px] font-black px-3.5 py-1.5 rounded-full border border-transparent outline-hidden cursor-pointer transition-all ${
+                      className={`text-[10px] font-black px-3.5 py-1.5 rounded-full border border-transparent outline-hidden transition-all ${
+                        canEdit ? "cursor-pointer" : "cursor-not-allowed opacity-80"
+                      } ${
                         acc.estado === "cumplida"
                           ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100/70"
                           : acc.estado === "atendida"
