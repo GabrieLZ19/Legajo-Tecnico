@@ -14,6 +14,7 @@ router.post('/', validate(crearInformeSchema), informesController.crearInforme);
 router.get('/', informesController.listarInformes);
 router.get('/:id', informesController.obtenerInforme);
 router.patch('/:id', validate(editarInformeSchema), informesController.editarInforme);
+router.delete('/:id', informesController.eliminarInforme);
 
 // Subida de archivos (acepta hasta 10 imágenes)
 router.post('/:id/evidencia', upload.array('evidencia', 10), validate(subirEvidenciaSchema), informesController.subirEvidencia);

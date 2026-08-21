@@ -1,12 +1,22 @@
 import { supabaseAdmin } from "../config/supabase";
 import { recalcularCumplimientoEmpresa } from "../utils/compliance";
 import { sanitizeRichHtml } from "../utils/sanitizeHtml";
+import { storageService } from "./storage.service";
+import { HttpError } from "../utils/httpError";
 import {
   InformeVisita,
   PeligroDetectado,
   PuntoMejora,
   AccionMejora,
 } from "../types/database";
+
+function pathFromEvidenciaUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const marker = "/storage/v1/object/public/evidencia_visitas/";
+  const idx = url.indexOf(marker);
+  if (idx === -1) return null;
+  return decodeURIComponent(url.slice(idx + marker.length));
+}
 
 export const informeService = {
   async crearInforme(
@@ -164,6 +174,55 @@ export const informeService = {
         `Error al insertar detalles del informe. Rolled back. Detalles: ${error.message}`,
       );
     }
+  },
+
+  async eliminar(id: string) {
+    const informe = await informeService.obtenerPorId(id);
+    if (!informe) {
+      throw new HttpError(404, "Informe no encontrado");
+    }
+
+    // Limpiar evidencias en Storage (carpeta del informe + URLs conocidas)
+    const paths = new Set<string>();
+    for (const url of informe.evidencias_urls || []) {
+      const p = pathFromEvidenciaUrl(url);
+      if (p) paths.add(p);
+    }
+    for (const pm of informe.puntos_mejora || []) {
+      const p = pathFromEvidenciaUrl(pm.evidencia_url);
+      if (p) paths.add(p);
+    }
+
+    try {
+      const { data: listed } = await supabaseAdmin.storage
+        .from("evidencia_visitas")
+        .list(id, { limit: 100 });
+      for (const file of listed || []) {
+        if (file.name) paths.add(`${id}/${file.name}`);
+      }
+    } catch (err) {
+      console.error("No se pudo listar evidencias al eliminar informe:", err);
+    }
+
+    for (const path of paths) {
+      try {
+        await storageService.eliminarArchivo("evidencia_visitas", path);
+      } catch (err) {
+        console.error(`Error limpiando evidencia ${path}:`, err);
+      }
+    }
+
+    const { error } = await supabaseAdmin
+      .from("informes_visita")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      throw new Error(`Error al eliminar el informe: ${error.message}`);
+    }
+
+    await recalcularCumplimientoEmpresa(informe.empresa_id);
+    return { success: true };
   },
 
   async listarPorEmpresa(empresaId: string) {

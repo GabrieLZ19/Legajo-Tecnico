@@ -82,6 +82,26 @@ export const informesController = {
     }
   },
 
+  async eliminarInforme(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = req.params.id as string;
+      await assertInformeAccess(req.user!, id);
+
+      // Solo roles operativos pueden eliminar (no ente regulador)
+      const rol = req.user!.rol;
+      if (rol !== "admin" && rol !== "preventor" && rol !== "dueno") {
+        return res.status(403).json({
+          error: "No tenés permiso para eliminar informes de visita",
+        });
+      }
+
+      await informeService.eliminar(id);
+      res.json({ success: true, message: "Informe eliminado con éxito" });
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async firmarPreventor(req: Request, res: Response, next: NextFunction) {
     try {
       await assertInformeAccess(req.user!, req.params.id as string);
