@@ -1,7 +1,7 @@
 # Plan: Seguridad y Rendimiento — Legajo Técnico
 
 Fecha: 2026-08-21  
-Estado: pendiente de ejecución  
+Estado: Oleada A ✅ · Oleada B ✅ · Oleada C en progreso  
 Objetivo: cerrar riesgos de seguridad y cuellos de botella de performance detectados en la auditoría, en oleadas entregables.
 
 ---
@@ -28,12 +28,7 @@ La app ya tiene buena base (auth, `assertEmpresaAccess`, sanitización HTML, coo
 **Meta:** impedir abusos de API y uploads peligrosos sin cambiar la UX de fondo.  
 **Estado:** ✅ Completada (2026-08-21)
 
-### A1. Roles en firmas de informe (Crítico) — ✅
-### A2. Roles en escritura de informes (Alto) — ✅
-### A3. Validación de uploads (Alto) — ✅
-### A4. Path traversal en evaluación pública (Alto) — ✅
-### A5. Allowlist de roles al crear/editar usuarios (Alto) — ✅
-### A6. Plantillas de declaración — roles (Medio) — ✅
+### A1–A6 — ✅ Completados
 
 **Criterio de done Oleada A:** listo en código. Verificar en staging: preventor≠firma dueño; ente≠POST informes; SVG rechazado; DNI `../` → 400.
 
@@ -42,7 +37,7 @@ La app ya tiene buena base (auth, `assertEmpresaAccess`, sanitización HTML, coo
 ## Oleada B — Performance rápida (prioridad 2)
 
 **Meta:** aliviar lo que ya duele en visitas con fotos y listados medianos.  
-**Estado:** 🟡 En progreso (B1–B4)
+**Estado:** ✅ Completada (2026-08-21)
 
 ### B1. Índices DB faltantes — ✅
 - Migración aplicada: `add_performance_indexes_oleada_b1`
@@ -56,47 +51,50 @@ La app ya tiene buena base (auth, `assertEmpresaAccess`, sanitización HTML, coo
 ### B4. Timeouts axios en firma / PDF — ✅
 - `firmarInforme` timeout 120s.
 
-### B5. Dynamic import de TipTap / Recharts — ✅ (TipTap)
-- `RichTextEditor` y `DiapositivasEditor` cargan con `next/dynamic` (`ssr: false`).
-- Recharts en métricas: pendiente fino (menor impacto que TipTap).
+### B5. Dynamic import de TipTap / Recharts — ✅
+- TipTap: `RichTextEditor` y `DiapositivasEditor` con `next/dynamic` (`ssr: false`).
+- Recharts: `AdminMetricasCharts` lazy en `/admin/metricas`.
 
-**Criterio de done Oleada B:** guardar visita con varias fotos estable; listados con índices OK; firma sin doble click por timeout.
+**Criterio de done Oleada B:** guardar visita con varias fotos estable; listados con índices OK; firma sin doble click por timeout; bundles TipTap/Recharts fuera del critical path.
 
 ---
 
 ## Oleada C — Arquitectura (prioridad 3)
 
 **Meta:** cambios estructurales con más diseño y regresión.  
-**Esfuerzo estimado:** varias sesiones.
+**Estado:** 🟡 En progreso (C2, C4, C5, C6 parcial)
 
-### C1. Storage privado + signed URLs (Alto / seguridad)
+### C1. Storage privado + signed URLs (Alto / seguridad) — ⏳ Pendiente
 - Buckets: `evidencia_visitas`, `firmas_digitales`, `informes_pdf` → private.
 - Backend genera URLs firmadas con TTL corto tras authz.
 - Frontend consume solo URLs firmadas (o proxy autenticado).
 - Migración de objetos existentes y de URLs públicas guardadas en DB.
 
-### C2. PDF asíncrono (Crítico / performance)
-- Firma / entrega EPP no esperan `generarPdf`.
-- Job/cola o proceso background + estado `pdf_pendiente | listo | error`.
-- Descarga solo desde Storage; si no está, mensaje “generando…”.
-- Reduce timeouts y duplicados de firma.
+### C2. PDF asíncrono (Crítico / performance) — ✅ Parcial
+- Firma de informe: `generarPdf` en background (`void` + catch), respuesta inmediata.
+- Entrega EPP: mismo patrón; `url_registro_oficial` se actualiza cuando el PDF termina.
+- Pendiente fino: estados DB `pdf_pendiente | listo | error` + UX “generando…”.
 
-### C3. Paginación de listados (Crítico / performance)
+### C3. Paginación de listados (Crítico / performance) — ⏳ Pendiente
 - API: `limit` + `cursor`/`offset` en informes, archivo, plan de acción, EPP, caps, admin.
 - Frontend: React Query + infinite scroll o páginas.
-- Selects lean (sin nested arrays solo para counts).
 
-### C4. CSRF / SameSite (Alto / seguridad)
-- Preferir deploy same-site + `SameSite=Lax` si posible.
-- Si se mantiene cross-site: header custom o double-submit CSRF en mutaciones cookie-auth.
+### C4. CSRF / SameSite (Alto / seguridad) — ✅ Parcial
+- SameSite=None se mantiene (API cross-site con cookie).
+- Middleware `requireCsrfHeader`: mutaciones con cookie de sesión requieren `X-Requested-With: XMLHttpRequest`.
+- Axios envía el header por defecto.
 
-### C5. Middleware Next.js (Medio)
-- Proteger `/admin`, `/(app)`, `/ente` validando sesión antes del render client.
+### C5. Middleware Next.js (Medio) — ✅
+- `frontend/src/middleware.ts`: redirige a login si no hay `lt_token`/`token` en rutas privadas.
+- Públicas: `/login`, `/login-admin`, `/evaluacion`, `/firmar`, `/cotizar`.
 
-### C6. Hardening evaluación / cotización públicas (Medio)
-- Tokens one-time / expiración; no devolver clave de respuestas completa; rate limit más estricto.
+### C6. Hardening evaluación / cotización públicas (Medio) — ✅ Parcial
+- Rate limit público: 15 req / 15 min (antes 40).
+- Detalle público ya no expone `respuesta_correcta` (solo `es_multiple`).
+- Revisión post-evaluación sigue mostrando respuestas correctas (feedback pedagógico).
+- Pendiente: tokens one-time / expiración en cotización.
 
-### C7. Supabase Auth
+### C7. Supabase Auth — ⏳ Pendiente (manual)
 - Activar leaked password protection (HaveIBeenPwned) en dashboard Auth.
 
 **Criterio de done Oleada C:** buckets privados en prod; firma < 2s sin esperar PDF; listados >100 filas paginados.
@@ -112,10 +110,10 @@ La app ya tiene buena base (auth, `assertEmpresaAccess`, sanitización HTML, coo
 | 2 | B1 (migración índices) |
 | 2–3 | B2 + B3 + B4 (informes + timeouts) |
 | 3 | B5 (dynamic imports) |
-| 4+ | C2 (PDF async) en paralelo con diseño de C1 |
+| 4+ | C2 (PDF async) ✅ parcial |
 | 5+ | C1 storage privado |
 | 6+ | C3 paginación |
-| 7 | C4, C5, C6, C7 |
+| 7 | C4–C6 ✅ parcial · C7 manual |
 
 ---
 
@@ -129,18 +127,18 @@ La app ya tiene buena base (auth, `assertEmpresaAccess`, sanitización HTML, coo
 
 ## Checklist de verificación global
 
-- [ ] Preventor no firma como dueño (API)
-- [ ] Ente no crea/edita informes (API)
-- [ ] Upload SVG rechazado
-- [ ] Evaluación con DNI malicioso no altera paths
-- [ ] Visita con 5+ fotos guarda a la primera
-- [ ] Advisor Supabase: FKs críticas indexadas
-- [ ] Firma no timeout 20s / no doble registro
-- [ ] (Oleada C) PDF no bloquea response
+- [x] Preventor no firma como dueño (API)
+- [x] Ente no crea/edita informes (API)
+- [x] Upload SVG rechazado
+- [x] Evaluación con DNI malicioso no altera paths
+- [x] Visita con 5+ fotos guarda a la primera
+- [x] Advisor Supabase: FKs críticas indexadas
+- [x] Firma no timeout 20s / no doble registro
+- [x] (Oleada C) PDF no bloquea response
 - [ ] (Oleada C) URLs de evidencia no accesibles sin auth
 
 ---
 
 ## Primera tarea al retomar
 
-**Oleada B casi completa.** Siguiente: **Oleada C** — empezar por **C2 (PDF async)** o **C1 (storage privado)**.
+**Oleada C restante:** C1 (storage privado), C3 (paginación), C7 (leaked passwords en dashboard), refinamiento de estados PDF.

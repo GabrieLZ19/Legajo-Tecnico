@@ -63,7 +63,10 @@ export default function CotizarPublicoPage() {
       }));
       const res = await fetch(`${API_URL}/epp/cotizar/${token}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Requested-With": "XMLHttpRequest",
+        },
         body: JSON.stringify({
           proveedor_nombre: nombre,
           monto: Number(monto),
