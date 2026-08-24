@@ -1,4 +1,4 @@
-import { supabaseAdmin } from "../config/supabase";
+import { createPasswordAuthClient, supabaseAdmin } from "../config/supabase";
 import { logService } from "./log.service";
 import { notificacionService } from "./notificacion.service";
 import { storageService } from "./storage.service";
@@ -335,14 +335,13 @@ export const adminService = {
     return data;
   },
 
-  async resetPasswordUsuario(
-    usuarioEditorId: string,
+  async assertPasswordActualUsuario(
     consultoraId: string,
     userId: string,
-    password: string,
+    currentPassword: string,
   ) {
-    if (!password || password.length < 6) {
-      throw new HttpError(400, "La contraseña debe tener al menos 6 caracteres");
+    if (!currentPassword) {
+      throw new HttpError(400, "Ingresá la contraseña actual");
     }
 
     const { data: perfil } = await supabaseAdmin
@@ -354,6 +353,49 @@ export const adminService = {
 
     if (!perfil) {
       throw new HttpError(404, "Usuario no encontrado");
+    }
+
+    const { data: authUser, error: authLookupError } =
+      await supabaseAdmin.auth.admin.getUserById(userId);
+    if (authLookupError || !authUser.user?.email) {
+      throw new HttpError(404, "Usuario no encontrado");
+    }
+
+    const { error: signInError } =
+      await createPasswordAuthClient().auth.signInWithPassword({
+        email: authUser.user.email,
+        password: currentPassword,
+      });
+
+    if (signInError) {
+      throw new HttpError(401, "La contraseña actual no es correcta");
+    }
+
+    return perfil;
+  },
+
+  async resetPasswordUsuario(
+    usuarioEditorId: string,
+    consultoraId: string,
+    userId: string,
+    password: string,
+    currentPassword: string,
+  ) {
+    if (!password || password.length < 6) {
+      throw new HttpError(400, "La contraseña debe tener al menos 6 caracteres");
+    }
+
+    const perfil = await this.assertPasswordActualUsuario(
+      consultoraId,
+      userId,
+      currentPassword,
+    );
+
+    if (password === currentPassword) {
+      throw new HttpError(
+        400,
+        "La nueva contraseña debe ser distinta a la actual",
+      );
     }
 
     const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
@@ -692,6 +734,15 @@ export const adminService = {
 
   async listarMisNotificaciones(usuarioId: string, consultoraId: string) {
     return await notificacionService.listarPorUsuario(usuarioId, consultoraId);
+  },
+
+  async marcarNotificacionLeida(notificacionId: string, usuarioId: string) {
+    await notificacionService.marcarComoLeida(notificacionId, usuarioId);
+    return { ok: true };
+  },
+
+  async marcarTodasNotificacionesLeidas(usuarioId: string, consultoraId: string) {
+    return await notificacionService.marcarTodasLeidas(usuarioId, consultoraId);
   },
 
   async subirLogoConsultora(consultoraId: string, file: Express.Multer.File) {

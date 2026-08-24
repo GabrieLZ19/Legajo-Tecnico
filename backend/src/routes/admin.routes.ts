@@ -8,6 +8,8 @@ const router = Router();
 // Rutas accesibles por cualquier usuario autenticado (sin importar rol)
 // Requerida para que la campana de notificaciones del Header funcione para todos los usuarios.
 router.get('/notificaciones/mias', requireAuth, adminController.listarMisNotificaciones);
+router.post('/notificaciones/mias/leer-todas', requireAuth, adminController.marcarTodasNotificacionesLeidas);
+router.post('/notificaciones/:id/leer', requireAuth, adminController.marcarNotificacionLeida);
 
 // Solo los admins acceden a las siguientes rutas de administración
 router.use(requireAuth, requireRole('admin'));
@@ -15,6 +17,7 @@ router.use(requireAuth, requireRole('admin'));
 router.get('/usuarios', adminController.listarUsuarios);
 router.post('/usuarios', adminController.crearUsuario);
 router.put('/usuarios/:id', adminController.editarUsuario);
+router.post('/usuarios/:id/password/verificar', adminController.verificarPasswordUsuario);
 router.patch('/usuarios/:id/password', adminController.resetPasswordUsuario);
 
 router.get('/empresas', adminController.listarEmpresas);

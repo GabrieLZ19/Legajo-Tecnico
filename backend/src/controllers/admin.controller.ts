@@ -43,18 +43,37 @@ export const adminController = {
     }
   },
 
+  async verificarPasswordUsuario(req: Request, res: Response, next: NextFunction) {
+    try {
+      const consultoraId = requireConsultoraId(req.user!);
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const currentPassword = String(req.body?.currentPassword || "");
+
+      await adminService.assertPasswordActualUsuario(
+        consultoraId,
+        id,
+        currentPassword,
+      );
+      res.json({ success: true });
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async resetPasswordUsuario(req: Request, res: Response, next: NextFunction) {
     try {
       const usuarioEditorId = req.user!.id;
       const consultoraId = requireConsultoraId(req.user!);
       const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
       const password = String(req.body?.password || "");
+      const currentPassword = String(req.body?.currentPassword || "");
 
       const data = await adminService.resetPasswordUsuario(
         usuarioEditorId,
         consultoraId,
         id,
         password,
+        currentPassword,
       );
       res.json(data);
     } catch (error) {
@@ -245,6 +264,35 @@ export const adminController = {
 
       const notifications = await adminService.listarMisNotificaciones(usuarioId, consultoraId);
       res.json(notifications);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async marcarNotificacionLeida(req: Request, res: Response, next: NextFunction) {
+    try {
+      const usuarioId = req.user!.id;
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const result = await adminService.marcarNotificacionLeida(id, usuarioId);
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async marcarTodasNotificacionesLeidas(req: Request, res: Response, next: NextFunction) {
+    try {
+      const usuarioId = req.user!.id;
+      const consultoraId = req.user?.consultora_id;
+      if (!consultoraId) {
+        res.json({ marked: 0 });
+        return;
+      }
+      const result = await adminService.marcarTodasNotificacionesLeidas(
+        usuarioId,
+        consultoraId,
+      );
+      res.json(result);
     } catch (error) {
       next(error);
     }
