@@ -31,7 +31,7 @@ export const authController = {
 
       const { data: empresas, error: empresaError } = await supabaseAdmin
         .from("empresas")
-        .select("id, razon_social, cuit, logo_url, consultora_id")
+        .select("id, razon_social, cuit, logo_url, consultora_id, estado")
         .in("cuit", cuitLookupValues(cleanCuit))
         .limit(1);
 
@@ -40,6 +40,19 @@ export const authController = {
 
       if (!empresa) {
         return res.status(401).json({ error: LOGIN_ERROR });
+      }
+
+      if (empresa.estado === "pausada") {
+        return res.status(403).json({
+          error:
+            "Esta empresa está pausada (p. ej. por falta de pago). Contactá a tu consultora.",
+        });
+      }
+
+      if (empresa.estado === "eliminada") {
+        return res.status(403).json({
+          error: "Esta empresa ya no está disponible en el sistema.",
+        });
       }
 
       const { data: authData, error: authError } =
@@ -75,6 +88,7 @@ export const authController = {
           razon_social: empresa.razon_social,
           cuit: empresa.cuit,
           logo_url: empresa.logo_url,
+          estado: empresa.estado || "activa",
         },
       });
     } catch (error) {
@@ -156,8 +170,9 @@ export const authController = {
         const consultoraId = requireConsultoraId(req.user!);
         const { data, error } = await supabaseAdmin
           .from('empresas')
-          .select('id, razon_social, cuit, logo_url, actividad')
+          .select('id, razon_social, cuit, logo_url, actividad, estado')
           .eq('consultora_id', consultoraId)
+          .neq('estado', 'eliminada')
           .order('razon_social');
 
         if (error) throw error;
@@ -167,33 +182,46 @@ export const authController = {
         // Preventor ve solo las empresas asignadas vía preventor_empresas
         const { data, error } = await supabaseAdmin
           .from('preventor_empresas')
-          .select('empresa_id, empresas(id, razon_social, cuit, logo_url, actividad)')
+          .select('empresa_id, empresas(id, razon_social, cuit, logo_url, actividad, estado)')
           .eq('preventor_id', userId);
 
         if (error) throw error;
-        empresas = (data || []).map((pe: any) => pe.empresas).filter(Boolean);
+        empresas = (data || [])
+          .map((pe: any) => pe.empresas)
+          .filter(
+            (e: any) => e && (e.estado === "activa" || e.estado === "aviso_deuda"),
+          );
 
       } else if (rol === 'ente_regulador') {
         // Ente regulador ve las empresas autorizadas
         const { data, error } = await supabaseAdmin
           .from('ente_regulador_empresas')
-          .select('empresa_id, empresas(id, razon_social, cuit, logo_url, actividad)')
+          .select('empresa_id, empresas(id, razon_social, cuit, logo_url, actividad, estado)')
           .eq('ente_id', userId);
 
         if (error) throw error;
-        empresas = (data || []).map((ere: any) => ere.empresas).filter(Boolean);
+        empresas = (data || [])
+          .map((ere: any) => ere.empresas)
+          .filter(
+            (e: any) => e && (e.estado === "activa" || e.estado === "aviso_deuda"),
+          );
 
       } else if (rol === 'dueno') {
         // Dueño ve solo su empresa
         if (req.user!.empresa_id) {
           const { data, error } = await supabaseAdmin
             .from('empresas')
-            .select('id, razon_social, cuit, logo_url, actividad')
+            .select('id, razon_social, cuit, logo_url, actividad, estado')
             .eq('id', req.user!.empresa_id)
             .single();
 
           if (error) throw error;
-          if (data) empresas = [data];
+          if (
+            data &&
+            (data.estado === "activa" || data.estado === "aviso_deuda")
+          ) {
+            empresas = [data];
+          }
         }
       }
 

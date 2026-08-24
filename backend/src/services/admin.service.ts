@@ -3,9 +3,15 @@ import { logService } from "./log.service";
 import { notificacionService } from "./notificacion.service";
 import { storageService } from "./storage.service";
 import { HttpError } from "../utils/httpError";
-import { RolUsuario } from "../types/database";
+import { RolUsuario, EstadoEmpresa } from "../types/database";
 
 const ROLES_CREABLES: RolUsuario[] = ["dueno", "preventor", "ente_regulador"];
+const ESTADOS_EMPRESA: EstadoEmpresa[] = [
+  "activa",
+  "aviso_deuda",
+  "pausada",
+  "eliminada",
+];
 
 export const adminService = {
   async listarUsuarios(consultoraId: string) {
@@ -188,8 +194,11 @@ export const adminService = {
   async listarEmpresas(consultoraId: string) {
     const { data, error } = await supabaseAdmin
       .from("empresas")
-      .select("*, consultoras(*), informes_visita(id), preventor_empresas(preventor_id, perfiles(nombre_completo))")
-      .eq("consultora_id", consultoraId);
+      .select(
+        "*, consultoras(*), informes_visita(id), preventor_empresas(preventor_id, perfiles(nombre_completo)), perfiles!perfiles_empresa_id_fkey(id, nombre_completo, username, activo, rol)",
+      )
+      .eq("consultora_id", consultoraId)
+      .order("razon_social");
 
     if (error) throw error;
     return data;
@@ -326,6 +335,88 @@ export const adminService = {
     return data;
   },
 
+  async resetPasswordUsuario(
+    usuarioEditorId: string,
+    consultoraId: string,
+    userId: string,
+    password: string,
+  ) {
+    if (!password || password.length < 6) {
+      throw new HttpError(400, "La contraseña debe tener al menos 6 caracteres");
+    }
+
+    const { data: perfil } = await supabaseAdmin
+      .from("perfiles")
+      .select("id, username, rol, consultora_id, nombre_completo")
+      .eq("id", userId)
+      .eq("consultora_id", consultoraId)
+      .maybeSingle();
+
+    if (!perfil) {
+      throw new HttpError(404, "Usuario no encontrado");
+    }
+
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+      password,
+    });
+    if (error) throw error;
+
+    await logService.registrar({
+      usuario_id: usuarioEditorId,
+      accion: "RESET_PASSWORD_USUARIO",
+      entidad: "perfiles",
+      entidad_id: userId,
+      detalles: {
+        username: perfil.username,
+        rol: perfil.rol,
+        nombre_completo: perfil.nombre_completo,
+      },
+      consultora_id: consultoraId,
+    });
+
+    return { success: true };
+  },
+
+  async cambiarEstadoEmpresa(
+    usuarioId: string,
+    consultoraId: string,
+    id: string,
+    estado: EstadoEmpresa,
+  ) {
+    if (!ESTADOS_EMPRESA.includes(estado)) {
+      throw new HttpError(400, "Estado de empresa inválido");
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from("empresas")
+      .update({ estado })
+      .eq("id", id)
+      .eq("consultora_id", consultoraId)
+      .select("*, consultoras(*)")
+      .single();
+
+    if (error) throw error;
+    if (!data) throw new HttpError(404, "Empresa no encontrada");
+
+    await logService.registrar({
+      usuario_id: usuarioId,
+      accion:
+        estado === "pausada"
+          ? "PAUSAR_EMPRESA"
+          : estado === "eliminada"
+            ? "ELIMINAR_EMPRESA"
+            : estado === "aviso_deuda"
+              ? "AVISO_DEUDA_EMPRESA"
+              : "REACTIVAR_EMPRESA",
+      entidad: "empresas",
+      entidad_id: id,
+      detalles: { estado, razon_social: data.razon_social, cuit: data.cuit },
+      consultora_id: consultoraId,
+    });
+
+    return data;
+  },
+
   async obtenerDashboardGlobal(
     consultoraId: string,
     filters: { empresaId?: string; fechaDesde?: string; fechaHasta?: string }
@@ -340,7 +431,8 @@ export const adminService = {
       const { count: countEmp, error: errEmp } = await supabaseAdmin
         .from("empresas")
         .select("*", { count: "exact", head: true })
-        .eq("consultora_id", consultoraId);
+        .eq("consultora_id", consultoraId)
+        .in("estado", ["activa", "aviso_deuda"]);
       if (errEmp) throw errEmp;
       totalEmpresas = countEmp || 0;
     }

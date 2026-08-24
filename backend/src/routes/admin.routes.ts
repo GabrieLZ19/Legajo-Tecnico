@@ -15,10 +15,12 @@ router.use(requireAuth, requireRole('admin'));
 router.get('/usuarios', adminController.listarUsuarios);
 router.post('/usuarios', adminController.crearUsuario);
 router.put('/usuarios/:id', adminController.editarUsuario);
+router.patch('/usuarios/:id/password', adminController.resetPasswordUsuario);
 
 router.get('/empresas', adminController.listarEmpresas);
 router.post('/empresas', adminController.crearEmpresa);
 router.put('/empresas/:id', adminController.editarEmpresa);
+router.patch('/empresas/:id/estado', adminController.cambiarEstadoEmpresa);
 
 router.get('/dashboard', adminController.obtenerDashboardGlobal);
 router.get('/auditoria', adminController.listarLogs);

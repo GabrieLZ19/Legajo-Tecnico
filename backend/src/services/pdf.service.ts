@@ -42,19 +42,31 @@ async function descargarPdfDesdeStorage(
   return storageService.downloadBuffer(publicUrl);
 }
 
+/** Extrae el Date.now() embebido en `informe_{n}_{timestamp}.pdf`. */
+function extractPdfGeneratedAtMs(url: string | null | undefined): number | null {
+  if (!url) return null;
+  const match = url.match(/informe_\d+_(\d+)\.pdf/i);
+  if (!match) return null;
+  const ts = Number(match[1]);
+  return Number.isFinite(ts) ? ts : null;
+}
+
 export const pdfService = {
   async generarPdf(informeId: string): Promise<string> {
     const result = await this.generarPdfCompleto(informeId);
     return result.publicUrl;
   },
 
-  /** Prefiere PDF ya generado en Storage; si no existe, lo genera. */
+  /**
+   * Prefiere PDF en Storage solo si está al día con las firmas.
+   * Si hay firmas posteriores al PDF cacheado, regenera.
+   */
   async obtenerPdfParaDescarga(
     informeId: string,
   ): Promise<{ buffer: Buffer; filename: string }> {
     const { data: informe, error } = await supabaseAdmin
       .from("informes_visita")
-      .select("id, numero_informe, url_pdf_generado")
+      .select("id, numero_informe, url_pdf_generado, firmas_informe(firmado_at)")
       .eq("id", informeId)
       .single();
 
@@ -66,7 +78,19 @@ export const pdfService = {
 
     const filename = `constancia_visita_${informe.numero_informe || informeId}.pdf`;
 
-    if (informe.url_pdf_generado) {
+    const firmas = (informe.firmas_informe ?? []) as Array<{
+      firmado_at: string;
+    }>;
+    const latestFirmaMs = firmas.reduce((max, f) => {
+      const t = new Date(f.firmado_at).getTime();
+      return Number.isFinite(t) && t > max ? t : max;
+    }, 0);
+    const pdfGeneratedAtMs = extractPdfGeneratedAtMs(informe.url_pdf_generado);
+    const pdfEstaDesactualizado =
+      latestFirmaMs > 0 &&
+      (pdfGeneratedAtMs === null || latestFirmaMs > pdfGeneratedAtMs);
+
+    if (informe.url_pdf_generado && !pdfEstaDesactualizado) {
       const fromStorage = await descargarPdfDesdeStorage(
         informe.url_pdf_generado,
       );

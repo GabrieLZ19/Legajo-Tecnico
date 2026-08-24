@@ -43,6 +43,25 @@ export const adminController = {
     }
   },
 
+  async resetPasswordUsuario(req: Request, res: Response, next: NextFunction) {
+    try {
+      const usuarioEditorId = req.user!.id;
+      const consultoraId = requireConsultoraId(req.user!);
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const password = String(req.body?.password || "");
+
+      const data = await adminService.resetPasswordUsuario(
+        usuarioEditorId,
+        consultoraId,
+        id,
+        password,
+      );
+      res.json(data);
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async listarEmpresas(req: Request, res: Response, next: NextFunction) {
     try {
       const consultoraId = requireConsultoraId(req.user!);
@@ -74,6 +93,36 @@ export const adminController = {
       const empresaData = req.body;
 
       const data = await adminService.editarEmpresa(usuarioEditorId, consultoraId, id, empresaData);
+      res.json(data);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async cambiarEstadoEmpresa(req: Request, res: Response, next: NextFunction) {
+    try {
+      const usuarioId = req.user!.id;
+      const consultoraId = requireConsultoraId(req.user!);
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const estado = String(req.body?.estado || "") as
+        | "activa"
+        | "aviso_deuda"
+        | "pausada"
+        | "eliminada";
+
+      if (!["activa", "aviso_deuda", "pausada", "eliminada"].includes(estado)) {
+        return res.status(400).json({
+          error:
+            "Estado inválido. Usá: activa, aviso_deuda, pausada o eliminada.",
+        });
+      }
+
+      const data = await adminService.cambiarEstadoEmpresa(
+        usuarioId,
+        consultoraId,
+        id,
+        estado,
+      );
       res.json(data);
     } catch (error) {
       next(error);

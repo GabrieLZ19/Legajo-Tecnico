@@ -8,10 +8,12 @@ export function authCookieOptions(): CookieOptions {
   const isLocal =
     frontend.hostname === "localhost" || frontend.hostname === "127.0.0.1";
 
+  // SameSite=Lax: cookie first-party vía proxy same-origin del frontend.
+  // SameSite=None rompe login en Safari/iOS (no persiste la sesión).
   return {
     httpOnly: true,
     secure: !isLocal,
-    sameSite: isLocal ? "lax" : "none",
+    sameSite: "lax",
     maxAge: 7 * 24 * 60 * 60 * 1000,
     path: "/",
   };

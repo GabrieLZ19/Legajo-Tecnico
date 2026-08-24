@@ -84,7 +84,12 @@ export async function assertPerfilDeConsultora(
     throw new HttpError(403, "No tenés acceso a este usuario");
   }
   if (rolEsperado && data.rol !== rolEsperado) {
-    throw new HttpError(404, "Usuario no encontrado");
+    throw new HttpError(
+      400,
+      rolEsperado === "preventor"
+        ? "Solo se pueden asignar usuarios con rol preventor."
+        : `El usuario no tiene el rol requerido (${rolEsperado}).`,
+    );
   }
 }
 

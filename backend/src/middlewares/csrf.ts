@@ -14,7 +14,7 @@ function hasAuthCookie(req: Request): boolean {
 }
 
 /**
- * Mitigación CSRF para sesión por cookie (SameSite=None en prod):
+ * Mitigación CSRF para sesión por cookie (SameSite=Lax, same-origin vía proxy):
  * mutaciones con cookie de auth deben traer X-Requested-With.
  * Requests sin cookie (públicos / Bearer) no se bloquean.
  */

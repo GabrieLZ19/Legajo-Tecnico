@@ -54,13 +54,12 @@ export const firmaService = {
 
     if (errEstado) throw errEstado;
 
-    // 4. Si es firmado, generar PDF en background (no bloquear la respuesta)
-    if (nuevoEstado === 'firmado') {
-      void pdfService.generarPdf(informeId).catch((pdfError) => {
-        console.error(`🚨 Error al generar el PDF para el informe ${informeId}:`, pdfError);
-      });
-    }
+    // 4. Regenerar PDF tras cada firma (preventor o dueño) para que la
+    //    descarga no sirva una constancia cacheada sin firmas actualizadas.
+    void pdfService.generarPdf(informeId).catch((pdfError) => {
+      console.error(`🚨 Error al generar el PDF para el informe ${informeId}:`, pdfError);
+    });
 
-    return { success: true, estado: nuevoEstado, pdf_generando: nuevoEstado === 'firmado' };
+    return { success: true, estado: nuevoEstado, pdf_generando: true };
   }
 };

@@ -24,9 +24,25 @@ const app = express();
 app.set("trust proxy", 1);
 
 // Middlewares globales — CORS primero para que errores de body/parse no pierdan headers
+function corsOriginsFor(frontendUrl: string): string[] {
+  try {
+    const u = new URL(frontendUrl);
+    const origins = new Set<string>([u.origin]);
+    // Aceptar www ↔ apex (Safari es estricto con Origin exacto)
+    if (u.hostname.startsWith("www.")) {
+      origins.add(`${u.protocol}//${u.hostname.slice(4)}`);
+    } else if (u.hostname !== "localhost" && u.hostname !== "127.0.0.1") {
+      origins.add(`${u.protocol}//www.${u.hostname}`);
+    }
+    return [...origins];
+  } catch {
+    return [frontendUrl];
+  }
+}
+
 app.use(
   cors({
-    origin: env.FRONTEND_URL,
+    origin: corsOriginsFor(env.FRONTEND_URL),
     credentials: true,
   }),
 );
