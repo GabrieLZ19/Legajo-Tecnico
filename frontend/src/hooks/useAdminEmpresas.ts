@@ -213,21 +213,6 @@ export function useAdminEmpresas() {
     },
   });
 
-  const resetPasswordUsuarioMutation = useMutation({
-    mutationFn: async ({
-      id,
-      password,
-    }: {
-      id: string;
-      password: string;
-    }) => {
-      const response = await api.patch(`/admin/usuarios/${id}/password`, {
-        password,
-      });
-      return response.data;
-    },
-  });
-
   return {
     empresas: empresasQuery.data || [],
     preventores: preventoresQuery.data || [],
@@ -241,7 +226,6 @@ export function useAdminEmpresas() {
     editarEmpresa: editarEmpresaMutation.mutateAsync,
     cambiarEstadoEmpresa: cambiarEstadoEmpresaMutation.mutateAsync,
     crearDuenoEmpresa: crearDuenoEmpresaMutation.mutateAsync,
-    resetPasswordUsuario: resetPasswordUsuarioMutation.mutateAsync,
     subirLogoEmpresa: subirLogoEmpresaMutation.mutateAsync,
     subirLogoConsultora: subirLogoConsultoraMutation.mutateAsync,
     asignarPreventor: asignarPreventorMutation.mutateAsync,
@@ -249,9 +233,7 @@ export function useAdminEmpresas() {
     buscarCuit: buscarCuitMutation.mutateAsync,
     isSaving: crearEmpresaMutation.isPending || editarEmpresaMutation.isPending,
     isChangingEstado: cambiarEstadoEmpresaMutation.isPending,
-    isSavingDueno:
-      crearDuenoEmpresaMutation.isPending ||
-      resetPasswordUsuarioMutation.isPending,
+    isSavingDueno: crearDuenoEmpresaMutation.isPending,
     isUploading:
       subirLogoEmpresaMutation.isPending ||
       subirLogoConsultoraMutation.isPending,

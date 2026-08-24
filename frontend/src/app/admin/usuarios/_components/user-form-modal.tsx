@@ -9,6 +9,7 @@ import {
 } from "@/lib/adminUsuarios";
 import { Loader2, X, Eye, EyeOff } from "lucide-react";
 import type { AdminUsuarioFormValues } from "@/hooks/useAdminUsuarios";
+import { useAlert } from "@/context/AlertContext";
 
 type UserFormModalProps = {
   isOpen: boolean;
@@ -17,6 +18,7 @@ type UserFormModalProps = {
   isSaving: boolean;
   onClose: () => void;
   onSubmit: (values: AdminUsuarioFormValues) => Promise<void>;
+  onVerifyPassword?: (currentPassword: string) => Promise<void>;
 };
 
 const initialValues: AdminUsuarioFormValues = {
@@ -24,6 +26,7 @@ const initialValues: AdminUsuarioFormValues = {
   username: "",
   email: "",
   password: "",
+  currentPassword: "",
   rol: "preventor",
   empresa_id: null,
   activo: true,
@@ -36,9 +39,14 @@ export function UserFormModal({
   isSaving,
   onClose,
   onSubmit,
+  onVerifyPassword,
 }: UserFormModalProps) {
+  const { showAlert } = useAlert();
   const [values, setValues] = useState<AdminUsuarioFormValues>(initialValues);
   const [showPassword, setShowPassword] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [passwordVerified, setPasswordVerified] = useState(false);
+  const [verifyingPassword, setVerifyingPassword] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -49,14 +57,21 @@ export function UserFormModal({
         username: editingUsuario.username || "",
         email: "",
         password: "",
+        currentPassword: "",
         rol: editingUsuario.rol,
         empresa_id: editingUsuario.empresa_id || null,
         activo: editingUsuario.activo,
       });
+      setPasswordVerified(false);
+      setShowPassword(false);
+      setShowCurrentPassword(false);
       return;
     }
 
     setValues(initialValues);
+    setPasswordVerified(false);
+    setShowPassword(false);
+    setShowCurrentPassword(false);
   }, [editingUsuario, isOpen]);
 
   if (!isOpen) return null;
@@ -70,8 +85,65 @@ export function UserFormModal({
     setValues((current) => ({ ...current, [field]: value }));
   };
 
+  const handleVerifyPassword = async () => {
+    if (!onVerifyPassword) return;
+    if (!values.currentPassword?.trim()) {
+      showAlert(
+        "warning",
+        "Contraseña requerida",
+        "Ingresá la contraseña actual para continuar.",
+      );
+      return;
+    }
+
+    setVerifyingPassword(true);
+    try {
+      await onVerifyPassword(values.currentPassword);
+      setPasswordVerified(true);
+      showAlert(
+        "success",
+        "Contraseña validada",
+        "Ya podés definir la nueva contraseña.",
+      );
+    } catch (error: unknown) {
+      setPasswordVerified(false);
+      const message =
+        typeof error === "object" &&
+        error !== null &&
+        "response" in error &&
+        typeof (error as { response?: { data?: { error?: string } } }).response
+          ?.data?.error === "string"
+          ? (error as { response?: { data?: { error?: string } } }).response
+              ?.data?.error
+          : "La contraseña actual no es correcta.";
+      showAlert("error", "Contraseña incorrecta", message || "La contraseña actual no es correcta.");
+    } finally {
+      setVerifyingPassword(false);
+    }
+  };
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+
+    if (isEditing && values.password.trim()) {
+      if (!passwordVerified) {
+        showAlert(
+          "warning",
+          "Validá la contraseña actual",
+          "Primero validá la contraseña actual para poder cambiarla.",
+        );
+        return;
+      }
+      if (values.password.trim().length < 6) {
+        showAlert(
+          "warning",
+          "Contraseña corta",
+          "La nueva contraseña debe tener al menos 6 caracteres.",
+        );
+        return;
+      }
+    }
+
     await onSubmit(values);
     onClose();
   };
@@ -91,8 +163,8 @@ export function UserFormModal({
                   : "Crear acceso de usuario"}
               </h3>
               <p className="mt-2 max-w-xl text-sm text-slate-500">
-                Definí rol, empresa asociada y credenciales iniciales para el
-                acceso al sistema.
+                Definí rol, empresa asociada y credenciales para el acceso al
+                sistema.
               </p>
             </div>
             <button
@@ -182,14 +254,86 @@ export function UserFormModal({
                   </Field>
                 </>
               ) : (
-                <div className="rounded-2xl border border-dashed border-blue-200 bg-blue-50/30 px-4 py-4 sm:col-span-2">
-                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">
-                    Credenciales
-                  </p>
-                  <p className="mt-2 text-sm text-slate-600">
-                    En edición no se modifica el correo ni la contraseña. Si
-                    necesitás reemitir acceso, creá una nueva cuenta.
-                  </p>
+                <div className="rounded-2xl border border-blue-100 bg-blue-50/30 px-4 py-4 sm:col-span-2 space-y-4">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">
+                      Cambiar contraseña
+                    </p>
+                    <p className="mt-1 text-sm text-slate-600">
+                      Validá la contraseña actual y recién ahí definí una nueva.
+                      Si no querés cambiarla, dejá estos campos vacíos.
+                    </p>
+                  </div>
+
+                  <Field label="Contraseña actual">
+                    <div className="relative">
+                      <input
+                        type={showCurrentPassword ? "text" : "password"}
+                        value={values.currentPassword || ""}
+                        onChange={(e) => {
+                          updateField("currentPassword", e.target.value);
+                          setPasswordVerified(false);
+                          updateField("password", "");
+                        }}
+                        disabled={passwordVerified}
+                        placeholder="Ingresá la contraseña actual"
+                        className="w-full rounded-2xl border border-slate-200 bg-white pl-4 pr-10 py-3 text-sm font-medium text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-slate-400 disabled:bg-slate-50 disabled:text-slate-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowCurrentPassword(!showCurrentPassword)
+                        }
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                      >
+                        {showCurrentPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                  </Field>
+
+                  {!passwordVerified ? (
+                    <button
+                      type="button"
+                      disabled={verifyingPassword || isSaving}
+                      onClick={() => void handleVerifyPassword()}
+                      className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-white transition-colors hover:bg-slate-800 disabled:opacity-60"
+                    >
+                      {(verifyingPassword || isSaving) && (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      )}
+                      Validar contraseña
+                    </button>
+                  ) : (
+                    <Field label="Nueva contraseña">
+                      <div className="relative">
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          value={values.password}
+                          onChange={(e) =>
+                            updateField("password", e.target.value)
+                          }
+                          minLength={6}
+                          placeholder="Mínimo 6 caracteres"
+                          className="w-full rounded-2xl border border-slate-200 bg-white pl-4 pr-10 py-3 text-sm font-medium text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-slate-400"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                        >
+                          {showPassword ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
+                    </Field>
+                  )}
                 </div>
               )}
             </div>
@@ -305,7 +449,7 @@ export function UserFormModal({
               </button>
               <button
                 type="submit"
-                disabled={isSaving}
+                disabled={isSaving || verifyingPassword}
                 className="inline-flex items-center gap-2 rounded-full bg-blue-700 px-5 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-white transition-colors hover:bg-blue-800 disabled:opacity-60"
               >
                 {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}

@@ -127,7 +127,7 @@ export default function AdminLayout({
         </nav>
 
         {/* User profile / Footer */}
-        <div className="p-4 border-t border-slate-900 flex items-center justify-between gap-3 bg-slate-950/20">
+        <div className="relative z-30 p-4 border-t border-slate-900 flex items-center justify-between gap-3 bg-slate-950/20">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="h-9 w-9 rounded-full bg-brand-secondary text-white flex items-center justify-center text-xs font-bold shrink-0">
               {getInitials(user.nombre_completo || "Admin")}
@@ -142,7 +142,7 @@ export default function AdminLayout({
             </div>
           </div>
           <div className="flex items-center gap-1">
-            <NotificationBell />
+            <NotificationBell placement="top" variant="dark" />
             <button
               onClick={logout}
               className="p-2 text-brand-text-light hover:text-red-400 hover:bg-slate-900/50 rounded-lg transition-colors cursor-pointer shrink-0"

@@ -7,6 +7,7 @@ export type AdminUsuarioFormValues = {
   username: string;
   email: string;
   password: string;
+  currentPassword?: string;
   rol: AdminUsuario["rol"];
   empresa_id: string | null;
   activo: boolean;
@@ -14,8 +15,10 @@ export type AdminUsuarioFormValues = {
 
 export type AdminUsuarioUpdateValues = Omit<
   AdminUsuarioFormValues,
-  "email" | "password"
+  "email" | "password" | "currentPassword"
 > & {
+  password?: string;
+  currentPassword?: string;
   permisos_personalizados?: AdminUsuario["permisos_personalizados"];
 };
 
@@ -81,9 +84,34 @@ export function useAdminUsuarios() {
       }
 
       const response = await api.put(`/admin/usuarios/${id}`, body);
-      return response.data as AdminUsuario;
+      const updated = response.data as AdminUsuario;
+
+      if (payload.password?.trim()) {
+        await api.patch(`/admin/usuarios/${id}/password`, {
+          password: payload.password,
+          currentPassword: payload.currentPassword || "",
+        });
+      }
+
+      return updated;
     },
     onSuccess: invalidate,
+  });
+
+  const verificarPasswordUsuarioMutation = useMutation({
+    mutationFn: async ({
+      id,
+      currentPassword,
+    }: {
+      id: string;
+      currentPassword: string;
+    }) => {
+      const response = await api.post(
+        `/admin/usuarios/${id}/password/verificar`,
+        { currentPassword },
+      );
+      return response.data;
+    },
   });
 
   const toggleUsuarioActivoMutation = useMutation({
@@ -118,9 +146,12 @@ export function useAdminUsuarios() {
     },
     createUsuario: createUsuarioMutation.mutateAsync,
     updateUsuario: updateUsuarioMutation.mutateAsync,
+    verificarPasswordUsuario: verificarPasswordUsuarioMutation.mutateAsync,
     toggleUsuarioActivo: toggleUsuarioActivoMutation.mutateAsync,
     isSaving:
-      createUsuarioMutation.isPending || updateUsuarioMutation.isPending,
+      createUsuarioMutation.isPending ||
+      updateUsuarioMutation.isPending ||
+      verificarPasswordUsuarioMutation.isPending,
     isToggling: toggleUsuarioActivoMutation.isPending,
   };
 }

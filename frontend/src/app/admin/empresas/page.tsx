@@ -38,7 +38,6 @@ export default function AdminEmpresasPage() {
     editarEmpresa,
     cambiarEstadoEmpresa,
     crearDuenoEmpresa,
-    resetPasswordUsuario,
     subirLogoEmpresa,
     subirLogoConsultora,
     asignarPreventor,
@@ -63,10 +62,6 @@ export default function AdminEmpresasPage() {
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [isCuitModalOpen, setIsCuitModalOpen] = useState(false);
   const [isDuenoModalOpen, setIsDuenoModalOpen] = useState(false);
-  const [duenoModalMode, setDuenoModalMode] = useState<"create" | "password">(
-    "create",
-  );
-  const [duenoTargetId, setDuenoTargetId] = useState<string | null>(null);
   const [duenoNombre, setDuenoNombre] = useState("");
   const [duenoUsername, setDuenoUsername] = useState("");
   const [duenoPassword, setDuenoPassword] = useState("");
@@ -500,8 +495,6 @@ export default function AdminEmpresasPage() {
   });
 
   const openCreateDuenoModal = () => {
-    setDuenoModalMode("create");
-    setDuenoTargetId(null);
     setDuenoNombre(selectedEmpresa?.contacto || "");
     setDuenoUsername("");
     setDuenoPassword("");
@@ -509,18 +502,8 @@ export default function AdminEmpresasPage() {
     setIsDuenoModalOpen(true);
   };
 
-  const openResetDuenoPassword = (duenoId: string, username: string) => {
-    setDuenoModalMode("password");
-    setDuenoTargetId(duenoId);
-    setDuenoUsername(username);
-    setDuenoPassword("");
-    setShowDuenoPassword(false);
-    setIsDuenoModalOpen(true);
-  };
-
   const closeDuenoModal = () => {
     setIsDuenoModalOpen(false);
-    setDuenoTargetId(null);
     setDuenoNombre("");
     setDuenoUsername("");
     setDuenoPassword("");
@@ -530,6 +513,15 @@ export default function AdminEmpresasPage() {
   const handleSaveDuenoAcceso = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedEmpresa) return;
+
+    if (!duenoNombre.trim() || !duenoUsername.trim()) {
+      showAlert(
+        "warning",
+        "Datos incompletos",
+        "Completá nombre completo y usuario.",
+      );
+      return;
+    }
 
     if (duenoPassword.trim().length < 6) {
       showAlert(
@@ -541,37 +533,17 @@ export default function AdminEmpresasPage() {
     }
 
     try {
-      if (duenoModalMode === "create") {
-        if (!duenoNombre.trim() || !duenoUsername.trim()) {
-          showAlert(
-            "warning",
-            "Datos incompletos",
-            "Completá nombre completo y usuario.",
-          );
-          return;
-        }
-        await crearDuenoEmpresa({
-          empresa_id: selectedEmpresa.id,
-          nombre_completo: duenoNombre.trim(),
-          username: duenoUsername.trim(),
-          password: duenoPassword,
-        });
-        showAlert(
-          "success",
-          "Acceso creado",
-          `El dueño ya puede ingresar al portal con CUIT ${formatCuit(selectedEmpresa.cuit)}, usuario "${duenoUsername.trim()}" y la contraseña definida.`,
-        );
-      } else if (duenoTargetId) {
-        await resetPasswordUsuario({
-          id: duenoTargetId,
-          password: duenoPassword,
-        });
-        showAlert(
-          "success",
-          "Contraseña actualizada",
-          `Se actualizó la contraseña de @${duenoUsername}.`,
-        );
-      }
+      await crearDuenoEmpresa({
+        empresa_id: selectedEmpresa.id,
+        nombre_completo: duenoNombre.trim(),
+        username: duenoUsername.trim(),
+        password: duenoPassword,
+      });
+      showAlert(
+        "success",
+        "Acceso creado",
+        `El dueño ya puede ingresar al portal con CUIT ${formatCuit(selectedEmpresa.cuit)}, usuario "${duenoUsername.trim()}" y la contraseña definida.`,
+      );
       closeDuenoModal();
     } catch (error: unknown) {
       showAlert(
@@ -1052,40 +1024,26 @@ export default function AdminEmpresasPage() {
                   {duenosEmpresa.map((dueno) => (
                     <div
                       key={dueno.id}
-                      className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-3 border border-emerald-100 rounded-xl bg-emerald-50/40"
+                      className="flex items-center gap-3 p-3 border border-emerald-100 rounded-xl bg-emerald-50/40"
                     >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="h-7 w-7 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-black shrink-0 border border-emerald-200">
-                          {getInitials(dueno.nombre_completo || "")}
-                        </div>
-                        <div className="min-w-0">
-                          <span className="block text-xs font-black text-slate-800 truncate">
-                            {dueno.nombre_completo || "Sin nombre"}
-                          </span>
-                          <span className="block text-[10px] font-bold text-slate-500 truncate">
-                            @{dueno.username} · login con CUIT{" "}
-                            {formatCuit(selectedEmpresa.cuit)}
-                          </span>
-                        </div>
+                      <div className="h-7 w-7 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-black shrink-0 border border-emerald-200">
+                        {getInitials(dueno.nombre_completo || "")}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          openResetDuenoPassword(
-                            dueno.id,
-                            dueno.username || "",
-                          )
-                        }
-                        className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-slate-600 hover:bg-slate-50 cursor-pointer"
-                      >
-                        <KeyRound className="h-3 w-3" />
-                        Contraseña
-                      </button>
+                      <div className="min-w-0">
+                        <span className="block text-xs font-black text-slate-800 truncate">
+                          {dueno.nombre_completo || "Sin nombre"}
+                        </span>
+                        <span className="block text-[10px] font-bold text-slate-500 truncate">
+                          @{dueno.username} · login con CUIT{" "}
+                          {formatCuit(selectedEmpresa.cuit)}
+                        </span>
+                      </div>
                     </div>
                   ))}
                   <p className="text-[10px] text-slate-500 font-semibold leading-relaxed">
                     El cliente entra en <strong>/login</strong> con CUIT +
-                    usuario + contraseña.
+                    usuario + contraseña. Para cambiar la contraseña, usá{" "}
+                    <strong>Usuarios</strong> en el CRM.
                   </p>
                 </div>
               ) : (
@@ -1545,7 +1503,7 @@ export default function AdminEmpresasPage() {
         </div>
       )}
 
-      {/* 7. MODAL: Acceso dueño / contraseña */}
+      {/* 7. MODAL: Crear acceso dueño */}
       {isDuenoModalOpen && selectedEmpresa && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-md animate-fade-in">
           <form
@@ -1558,14 +1516,8 @@ export default function AdminEmpresasPage() {
                   Acceso al portal
                 </span>
                 <h3 className="mt-1 text-base font-black text-slate-900">
-                  {duenoModalMode === "create"
-                    ? "Crear dueño y contraseña"
-                    : "Cambiar contraseña"}
+                  Crear dueño y contraseña
                 </h3>
-                <p className="mt-1 text-xs text-slate-500 font-semibold leading-relaxed">
-                  Empresa: {selectedEmpresa.razon_social}. Login con CUIT{" "}
-                  {formatCuit(selectedEmpresa.cuit)} + usuario + contraseña.
-                </p>
               </div>
               <button
                 type="button"
@@ -1577,53 +1529,40 @@ export default function AdminEmpresasPage() {
             </div>
 
             <div className="space-y-4 px-5 py-5">
-              {duenoModalMode === "create" && (
-                <>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                      Nombre completo
-                    </label>
-                    <input
-                      value={duenoNombre}
-                      onChange={(e) => setDuenoNombre(e.target.value)}
-                      required
-                      placeholder="Responsable de la empresa"
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-slate-400"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                      Usuario
-                    </label>
-                    <input
-                      value={duenoUsername}
-                      onChange={(e) =>
-                        setDuenoUsername(
-                          e.target.value.replace(/\s+/g, "").toLowerCase(),
-                        )
-                      }
-                      required
-                      autoCapitalize="none"
-                      autoCorrect="off"
-                      spellCheck={false}
-                      placeholder="ej. sandra.lapetina"
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-slate-400"
-                    />
-                  </div>
-                </>
-              )}
-
-              {duenoModalMode === "password" && (
-                <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 text-xs font-bold text-slate-600">
-                  Usuario: @{duenoUsername}
-                </div>
-              )}
-
               <div className="space-y-1.5">
                 <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                  {duenoModalMode === "create"
-                    ? "Contraseña inicial"
-                    : "Nueva contraseña"}
+                  Nombre completo
+                </label>
+                <input
+                  value={duenoNombre}
+                  onChange={(e) => setDuenoNombre(e.target.value)}
+                  required
+                  placeholder="Responsable de la empresa"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-slate-400"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  Usuario
+                </label>
+                <input
+                  value={duenoUsername}
+                  onChange={(e) =>
+                    setDuenoUsername(
+                      e.target.value.replace(/\s+/g, "").toLowerCase(),
+                    )
+                  }
+                  required
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  placeholder="ej. sandra.lapetina"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-slate-400"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  Contraseña inicial
                 </label>
                 <div className="relative">
                   <input
@@ -1668,10 +1607,8 @@ export default function AdminEmpresasPage() {
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     Guardando…
                   </>
-                ) : duenoModalMode === "create" ? (
-                  "Crear acceso"
                 ) : (
-                  "Guardar contraseña"
+                  "Crear acceso"
                 )}
               </button>
             </div>

@@ -35,6 +35,7 @@ export default function AdminUsuariosPage() {
     refetch,
     createUsuario,
     updateUsuario,
+    verificarPasswordUsuario,
     toggleUsuarioActivo,
     isSaving,
     isToggling,
@@ -125,6 +126,8 @@ export default function AdminUsuariosPage() {
             rol: values.rol,
             activo: values.activo,
             empresa_id: values.rol === "dueno" ? values.empresa_id : null,
+            password: values.password?.trim() || undefined,
+            currentPassword: values.currentPassword?.trim() || undefined,
           },
         });
 
@@ -132,7 +135,9 @@ export default function AdminUsuariosPage() {
         showAlert(
           "success",
           "Usuario actualizado",
-          "Los cambios se guardaron correctamente.",
+          values.password?.trim()
+            ? "Perfil y contraseña actualizados correctamente."
+            : "Los cambios se guardaron correctamente.",
         );
         return;
       }
@@ -363,6 +368,16 @@ export default function AdminUsuariosPage() {
         isSaving={isSaving}
         onClose={handleCloseModal}
         onSubmit={handleSubmitUsuario}
+        onVerifyPassword={
+          editingUsuario
+            ? async (currentPassword) => {
+                await verificarPasswordUsuario({
+                  id: editingUsuario.id,
+                  currentPassword,
+                });
+              }
+            : undefined
+        }
       />
 
       {isRefetching ? (
