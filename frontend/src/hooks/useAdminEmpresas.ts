@@ -19,6 +19,13 @@ export type EmpresaDetalle = Empresa & {
       nombre_completo?: string | null;
     } | null;
   }>;
+  perfiles?: Array<{
+    id: string;
+    nombre_completo?: string | null;
+    username?: string | null;
+    activo?: boolean;
+    rol?: string;
+  }>;
 };
 
 export type PreventorActivo = Perfil;
@@ -41,13 +48,13 @@ export function useAdminEmpresas() {
     },
   });
 
-  // Query: list of all preventores (users with role 'preventor' and active)
+  // Solo preventores activos (queryKey propio: no mezclar con adminUsuarios)
   const preventoresQuery = useQuery({
-    queryKey: ["adminUsuarios"],
+    queryKey: ["adminPreventores"],
     queryFn: async () => {
       const response = await api.get("/admin/usuarios");
       return (response.data as Perfil[]).filter(
-        (u) => u.rol === "preventor" && u.activo,
+        (u) => u.rol === "preventor" && u.activo !== false,
       );
     },
   });
@@ -164,6 +171,63 @@ export function useAdminEmpresas() {
     },
   });
 
+  const cambiarEstadoEmpresaMutation = useMutation({
+    mutationFn: async ({
+      id,
+      estado,
+    }: {
+      id: string;
+      estado: "activa" | "aviso_deuda" | "pausada" | "eliminada";
+    }) => {
+      const response = await api.patch(`/admin/empresas/${id}/estado`, {
+        estado,
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["adminEmpresas"] });
+      queryClient.invalidateQueries({ queryKey: ["adminDashboard"] });
+    },
+  });
+
+  const crearDuenoEmpresaMutation = useMutation({
+    mutationFn: async (payload: {
+      empresa_id: string;
+      nombre_completo: string;
+      username: string;
+      password: string;
+    }) => {
+      const response = await api.post("/admin/usuarios", {
+        email: `${payload.username}@placeholder.local`,
+        password: payload.password,
+        username: payload.username,
+        nombre_completo: payload.nombre_completo,
+        rol: "dueno",
+        empresa_id: payload.empresa_id,
+      });
+      return response.data as Perfil;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["adminEmpresas"] });
+      queryClient.invalidateQueries({ queryKey: ["adminUsuarios"] });
+    },
+  });
+
+  const resetPasswordUsuarioMutation = useMutation({
+    mutationFn: async ({
+      id,
+      password,
+    }: {
+      id: string;
+      password: string;
+    }) => {
+      const response = await api.patch(`/admin/usuarios/${id}/password`, {
+        password,
+      });
+      return response.data;
+    },
+  });
+
   return {
     empresas: empresasQuery.data || [],
     preventores: preventoresQuery.data || [],
@@ -175,12 +239,19 @@ export function useAdminEmpresas() {
     },
     crearEmpresa: crearEmpresaMutation.mutateAsync,
     editarEmpresa: editarEmpresaMutation.mutateAsync,
+    cambiarEstadoEmpresa: cambiarEstadoEmpresaMutation.mutateAsync,
+    crearDuenoEmpresa: crearDuenoEmpresaMutation.mutateAsync,
+    resetPasswordUsuario: resetPasswordUsuarioMutation.mutateAsync,
     subirLogoEmpresa: subirLogoEmpresaMutation.mutateAsync,
     subirLogoConsultora: subirLogoConsultoraMutation.mutateAsync,
     asignarPreventor: asignarPreventorMutation.mutateAsync,
     desasignarPreventor: desasignarPreventorMutation.mutateAsync,
     buscarCuit: buscarCuitMutation.mutateAsync,
     isSaving: crearEmpresaMutation.isPending || editarEmpresaMutation.isPending,
+    isChangingEstado: cambiarEstadoEmpresaMutation.isPending,
+    isSavingDueno:
+      crearDuenoEmpresaMutation.isPending ||
+      resetPasswordUsuarioMutation.isPending,
     isUploading:
       subirLogoEmpresaMutation.isPending ||
       subirLogoConsultoraMutation.isPending,

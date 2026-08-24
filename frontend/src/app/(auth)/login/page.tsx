@@ -95,6 +95,11 @@ export default function LoginPage() {
                     id="cuit"
                     name="cuit"
                     type="text"
+                    inputMode="numeric"
+                    autoComplete="organization"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                     required
                     placeholder="30-12345678-9"
                     value={cuit}
@@ -120,6 +125,10 @@ export default function LoginPage() {
                     id="username"
                     name="username"
                     type="text"
+                    autoComplete="username"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                     required
                     placeholder="diego.luduena"
                     value={username}
@@ -145,6 +154,7 @@ export default function LoginPage() {
                     id="password"
                     name="password"
                     type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
                     required
                     placeholder="••••••••"
                     value={password}

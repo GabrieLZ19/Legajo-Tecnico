@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useAdminEmpresas } from "@/hooks/useAdminEmpresas";
 import type { EmpresaDetalle, PreventorActivo } from "@/hooks/useAdminEmpresas";
 import { useAlert } from "@/context/AlertContext";
+import { getClipboardImageFile } from "@/lib/signature";
 import {
   Building2,
   Plus,
@@ -14,10 +15,19 @@ import {
   Building,
   UserPlus,
   Upload,
+  Pause,
+  Play,
+  Trash2,
+  AlertTriangle,
+  KeyRound,
+  Eye,
+  EyeOff,
+  Copy,
 } from "lucide-react";
+import type { EstadoEmpresa } from "@/types";
 
 export default function AdminEmpresasPage() {
-  const { showAlert } = useAlert();
+  const { showAlert, showConfirm } = useAlert();
 
   // Custom hook containing all TanStack React Query states and mutations
   const {
@@ -26,12 +36,17 @@ export default function AdminEmpresasPage() {
     isLoading,
     crearEmpresa,
     editarEmpresa,
+    cambiarEstadoEmpresa,
+    crearDuenoEmpresa,
+    resetPasswordUsuario,
     subirLogoEmpresa,
     subirLogoConsultora,
     asignarPreventor,
     desasignarPreventor,
     buscarCuit,
     isSaving,
+    isChangingEstado,
+    isSavingDueno,
     isLookingUpCuit,
   } = useAdminEmpresas();
 
@@ -47,6 +62,15 @@ export default function AdminEmpresasPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [isCuitModalOpen, setIsCuitModalOpen] = useState(false);
+  const [isDuenoModalOpen, setIsDuenoModalOpen] = useState(false);
+  const [duenoModalMode, setDuenoModalMode] = useState<"create" | "password">(
+    "create",
+  );
+  const [duenoTargetId, setDuenoTargetId] = useState<string | null>(null);
+  const [duenoNombre, setDuenoNombre] = useState("");
+  const [duenoUsername, setDuenoUsername] = useState("");
+  const [duenoPassword, setDuenoPassword] = useState("");
+  const [showDuenoPassword, setShowDuenoPassword] = useState(false);
   const [preventorSearch, setPreventorSearch] = useState("");
 
   // CUIT lookup input
@@ -68,6 +92,7 @@ export default function AdminEmpresasPage() {
   // Upload file refs
   const fileEmpresaRef = useRef<HTMLInputElement>(null);
   const fileConsultoraRef = useRef<HTMLInputElement>(null);
+  const logoEmpresaBoxRef = useRef<HTMLDivElement>(null);
 
   // Filtered list of companies
   const filteredEmpresas = empresas.filter(
@@ -123,6 +148,89 @@ export default function AdminEmpresasPage() {
     }
 
     return fallback;
+  };
+
+  const estadoEmpresaLabel = (estado?: EstadoEmpresa | string | null) => {
+    switch (estado) {
+      case "aviso_deuda":
+        return "Aviso de deuda";
+      case "pausada":
+        return "Pausada";
+      case "eliminada":
+        return "Eliminada";
+      default:
+        return "Activa";
+    }
+  };
+
+  const estadoEmpresaBadgeClass = (estado?: EstadoEmpresa | string | null) => {
+    switch (estado) {
+      case "aviso_deuda":
+        return "bg-amber-50 text-amber-700 border-amber-200";
+      case "pausada":
+        return "bg-orange-50 text-orange-700 border-orange-200";
+      case "eliminada":
+        return "bg-rose-50 text-rose-700 border-rose-200";
+      default:
+        return "bg-emerald-50 text-emerald-700 border-emerald-200";
+    }
+  };
+
+  const handleCambiarEstado = async (
+    emp: EmpresaDetalle,
+    estado: EstadoEmpresa,
+  ) => {
+    const titles: Record<EstadoEmpresa, string> = {
+      activa: "¿Reactivar empresa?",
+      aviso_deuda: "¿Marcar aviso de deuda?",
+      pausada: "¿Pausar empresa?",
+      eliminada: "¿Eliminar empresa?",
+    };
+
+    const messages: Record<EstadoEmpresa, string> = {
+      activa: `Vas a reactivar "${emp.razon_social}". Volverá a operar con normalidad.`,
+      aviso_deuda: `Los usuarios de "${emp.razon_social}" podrán ingresar, pero verán un aviso de deuda en el portal.`,
+      pausada: `"${emp.razon_social}" no podrá iniciar sesión (útil por falta de pago).`,
+      eliminada: `"${emp.razon_social}" quedará dada de baja. Podés restaurarla después.`,
+    };
+
+    const confirmLabels: Record<EstadoEmpresa, string> = {
+      activa: "Reactivar",
+      aviso_deuda: "Marcar aviso",
+      pausada: "Pausar",
+      eliminada: "Eliminar",
+    };
+
+    const confirmTypes: Record<EstadoEmpresa, "success" | "warning" | "error"> =
+      {
+        activa: "success",
+        aviso_deuda: "warning",
+        pausada: "warning",
+        eliminada: "error",
+      };
+
+    const ok = await showConfirm(titles[estado], messages[estado], {
+      type: confirmTypes[estado],
+      confirmLabel: confirmLabels[estado],
+      cancelLabel: "Cancelar",
+    });
+    if (!ok) return;
+
+    try {
+      await cambiarEstadoEmpresa({ id: emp.id, estado });
+      setSelectedEmpresaId(emp.id);
+      showAlert(
+        "success",
+        "Estado actualizado",
+        `La empresa quedó como: ${estadoEmpresaLabel(estado)}.`,
+      );
+    } catch (error: unknown) {
+      showAlert(
+        "error",
+        "No se pudo cambiar el estado",
+        getErrorMessage(error, "Ocurrió un error al actualizar la empresa."),
+      );
+    }
   };
 
   const openEditModal = (emp: EmpresaDetalle) => {
@@ -234,32 +342,67 @@ export default function AdminEmpresasPage() {
     }
   };
 
-  // Upload company logo handler
+  const uploadLogoEmpresaFile = useCallback(
+    async (file: File) => {
+      if (!selectedEmpresa) return;
+
+      const formData = new FormData();
+      formData.append("logo", file);
+
+      try {
+        await subirLogoEmpresa({ id: selectedEmpresa.id, formData });
+        setSelectedEmpresaId(selectedEmpresa.id);
+        showAlert(
+          "success",
+          "Logo cargado",
+          "El logotipo de la empresa se ha actualizado.",
+        );
+      } catch (error: unknown) {
+        showAlert(
+          "error",
+          "Error de carga",
+          getErrorMessage(error, "No se pudo subir el logo."),
+        );
+      }
+    },
+    [selectedEmpresa, showAlert, subirLogoEmpresa],
+  );
+
+  // Upload company logo handler (archivo o recorte pegado)
   const handleUploadLogoEmpresa = async (
     e: React.ChangeEvent<HTMLInputElement>,
   ) => {
     const file = e.target.files?.[0];
-    if (!file || !selectedEmpresa) return;
-
-    const formData = new FormData();
-    formData.append("logo", file);
-
-    try {
-      await subirLogoEmpresa({ id: selectedEmpresa.id, formData });
-      setSelectedEmpresaId(selectedEmpresa.id);
-      showAlert(
-        "success",
-        "Logo cargado",
-        "El logotipo de la empresa se ha actualizado.",
-      );
-    } catch (error: unknown) {
-      showAlert(
-        "error",
-        "Error de carga",
-        getErrorMessage(error, "No se pudo subir el logo."),
-      );
-    }
+    e.target.value = "";
+    if (!file) return;
+    await uploadLogoEmpresaFile(file);
   };
+
+  // Pegar recorte (Ctrl+V / Cmd+V) → logo empresa
+  useEffect(() => {
+    if (!selectedEmpresa) return;
+
+    const onPaste = (event: ClipboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      const file = getClipboardImageFile(event.clipboardData);
+      if (!file) return;
+
+      event.preventDefault();
+      void uploadLogoEmpresaFile(file);
+    };
+
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [selectedEmpresa, uploadLogoEmpresaFile]);
 
   // Upload consultora logo handler
   const handleUploadLogoConsultora = async (
@@ -346,11 +489,124 @@ export default function AdminEmpresasPage() {
 
   // Active Assigned Preventores List for Selected Empresa
   const assignedList = selectedEmpresa?.preventor_empresas || [];
+  const duenosEmpresa = (selectedEmpresa?.perfiles || []).filter(
+    (p) => p.rol === "dueno",
+  );
   const preventoresFiltrados = preventores.filter((prev) => {
+    if (prev.rol !== "preventor" || prev.activo === false) return false;
     const searchable =
       `${prev.nombre_completo || ""} ${prev.username || ""}`.toLowerCase();
     return searchable.includes(preventorSearch.toLowerCase());
   });
+
+  const openCreateDuenoModal = () => {
+    setDuenoModalMode("create");
+    setDuenoTargetId(null);
+    setDuenoNombre(selectedEmpresa?.contacto || "");
+    setDuenoUsername("");
+    setDuenoPassword("");
+    setShowDuenoPassword(false);
+    setIsDuenoModalOpen(true);
+  };
+
+  const openResetDuenoPassword = (duenoId: string, username: string) => {
+    setDuenoModalMode("password");
+    setDuenoTargetId(duenoId);
+    setDuenoUsername(username);
+    setDuenoPassword("");
+    setShowDuenoPassword(false);
+    setIsDuenoModalOpen(true);
+  };
+
+  const closeDuenoModal = () => {
+    setIsDuenoModalOpen(false);
+    setDuenoTargetId(null);
+    setDuenoNombre("");
+    setDuenoUsername("");
+    setDuenoPassword("");
+    setShowDuenoPassword(false);
+  };
+
+  const handleSaveDuenoAcceso = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedEmpresa) return;
+
+    if (duenoPassword.trim().length < 6) {
+      showAlert(
+        "warning",
+        "Contraseña corta",
+        "La contraseña debe tener al menos 6 caracteres.",
+      );
+      return;
+    }
+
+    try {
+      if (duenoModalMode === "create") {
+        if (!duenoNombre.trim() || !duenoUsername.trim()) {
+          showAlert(
+            "warning",
+            "Datos incompletos",
+            "Completá nombre completo y usuario.",
+          );
+          return;
+        }
+        await crearDuenoEmpresa({
+          empresa_id: selectedEmpresa.id,
+          nombre_completo: duenoNombre.trim(),
+          username: duenoUsername.trim(),
+          password: duenoPassword,
+        });
+        showAlert(
+          "success",
+          "Acceso creado",
+          `El dueño ya puede ingresar al portal con CUIT ${formatCuit(selectedEmpresa.cuit)}, usuario "${duenoUsername.trim()}" y la contraseña definida.`,
+        );
+      } else if (duenoTargetId) {
+        await resetPasswordUsuario({
+          id: duenoTargetId,
+          password: duenoPassword,
+        });
+        showAlert(
+          "success",
+          "Contraseña actualizada",
+          `Se actualizó la contraseña de @${duenoUsername}.`,
+        );
+      }
+      closeDuenoModal();
+    } catch (error: unknown) {
+      showAlert(
+        "error",
+        "No se pudo guardar el acceso",
+        getErrorMessage(error, "Revisá los datos e intentá de nuevo."),
+      );
+    }
+  };
+
+  const copyPortalHint = async () => {
+    if (!selectedEmpresa) return;
+    const dueno = duenosEmpresa[0];
+    const text = [
+      `Portal Legajo Técnico`,
+      `CUIT: ${formatCuit(selectedEmpresa.cuit)}`,
+      `Usuario: ${dueno?.username || "(definir)"}`,
+      `Contraseña: (la que configuraste)`,
+      `URL: /login`,
+    ].join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      showAlert(
+        "success",
+        "Copiado",
+        "Datos de acceso copiados al portapapeles.",
+      );
+    } catch {
+      showAlert(
+        "error",
+        "No se pudo copiar",
+        "Copiá manualmente CUIT + usuario para enviárselos al cliente.",
+      );
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -405,9 +661,9 @@ export default function AdminEmpresasPage() {
           <Building className="h-4 w-4" />
         </div>
         <span className="mt-0.5">
-          Al dar de alta una empresa se cargan: Razón social, CUIT, Domicilio,
-          Localidad, Código Postal, Teléfono y Logotipo — datos que se
-          reutilizan en informes, constancias y entrega de EPP.
+          Alta recomendada en 3 pasos: 1) crear la empresa, 2) asignar
+          preventor(es), 3) crear el acceso del dueño (usuario + contraseña) para
+          que entre al portal con el CUIT.
         </span>
       </div>
 
@@ -425,6 +681,9 @@ export default function AdminEmpresasPage() {
                   <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-wider w-36">
                     CUIT
                   </th>
+                  <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-wider w-28 text-center">
+                    Estado
+                  </th>
                   <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-wider w-20 text-center">
                     Cumplimiento
                   </th>
@@ -436,6 +695,7 @@ export default function AdminEmpresasPage() {
                     Number(emp.porcentaje_cumplimiento || 100),
                   );
                   const isSelected = selectedEmpresa?.id === emp.id;
+                  const estado = (emp.estado || "activa") as EstadoEmpresa;
 
                   let badgeColor = "text-emerald-600";
                   if (compliance < 70) badgeColor = "text-rose-500";
@@ -449,7 +709,7 @@ export default function AdminEmpresasPage() {
                         isSelected
                           ? "bg-blue-50/40 hover:bg-blue-50/50"
                           : "hover:bg-slate-50/30"
-                      }`}
+                      } ${estado === "eliminada" ? "opacity-60" : ""}`}
                     >
                       <td className="px-6 py-4 flex items-center gap-3">
                         {emp.logo_url ? (
@@ -476,6 +736,13 @@ export default function AdminEmpresasPage() {
                       <td className="px-6 py-4 text-slate-500 font-bold">
                         {formatCuit(emp.cuit)}
                       </td>
+                      <td className="px-6 py-4 text-center">
+                        <span
+                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${estadoEmpresaBadgeClass(estado)}`}
+                        >
+                          {estadoEmpresaLabel(estado)}
+                        </span>
+                      </td>
                       <td
                         className={`px-6 py-4 text-center font-black text-sm ${badgeColor}`}
                       >
@@ -488,7 +755,7 @@ export default function AdminEmpresasPage() {
                 {filteredEmpresas.length === 0 && (
                   <tr>
                     <td
-                      colSpan={3}
+                      colSpan={4}
                       className="p-12 text-center text-xs font-bold text-slate-400"
                     >
                       No se encontraron empresas cargadas.
@@ -536,6 +803,85 @@ export default function AdminEmpresasPage() {
               >
                 <Edit2 className="h-3.5 w-3.5" />
               </button>
+            </div>
+
+            {/* Estado operativo CRM */}
+            <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-3.5 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                  Estado CRM
+                </span>
+                <span
+                  className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider ${estadoEmpresaBadgeClass(selectedEmpresa.estado)}`}
+                >
+                  {estadoEmpresaLabel(selectedEmpresa.estado)}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                {selectedEmpresa.estado === "aviso_deuda"
+                  ? "Pueden ingresar al portal, pero verán un mensaje de aviso de deuda."
+                  : selectedEmpresa.estado === "pausada"
+                    ? "No pueden iniciar sesión (útil por falta de pago)."
+                    : selectedEmpresa.estado === "eliminada"
+                      ? "Baja lógica: oculta del uso operativo. Podés restaurarla."
+                      : "Empresa operativa sin restricciones."}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {selectedEmpresa.estado !== "activa" && (
+                  <button
+                    type="button"
+                    disabled={isChangingEstado}
+                    onClick={() =>
+                      void handleCambiarEstado(selectedEmpresa, "activa")
+                    }
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 cursor-pointer"
+                  >
+                    <Play className="h-3 w-3" />
+                    Activar
+                  </button>
+                )}
+                {selectedEmpresa.estado !== "aviso_deuda" &&
+                  selectedEmpresa.estado !== "eliminada" && (
+                    <button
+                      type="button"
+                      disabled={isChangingEstado}
+                      onClick={() =>
+                        void handleCambiarEstado(selectedEmpresa, "aviso_deuda")
+                      }
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-amber-700 hover:bg-amber-100 disabled:opacity-50 cursor-pointer"
+                    >
+                      <AlertTriangle className="h-3 w-3" />
+                      Aviso deuda
+                    </button>
+                  )}
+                {selectedEmpresa.estado !== "pausada" &&
+                  selectedEmpresa.estado !== "eliminada" && (
+                    <button
+                      type="button"
+                      disabled={isChangingEstado}
+                      onClick={() =>
+                        void handleCambiarEstado(selectedEmpresa, "pausada")
+                      }
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-orange-700 hover:bg-orange-100 disabled:opacity-50 cursor-pointer"
+                    >
+                      <Pause className="h-3 w-3" />
+                      Pausar
+                    </button>
+                  )}
+                {selectedEmpresa.estado !== "eliminada" && (
+                  <button
+                    type="button"
+                    disabled={isChangingEstado}
+                    onClick={() =>
+                      void handleCambiarEstado(selectedEmpresa, "eliminada")
+                    }
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-rose-700 hover:bg-rose-100 disabled:opacity-50 cursor-pointer"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    Eliminar
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Info Grid */}
@@ -628,8 +974,24 @@ export default function AdminEmpresasPage() {
 
                 {/* Logo Empresa Upload Box */}
                 <div
+                  ref={logoEmpresaBoxRef}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => fileEmpresaRef.current?.click()}
-                  className="border border-slate-200 hover:border-slate-300 rounded-xl p-3 bg-slate-50/50 hover:bg-slate-50 flex flex-col items-center justify-center gap-1.5 cursor-pointer text-center group transition-all h-24"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      fileEmpresaRef.current?.click();
+                    }
+                  }}
+                  onPaste={(e) => {
+                    const file = getClipboardImageFile(e.clipboardData);
+                    if (!file) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    void uploadLogoEmpresaFile(file);
+                  }}
+                  className="border border-slate-200 hover:border-slate-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15 rounded-xl p-3 bg-slate-50/50 hover:bg-slate-50 flex flex-col items-center justify-center gap-1 cursor-pointer text-center group transition-all h-24 outline-none"
                 >
                   <input
                     type="file"
@@ -643,7 +1005,7 @@ export default function AdminEmpresasPage() {
                     <img
                       src={selectedEmpresa.logo_url}
                       alt="Logo Empresa"
-                      className="h-10 max-w-full object-contain p-0.5"
+                      className="h-9 max-w-full object-contain p-0.5"
                     />
                   ) : (
                     <Upload className="h-4.5 w-4.5 text-slate-400 group-hover:text-blue-600 transition-colors" />
@@ -651,8 +1013,97 @@ export default function AdminEmpresasPage() {
                   <span className="text-[9px] font-black text-slate-500 uppercase tracking-wider block">
                     Logo Empresa
                   </span>
+                  <span className="text-[8px] font-semibold text-slate-400 normal-case tracking-normal">
+                    Clic o pegá un recorte (Ctrl+V)
+                  </span>
                 </div>
               </div>
+            </div>
+
+            {/* ACCESO DUEÑO / PORTAL */}
+            <div className="space-y-4 pt-4 border-t border-slate-100">
+              <div className="flex justify-between items-center gap-2">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                  Acceso al portal (Dueño)
+                </span>
+                {duenosEmpresa.length === 0 ? (
+                  <button
+                    type="button"
+                    onClick={openCreateDuenoModal}
+                    className="inline-flex items-center gap-1 text-[10px] font-black text-blue-650 hover:text-blue-800 transition-colors cursor-pointer uppercase tracking-wider"
+                  >
+                    <KeyRound className="h-3 w-3" />
+                    Crear acceso
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void copyPortalHint()}
+                    className="inline-flex items-center gap-1 text-[10px] font-black text-slate-500 hover:text-slate-800 transition-colors cursor-pointer uppercase tracking-wider"
+                  >
+                    <Copy className="h-3 w-3" />
+                    Copiar datos
+                  </button>
+                )}
+              </div>
+
+              {duenosEmpresa.length > 0 ? (
+                <div className="space-y-2">
+                  {duenosEmpresa.map((dueno) => (
+                    <div
+                      key={dueno.id}
+                      className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-3 border border-emerald-100 rounded-xl bg-emerald-50/40"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-7 w-7 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-black shrink-0 border border-emerald-200">
+                          {getInitials(dueno.nombre_completo || "")}
+                        </div>
+                        <div className="min-w-0">
+                          <span className="block text-xs font-black text-slate-800 truncate">
+                            {dueno.nombre_completo || "Sin nombre"}
+                          </span>
+                          <span className="block text-[10px] font-bold text-slate-500 truncate">
+                            @{dueno.username} · login con CUIT{" "}
+                            {formatCuit(selectedEmpresa.cuit)}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          openResetDuenoPassword(
+                            dueno.id,
+                            dueno.username || "",
+                          )
+                        }
+                        className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-slate-600 hover:bg-slate-50 cursor-pointer"
+                      >
+                        <KeyRound className="h-3 w-3" />
+                        Contraseña
+                      </button>
+                    </div>
+                  ))}
+                  <p className="text-[10px] text-slate-500 font-semibold leading-relaxed">
+                    El cliente entra en <strong>/login</strong> con CUIT +
+                    usuario + contraseña.
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-amber-200 bg-amber-50/50 p-3 space-y-2">
+                  <p className="text-xs text-amber-900 font-bold leading-relaxed">
+                    Todavía no hay dueño con acceso al portal para esta
+                    empresa.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={openCreateDuenoModal}
+                    className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2.5 text-[11px] font-black uppercase tracking-wider text-white hover:bg-slate-800 cursor-pointer"
+                  >
+                    <UserPlus className="h-3.5 w-3.5" />
+                    Crear dueño y contraseña
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* PREVENTORES ASIGNADOS */}
@@ -1091,6 +1542,140 @@ export default function AdminEmpresasPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 7. MODAL: Acceso dueño / contraseña */}
+      {isDuenoModalOpen && selectedEmpresa && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-md animate-fade-in">
+          <form
+            onSubmit={(e) => void handleSaveDuenoAcceso(e)}
+            className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+          >
+            <div className="border-b border-slate-100 px-5 py-4 flex items-start justify-between gap-3">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                  Acceso al portal
+                </span>
+                <h3 className="mt-1 text-base font-black text-slate-900">
+                  {duenoModalMode === "create"
+                    ? "Crear dueño y contraseña"
+                    : "Cambiar contraseña"}
+                </h3>
+                <p className="mt-1 text-xs text-slate-500 font-semibold leading-relaxed">
+                  Empresa: {selectedEmpresa.razon_social}. Login con CUIT{" "}
+                  {formatCuit(selectedEmpresa.cuit)} + usuario + contraseña.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeDuenoModal}
+                className="h-8 w-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 px-5 py-5">
+              {duenoModalMode === "create" && (
+                <>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                      Nombre completo
+                    </label>
+                    <input
+                      value={duenoNombre}
+                      onChange={(e) => setDuenoNombre(e.target.value)}
+                      required
+                      placeholder="Responsable de la empresa"
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-slate-400"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                      Usuario
+                    </label>
+                    <input
+                      value={duenoUsername}
+                      onChange={(e) =>
+                        setDuenoUsername(
+                          e.target.value.replace(/\s+/g, "").toLowerCase(),
+                        )
+                      }
+                      required
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      placeholder="ej. sandra.lapetina"
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-slate-400"
+                    />
+                  </div>
+                </>
+              )}
+
+              {duenoModalMode === "password" && (
+                <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 text-xs font-bold text-slate-600">
+                  Usuario: @{duenoUsername}
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  {duenoModalMode === "create"
+                    ? "Contraseña inicial"
+                    : "Nueva contraseña"}
+                </label>
+                <div className="relative">
+                  <input
+                    type={showDuenoPassword ? "text" : "password"}
+                    value={duenoPassword}
+                    onChange={(e) => setDuenoPassword(e.target.value)}
+                    required
+                    minLength={6}
+                    placeholder="Mínimo 6 caracteres"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 pr-10 text-sm font-semibold text-slate-800 outline-none focus:border-slate-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowDuenoPassword((v) => !v)}
+                    className="absolute inset-y-0 right-0 px-3 text-slate-400 hover:text-slate-700 cursor-pointer"
+                  >
+                    {showDuenoPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2 border-t border-slate-100 px-5 py-4">
+              <button
+                type="button"
+                onClick={closeDuenoModal}
+                className="flex-1 rounded-xl border border-slate-200 py-2.5 text-xs font-black text-slate-600 hover:bg-slate-50 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={isSavingDueno}
+                className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-slate-900 py-2.5 text-xs font-black text-white hover:bg-slate-800 disabled:opacity-50 cursor-pointer"
+              >
+                {isSavingDueno ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Guardando…
+                  </>
+                ) : duenoModalMode === "create" ? (
+                  "Crear acceso"
+                ) : (
+                  "Guardar contraseña"
+                )}
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>

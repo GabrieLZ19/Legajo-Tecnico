@@ -7,7 +7,7 @@ import { useRouter, usePathname } from "next/navigation";
 import BottomNav from "@/components/BottomNav.FC";
 import Link from "next/link";
 import { Empresa } from "@/types";
-import { LogOut, Building2, ChevronDown } from "lucide-react";
+import { LogOut, Building2, ChevronDown, AlertTriangle } from "lucide-react";
 import { NotificationBell } from "@/components/notification-bell";
 import {
   canWriteAppModule,
@@ -292,6 +292,26 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </header>
+
+      {localEmpresa?.estado === "aviso_deuda" && (
+        <div className="border-b border-amber-200 bg-amber-50">
+          <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-10 py-3 flex items-start gap-3">
+            <div className="h-8 w-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+              <AlertTriangle className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-black text-amber-900">
+                Aviso de deuda
+              </p>
+              <p className="text-xs text-amber-800 font-medium leading-relaxed mt-0.5">
+                La empresa <strong>{localEmpresa.razon_social}</strong> tiene
+                un aviso de deuda pendiente. Por favor contactá a tu consultora
+                para regularizar la situación.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Content Area */}
       <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 xl:px-10 py-6 pb-24 md:pb-8">

@@ -1,4 +1,5 @@
 export type RolUsuario = "admin" | "preventor" | "dueno" | "ente_regulador";
+export type EstadoEmpresa = "activa" | "aviso_deuda" | "pausada" | "eliminada";
 export type EstadoFirmaInforme =
   | "borrador"
   | "pendiente_preventor"
@@ -16,6 +17,7 @@ export interface Empresa {
   actividad?: string;
   logo_url?: string;
   porcentaje_cumplimiento?: number;
+  estado?: EstadoEmpresa;
   created_at: string;
 }
 

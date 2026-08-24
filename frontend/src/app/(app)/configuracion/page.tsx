@@ -1,27 +1,31 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import Cookies from "js-cookie";
 import { Upload, Briefcase, Check, Loader, ShieldAlert } from "lucide-react";
+import { getClipboardImageFile } from "@/lib/signature";
+import { useAlert } from "@/context/AlertContext";
 
 import { useConfiguracion } from "@/hooks/useConfiguracion";
 
 export default function ConfiguracionPage() {
   const { user, empresa, logout } = useAuth();
+  const { showAlert } = useAlert();
   const { uploadEmpresaLogo } = useConfiguracion();
   const [logoUrl, setLogoUrl] = useState<string | null>(
     empresa?.logo_url || null,
   );
   const [uploading, setUploading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const uploadingRef = useRef(false);
 
   const isDuenoOrAdmin = user?.rol === "dueno" || user?.rol === "admin";
 
-  const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !empresa) return;
+  const applyLogoFile = async (file: File) => {
+    if (!empresa || uploadingRef.current) return;
 
+    uploadingRef.current = true;
     setUploading(true);
     setSuccess(false);
 
@@ -32,7 +36,6 @@ export default function ConfiguracionPage() {
       setLogoUrl(newLogoUrl);
       setSuccess(true);
 
-      // Actualizar la cookie de la empresa con el nuevo logo
       const updatedEmpresa = { ...empresa, logo_url: newLogoUrl };
       Cookies.set("empresa", JSON.stringify(updatedEmpresa), {
         expires: 7,
@@ -40,16 +43,61 @@ export default function ConfiguracionPage() {
         sameSite: "lax",
       });
 
-      // Forzar recarga de estado de la aplicación
       setTimeout(() => {
         window.location.reload();
       }, 1500);
-    } catch (error: any) {
-      alert(error.response?.data?.error || "Error al subir el logo");
+    } catch (error: unknown) {
+      const message =
+        typeof error === "object" &&
+        error !== null &&
+        "response" in error &&
+        typeof (error as { response?: { data?: { error?: string } } }).response
+          ?.data?.error === "string"
+          ? (error as { response?: { data?: { error?: string } } }).response
+              ?.data?.error
+          : "Error al subir el logo";
+      showAlert("error", "No se pudo subir el logo", message || "Error al subir el logo");
     } finally {
+      uploadingRef.current = false;
       setUploading(false);
     }
   };
+
+  const applyLogoFileRef = useRef(applyLogoFile);
+  applyLogoFileRef.current = applyLogoFile;
+
+  const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    await applyLogoFile(file);
+  };
+
+  useEffect(() => {
+    if (!isDuenoOrAdmin || !empresa) return;
+
+    const onPaste = (event: ClipboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      const file = getClipboardImageFile(event.clipboardData);
+      if (!file) return;
+
+      event.preventDefault();
+      void applyLogoFileRef.current(file);
+    };
+
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [isDuenoOrAdmin, empresa]);
+
 
   return (
     <div className="max-w-xl mx-auto bg-white border border-slate-200 rounded-2xl p-6 shadow-2xs space-y-6">
@@ -68,7 +116,7 @@ export default function ConfiguracionPage() {
           </h2>
           <p className="text-xs text-slate-500">
             Este logo se utilizará en las esquinas superiores de tus constancias
-            de visita en PDF.
+            de visita en PDF. 
           </p>
         </div>
 

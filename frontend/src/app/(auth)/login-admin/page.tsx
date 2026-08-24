@@ -71,6 +71,10 @@ export default function LoginAdminPage() {
               </div>
               <input
                 type="email"
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 required
                 placeholder="admin@legajotecnico.com"
                 value={email}
@@ -91,6 +95,7 @@ export default function LoginAdminPage() {
               </div>
               <input
                 type="password"
+                autoComplete="current-password"
                 required
                 placeholder="••••••••••"
                 value={password}

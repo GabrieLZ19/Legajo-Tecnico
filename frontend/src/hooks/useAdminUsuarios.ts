@@ -39,7 +39,10 @@ export function useAdminUsuarios() {
   });
 
   const invalidate = async () => {
-    await queryClient.invalidateQueries({ queryKey: ["adminUsuarios"] });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["adminUsuarios"] }),
+      queryClient.invalidateQueries({ queryKey: ["adminPreventores"] }),
+    ]);
   };
 
   const createUsuarioMutation = useMutation({
