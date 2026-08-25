@@ -35,7 +35,6 @@ export default function AdminUsuariosPage() {
     refetch,
     createUsuario,
     updateUsuario,
-    verificarPasswordUsuario,
     toggleUsuarioActivo,
     isSaving,
     isToggling,
@@ -127,7 +126,7 @@ export default function AdminUsuariosPage() {
             activo: values.activo,
             empresa_id: values.rol === "dueno" ? values.empresa_id : null,
             password: values.password?.trim() || undefined,
-            currentPassword: values.currentPassword?.trim() || undefined,
+            adminPassword: values.adminPassword?.trim() || undefined,
           },
         });
 
@@ -368,16 +367,6 @@ export default function AdminUsuariosPage() {
         isSaving={isSaving}
         onClose={handleCloseModal}
         onSubmit={handleSubmitUsuario}
-        onVerifyPassword={
-          editingUsuario
-            ? async (currentPassword) => {
-                await verificarPasswordUsuario({
-                  id: editingUsuario.id,
-                  currentPassword,
-                });
-              }
-            : undefined
-        }
       />
 
       {isRefetching ? (

@@ -117,11 +117,25 @@ export const useInformeDetalle = (
 };
 
 export const descargarInformePdf = async (id: string) => {
-  const response = await api.get(`/informes/${id}/pdf`, {
-    responseType: "blob",
-    timeout: 60000,
-  });
-  return response.data as Blob;
+  // El backend devuelve URL firmada a Storage (JSON) para no pasar el PDF
+  // por el proxy de Vercel, que responde 413 con archivos > ~4.5 MB.
+  const { data } = await api.get<{ url: string; filename: string }>(
+    `/informes/${id}/pdf`,
+    { timeout: 120000 },
+  );
+
+  if (!data?.url) {
+    throw new Error("No se pudo obtener la URL del PDF");
+  }
+
+  const fileRes = await fetch(data.url);
+  if (!fileRes.ok) {
+    throw new Error(
+      `No se pudo descargar el archivo (HTTP ${fileRes.status})`,
+    );
+  }
+
+  return fileRes.blob();
 };
 
 export const subirEvidenciaInforme = async (id: string, formData: FormData) => {

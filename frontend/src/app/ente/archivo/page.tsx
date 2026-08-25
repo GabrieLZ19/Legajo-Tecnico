@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { descargarInformePdf } from "@/hooks/useInformes";
 import type { DocumentoArchivo } from "@/types";
 import { Download } from "lucide-react";
 
@@ -16,14 +17,18 @@ export default function EnteArchivoPage() {
   const download = async (doc: DocumentoArchivo) => {
     setDownloading(doc.id);
     try {
-      const path =
-        doc.tipo === "epp"
-          ? `/epp/entregas/${doc.id}/pdf`
-          : doc.tipo === "capacitacion"
-            ? `/capacitaciones/${doc.id}/exportar?formato=pdf`
-            : `/informes/${doc.id}/pdf`;
-      const res = await api.get(path, { responseType: "blob" });
-      const url = window.URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
+      let blob: Blob;
+      if (doc.tipo === "informe") {
+        blob = await descargarInformePdf(doc.id);
+      } else {
+        const path =
+          doc.tipo === "epp"
+            ? `/epp/entregas/${doc.id}/pdf`
+            : `/capacitaciones/${doc.id}/exportar?formato=pdf`;
+        const res = await api.get(path, { responseType: "blob" });
+        blob = new Blob([res.data], { type: "application/pdf" });
+      }
+      const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
       a.download = `${doc.tipo}_${doc.id}.pdf`;

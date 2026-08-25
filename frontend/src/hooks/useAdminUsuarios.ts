@@ -7,7 +7,8 @@ export type AdminUsuarioFormValues = {
   username: string;
   email: string;
   password: string;
-  currentPassword?: string;
+  /** Contraseña del admin que confirma el reset (solo al editar). */
+  adminPassword?: string;
   rol: AdminUsuario["rol"];
   empresa_id: string | null;
   activo: boolean;
@@ -15,10 +16,10 @@ export type AdminUsuarioFormValues = {
 
 export type AdminUsuarioUpdateValues = Omit<
   AdminUsuarioFormValues,
-  "email" | "password" | "currentPassword"
+  "email" | "password" | "adminPassword"
 > & {
   password?: string;
-  currentPassword?: string;
+  adminPassword?: string;
   permisos_personalizados?: AdminUsuario["permisos_personalizados"];
 };
 
@@ -89,7 +90,7 @@ export function useAdminUsuarios() {
       if (payload.password?.trim()) {
         await api.patch(`/admin/usuarios/${id}/password`, {
           password: payload.password,
-          currentPassword: payload.currentPassword || "",
+          adminPassword: payload.adminPassword || "",
         });
       }
 

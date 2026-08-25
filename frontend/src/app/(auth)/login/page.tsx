@@ -64,7 +64,8 @@ export default function LoginPage() {
               Iniciar sesión
             </h2>
             <p className="text-sm text-brand-text-muted font-medium">
-              Ingresá con el CUIT de tu empresa y tus credenciales.
+              Ingresá con el CUIT de tu empresa y tus credenciales
+              (dueño o preventor asignado).
             </p>
           </div>
 

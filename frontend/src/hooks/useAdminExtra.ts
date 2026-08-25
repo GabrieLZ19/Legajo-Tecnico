@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { api } from "@/lib/api";
+import { descargarInformePdf } from "@/hooks/useInformes";
 
 export function useAdminMetricas() {
   const [loading, setLoading] = useState(false);
@@ -121,12 +122,13 @@ export function useArchivo() {
     setLoading(true);
     setError(null);
     try {
+      if (tipo === "informe") {
+        return await descargarInformePdf(informeId);
+      }
       const path =
         tipo === "epp"
           ? `/epp/entregas/${informeId}/pdf`
-          : tipo === "capacitacion"
-            ? `/capacitaciones/${informeId}/exportar?formato=pdf`
-            : `/informes/${informeId}/pdf`;
+          : `/capacitaciones/${informeId}/exportar?formato=pdf`;
       const response = await api.get(path, {
         responseType: "blob",
       });

@@ -49,8 +49,13 @@ api.interceptors.response.use(
         path.startsWith("/firmar") ||
         path.startsWith("/cotizar");
       const isLogout = requestUrl.includes("/auth/logout");
+      // 401 de validación/cambio de contraseña ≠ sesión inválida
+      const isPasswordCheck =
+        requestUrl.includes("/password/verificar") ||
+        /\/usuarios\/[^/]+\/password(?:\?|$)/.test(requestUrl) ||
+        requestUrl.includes("/password");
 
-      if (!isPublicRoute && !isLogout) {
+      if (!isPublicRoute && !isLogout && !isPasswordCheck) {
         Cookies.remove("token");
         Cookies.remove("perfil");
         Cookies.remove("empresa");
