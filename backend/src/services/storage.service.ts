@@ -93,10 +93,11 @@ export const storageService = {
     bucket: string,
     path: string,
     expiresInSec = DEFAULT_SIGNED_TTL_SEC,
+    options?: { download?: string | boolean },
   ): Promise<string> {
     const { data, error } = await supabaseAdmin.storage
       .from(bucket)
-      .createSignedUrl(path, expiresInSec);
+      .createSignedUrl(path, expiresInSec, options);
 
     if (error || !data?.signedUrl) {
       throw new Error(
@@ -113,6 +114,7 @@ export const storageService = {
   async signUrl(
     urlOrPath: string | null | undefined,
     expiresInSec = DEFAULT_SIGNED_TTL_SEC,
+    options?: { download?: string | boolean },
   ): Promise<string | null> {
     if (!urlOrPath) return null;
     const parsed = this.parseStorageUrl(urlOrPath);
@@ -123,6 +125,7 @@ export const storageService = {
         parsed.bucket,
         parsed.path,
         expiresInSec,
+        options,
       );
     } catch (err) {
       console.error("Error firmando URL de storage:", err);

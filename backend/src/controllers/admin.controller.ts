@@ -66,14 +66,14 @@ export const adminController = {
       const consultoraId = requireConsultoraId(req.user!);
       const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
       const password = String(req.body?.password || "");
-      const currentPassword = String(req.body?.currentPassword || "");
+      const adminPassword = String(req.body?.adminPassword || "");
 
       const data = await adminService.resetPasswordUsuario(
         usuarioEditorId,
         consultoraId,
         id,
         password,
-        currentPassword,
+        adminPassword,
       );
       res.json(data);
     } catch (error) {

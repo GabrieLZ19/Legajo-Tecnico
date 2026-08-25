@@ -7,12 +7,15 @@ import { publicActionLimiter } from "../middlewares/rateLimit";
 
 const router = Router();
 
+// Escritura operativa de empresa: preventor/admin + dueño con acceso al módulo
+const puedeEscribirCapacitacion = requireRole("preventor", "admin", "dueno");
+
 // Rutas protegidas (requieren autenticación)
 router.get("/", requireAuth, capacitacionesController.listar);
 router.post(
   "/",
   requireAuth,
-  requireRole("preventor", "admin"),
+  puedeEscribirCapacitacion,
   capacitacionesController.crear,
 );
 
@@ -23,7 +26,7 @@ router.get("/plan-anual", requireAuth, planAnualController.obtener);
 router.post(
   "/plan-anual",
   requireAuth,
-  requireRole("preventor", "admin"),
+  puedeEscribirCapacitacion,
   (req, res, next) => {
     uploadExcel.single("archivo")(req, res, (err) => {
       if (err) {
@@ -41,7 +44,7 @@ router.get("/:id", requireAuth, capacitacionesController.detalle);
 router.patch(
   "/:id",
   requireAuth,
-  requireRole("preventor", "admin"),
+  puedeEscribirCapacitacion,
   capacitacionesController.actualizarEstado,
 );
 router.get("/:id/qr", requireAuth, capacitacionesController.generarQR);
@@ -53,19 +56,19 @@ router.get(
 router.put(
   "/:id",
   requireAuth,
-  requireRole("preventor", "admin"),
+  puedeEscribirCapacitacion,
   capacitacionesController.actualizar,
 );
 router.patch(
   "/:id/registro",
   requireAuth,
-  requireRole("preventor", "admin", "dueno"),
+  puedeEscribirCapacitacion,
   capacitacionesController.actualizarRegistro,
 );
 router.delete(
   "/:id",
   requireAuth,
-  requireRole("preventor", "admin"),
+  puedeEscribirCapacitacion,
   capacitacionesController.eliminar,
 );
 

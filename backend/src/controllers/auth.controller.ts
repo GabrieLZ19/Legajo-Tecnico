@@ -15,6 +15,51 @@ function cuitLookupValues(cleanCuit: string): string[] {
   return Array.from(new Set([cleanCuit, formatted]));
 }
 
+/**
+ * Resuelve el perfil que puede entrar a una empresa con un username:
+ * - dueño de esa empresa, o
+ * - preventor asignado en preventor_empresas.
+ * El email de Auth del preventor NO es el proxy @cuit.legajo.local (ese es solo del dueño).
+ */
+async function findPerfilLoginEmpresa(
+  username: string,
+  empresaId: string,
+): Promise<Record<string, unknown> | null> {
+  const usernameNorm = username.trim();
+  if (!usernameNorm) return null;
+
+  const { data: duenos, error: duenoError } = await supabaseAdmin
+    .from("perfiles")
+    .select("*")
+    .eq("empresa_id", empresaId)
+    .eq("rol", "dueno")
+    .ilike("username", usernameNorm)
+    .limit(1);
+
+  if (duenoError) throw duenoError;
+  if (duenos?.[0]) return duenos[0];
+
+  const { data: asignaciones, error: asigError } = await supabaseAdmin
+    .from("preventor_empresas")
+    .select("preventor_id")
+    .eq("empresa_id", empresaId);
+
+  if (asigError) throw asigError;
+  const preventorIds = (asignaciones ?? []).map((a) => a.preventor_id);
+  if (preventorIds.length === 0) return null;
+
+  const { data: preventores, error: prevError } = await supabaseAdmin
+    .from("perfiles")
+    .select("*")
+    .in("id", preventorIds)
+    .eq("rol", "preventor")
+    .ilike("username", usernameNorm)
+    .limit(1);
+
+  if (prevError) throw prevError;
+  return preventores?.[0] ?? null;
+}
+
 export const authController = {
   async login(req: Request, res: Response, next: NextFunction) {
     try {
@@ -26,8 +71,6 @@ export const authController = {
       if (!cleanCuit || !usernameNorm) {
         return res.status(401).json({ error: LOGIN_ERROR });
       }
-
-      const proxyEmail = `${usernameNorm}@${cleanCuit}.legajo.local`;
 
       const { data: empresas, error: empresaError } = await supabaseAdmin
         .from("empresas")
@@ -55,9 +98,26 @@ export const authController = {
         });
       }
 
+      const perfilCandidato = await findPerfilLoginEmpresa(
+        usernameNorm,
+        empresa.id,
+      );
+      if (!perfilCandidato || perfilCandidato.activo === false) {
+        return res.status(401).json({ error: LOGIN_ERROR });
+      }
+
+      const { data: authUserData, error: authUserError } =
+        await supabaseAdmin.auth.admin.getUserById(
+          String(perfilCandidato.id),
+        );
+      const authEmail = authUserData?.user?.email;
+      if (authUserError || !authEmail) {
+        return res.status(401).json({ error: LOGIN_ERROR });
+      }
+
       const { data: authData, error: authError } =
         await createPasswordAuthClient().auth.signInWithPassword({
-          email: proxyEmail,
+          email: authEmail,
           password: password,
         });
 

@@ -6,18 +6,21 @@ import { publicActionLimiter } from "../middlewares/rateLimit";
 
 const router = Router();
 
+// Escritura operativa de empresa: alineado con canWriteAppModule("epp") del front
+const puedeEscribirEpp = requireRole("preventor", "admin", "dueno");
+
 router.get("/tipos", requireAuth, eppController.listarTipos);
 router.post(
   "/tipos",
   requireAuth,
-  requireRole("preventor", "admin"),
+  puedeEscribirEpp,
   upload.single("foto"),
   eppController.crearTipo,
 );
 router.patch(
   "/tipos/:id",
   requireAuth,
-  requireRole("preventor", "admin"),
+  puedeEscribirEpp,
   upload.single("foto"),
   eppController.actualizarTipo,
 );
@@ -26,25 +29,25 @@ router.get("/empleados", requireAuth, eppController.listarEmpleados);
 router.post(
   "/empleados",
   requireAuth,
-  requireRole("preventor", "admin"),
+  puedeEscribirEpp,
   eppController.crearEmpleado,
 );
 router.patch(
   "/empleados/:id",
   requireAuth,
-  requireRole("preventor", "admin"),
+  puedeEscribirEpp,
   eppController.actualizarEmpleado,
 );
 router.get(
   "/empleados/qr/:token",
   requireAuth,
-  requireRole("preventor", "admin"),
+  puedeEscribirEpp,
   eppController.buscarEmpleadoPorQr,
 );
 router.get(
   "/empleados/:id/qr",
   requireAuth,
-  requireRole("preventor", "admin"),
+  puedeEscribirEpp,
   eppController.generarQrEmpleado,
 );
 
@@ -52,13 +55,13 @@ router.get("/entregas", requireAuth, eppController.listarEntregas);
 router.post(
   "/entregas",
   requireAuth,
-  requireRole("preventor", "admin"),
+  puedeEscribirEpp,
   eppController.registrarEntrega,
 );
 router.post(
   "/entregas/:id/pdf",
   requireAuth,
-  requireRole("preventor", "admin"),
+  puedeEscribirEpp,
   eppController.regenerarPdf,
 );
 router.get("/entregas/:id/pdf", requireAuth, eppController.descargarPdf);
@@ -67,13 +70,13 @@ router.get("/proveedores", requireAuth, eppController.listarProveedores);
 router.post(
   "/proveedores",
   requireAuth,
-  requireRole("preventor", "admin"),
+  puedeEscribirEpp,
   eppController.crearProveedor,
 );
 router.patch(
   "/proveedores/:id",
   requireAuth,
-  requireRole("preventor", "admin"),
+  puedeEscribirEpp,
   eppController.actualizarProveedor,
 );
 
@@ -81,7 +84,7 @@ router.get("/licitaciones", requireAuth, eppController.listarLicitaciones);
 router.post(
   "/licitaciones",
   requireAuth,
-  requireRole("preventor", "admin"),
+  puedeEscribirEpp,
   eppController.crearLicitacion,
 );
 

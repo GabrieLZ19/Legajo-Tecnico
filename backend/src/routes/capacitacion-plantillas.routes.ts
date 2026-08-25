@@ -4,24 +4,26 @@ import { capacitacionPlantillasController } from "../controllers/capacitacion-pl
 
 const router = Router();
 
+const puedeEscribirPlantilla = requireRole("preventor", "admin", "dueno");
+
 router.get("/", requireAuth, capacitacionPlantillasController.listar);
 router.get("/:id", requireAuth, capacitacionPlantillasController.detalle);
 router.post(
   "/",
   requireAuth,
-  requireRole("preventor", "admin"),
+  puedeEscribirPlantilla,
   capacitacionPlantillasController.crear,
 );
 router.put(
   "/:id",
   requireAuth,
-  requireRole("preventor", "admin"),
+  puedeEscribirPlantilla,
   capacitacionPlantillasController.actualizar,
 );
 router.delete(
   "/:id",
   requireAuth,
-  requireRole("preventor", "admin"),
+  puedeEscribirPlantilla,
   capacitacionPlantillasController.eliminar,
 );
 

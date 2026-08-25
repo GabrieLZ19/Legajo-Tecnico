@@ -335,24 +335,19 @@ export const adminService = {
     return data;
   },
 
-  async assertPasswordActualUsuario(
-    consultoraId: string,
+  /**
+   * Verifica la contraseña de un usuario Auth por su id (sin afectar la sesión del admin).
+   */
+  async assertPasswordDeUsuario(
     userId: string,
-    currentPassword: string,
+    password: string,
+    messages?: { missing?: string; invalid?: string },
   ) {
-    if (!currentPassword) {
-      throw new HttpError(400, "Ingresá la contraseña actual");
-    }
-
-    const { data: perfil } = await supabaseAdmin
-      .from("perfiles")
-      .select("id, username, rol, consultora_id, nombre_completo")
-      .eq("id", userId)
-      .eq("consultora_id", consultoraId)
-      .maybeSingle();
-
-    if (!perfil) {
-      throw new HttpError(404, "Usuario no encontrado");
+    if (!password?.trim()) {
+      throw new HttpError(
+        400,
+        messages?.missing || "Ingresá tu contraseña de administrador",
+      );
     }
 
     const { data: authUser, error: authLookupError } =
@@ -364,13 +359,39 @@ export const adminService = {
     const { error: signInError } =
       await createPasswordAuthClient().auth.signInWithPassword({
         email: authUser.user.email,
-        password: currentPassword,
+        password,
       });
 
     if (signInError) {
-      throw new HttpError(401, "La contraseña actual no es correcta");
+      throw new HttpError(
+        400,
+        messages?.invalid || "Tu contraseña de administrador no es correcta",
+      );
     }
 
+    return authUser.user;
+  },
+
+  async assertPasswordActualUsuario(
+    consultoraId: string,
+    userId: string,
+    currentPassword: string,
+  ) {
+    const { data: perfil } = await supabaseAdmin
+      .from("perfiles")
+      .select("id, username, rol, consultora_id, nombre_completo")
+      .eq("id", userId)
+      .eq("consultora_id", consultoraId)
+      .maybeSingle();
+
+    if (!perfil) {
+      throw new HttpError(404, "Usuario no encontrado");
+    }
+
+    await this.assertPasswordDeUsuario(userId, currentPassword, {
+      missing: "Ingresá la contraseña actual",
+      invalid: "La contraseña actual no es correcta",
+    });
     return perfil;
   },
 
@@ -379,29 +400,29 @@ export const adminService = {
     consultoraId: string,
     userId: string,
     password: string,
-    currentPassword: string,
+    adminPassword: string,
   ) {
     if (!password || password.length < 6) {
       throw new HttpError(400, "La contraseña debe tener al menos 6 caracteres");
     }
 
-    const perfil = await this.assertPasswordActualUsuario(
-      consultoraId,
-      userId,
-      currentPassword,
-    );
+    // El admin confirma identidad con SU propia contraseña
+    await this.assertPasswordDeUsuario(usuarioEditorId, adminPassword);
 
-    if (password === currentPassword) {
-      throw new HttpError(
-        400,
-        "La nueva contraseña debe ser distinta a la actual",
-      );
-    }
-
-    const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
-      password,
-    });
+    const { data: perfil, error } = await supabaseAdmin
+      .from("perfiles")
+      .select("id, username, rol, consultora_id, nombre_completo")
+      .eq("id", userId)
+      .eq("consultora_id", consultoraId)
+      .maybeSingle();
     if (error) throw error;
+    if (!perfil) throw new HttpError(404, "Usuario no encontrado");
+
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+      userId,
+      { password },
+    );
+    if (updateError) throw updateError;
 
     await logService.registrar({
       usuario_id: usuarioEditorId,
@@ -412,6 +433,7 @@ export const adminService = {
         username: perfil.username,
         rol: perfil.rol,
         nombre_completo: perfil.nombre_completo,
+        confirmed_by_admin_password: true,
       },
       consultora_id: consultoraId,
     });

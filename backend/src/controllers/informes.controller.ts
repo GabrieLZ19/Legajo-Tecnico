@@ -219,13 +219,10 @@ export const informesController = {
     try {
       const id = req.params.id as string;
       await assertInformeAccess(req.user!, id);
-      const { buffer, filename } = await pdfService.obtenerPdfParaDescarga(id);
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename="${filename}"`,
-      );
-      res.send(buffer);
+      // URL firmada a Storage (JSON pequeño) — evita 413 del proxy Vercel
+      // al streamear PDFs grandes con evidencias fotográficas.
+      const { url, filename } = await pdfService.obtenerPdfParaDescarga(id);
+      res.json({ url, filename });
     } catch (error) {
       next(error);
     }

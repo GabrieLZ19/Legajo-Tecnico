@@ -81,7 +81,11 @@ export const capacitacionPlantillasController = {
           return;
         }
         await assertEmpresaAccess(user, empresa_id);
-        if (user.rol !== "admin" && user.rol !== "preventor") {
+        if (
+          user.rol !== "admin" &&
+          user.rol !== "preventor" &&
+          user.rol !== "dueno"
+        ) {
           res.status(403).json({ error: "Rol insuficiente" });
           return;
         }
@@ -136,7 +140,11 @@ export const capacitacionPlantillasController = {
           return;
         }
         await assertEmpresaAccess(user, existente.empresa_id);
-        if (user.rol !== "admin" && user.rol !== "preventor") {
+        if (
+          user.rol !== "admin" &&
+          user.rol !== "preventor" &&
+          user.rol !== "dueno"
+        ) {
           res.status(403).json({ error: "Rol insuficiente" });
           return;
         }
@@ -178,7 +186,11 @@ export const capacitacionPlantillasController = {
           return;
         }
         await assertEmpresaAccess(user, existente.empresa_id);
-        if (user.rol !== "admin" && user.rol !== "preventor") {
+        if (
+          user.rol !== "admin" &&
+          user.rol !== "preventor" &&
+          user.rol !== "dueno"
+        ) {
           res.status(403).json({ error: "Rol insuficiente" });
           return;
         }

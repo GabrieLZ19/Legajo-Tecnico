@@ -1,10 +1,46 @@
 import PDFDocument from "pdfkit";
+import sharp from "sharp";
 import { supabaseAdmin } from "../config/supabase";
 import { storageService } from "./storage.service";
 
 // Helper para descargar una imagen a Buffer (soporta buckets privados)
-async function descargarImagenBuffer(url: string): Promise<Buffer | null> {
-  return storageService.downloadBuffer(url);
+async function descargarImagenBuffer(
+  url: string,
+  opts?: { maxWidth?: number; format?: "jpeg" | "png" },
+): Promise<Buffer | null> {
+  const raw = await storageService.downloadBuffer(url);
+  if (!raw) return null;
+  return comprimirImagenParaPdf(raw, opts);
+}
+
+/**
+ * Reduce fotos de evidencia/logos antes de embeberlas en el PDF.
+ * Las fotos de celular suelen ser varios MB; PDFKit las embebe tal cual.
+ */
+async function comprimirImagenParaPdf(
+  buffer: Buffer,
+  opts?: { maxWidth?: number; format?: "jpeg" | "png" },
+): Promise<Buffer> {
+  const maxWidth = opts?.maxWidth ?? 900;
+  const format = opts?.format ?? "jpeg";
+  try {
+    const pipeline = sharp(buffer)
+      .rotate() // respeta EXIF
+      .resize({
+        width: maxWidth,
+        height: maxWidth,
+        fit: "inside",
+        withoutEnlargement: true,
+      });
+
+    if (format === "png") {
+      return await pipeline.png({ compressionLevel: 8 }).toBuffer();
+    }
+    return await pipeline.jpeg({ quality: 72, mozjpeg: true }).toBuffer();
+  } catch (err) {
+    console.error("No se pudo comprimir imagen para PDF, se usa original:", err);
+    return buffer;
+  }
 }
 
 function limpiarHtmlParaPdf(html: string): string {
@@ -36,12 +72,6 @@ function limpiarHtmlParaPdf(html: string): string {
   return texto;
 }
 
-async function descargarPdfDesdeStorage(
-  publicUrl: string,
-): Promise<Buffer | null> {
-  return storageService.downloadBuffer(publicUrl);
-}
-
 /** Extrae el Date.now() embebido en `informe_{n}_{timestamp}.pdf`. */
 function extractPdfGeneratedAtMs(url: string | null | undefined): number | null {
   if (!url) return null;
@@ -60,10 +90,11 @@ export const pdfService = {
   /**
    * Prefiere PDF en Storage solo si está al día con las firmas.
    * Si hay firmas posteriores al PDF cacheado, regenera.
+   * Devuelve URL firmada (no el binario) para evitar 413 en el proxy de Vercel.
    */
   async obtenerPdfParaDescarga(
     informeId: string,
-  ): Promise<{ buffer: Buffer; filename: string }> {
+  ): Promise<{ url: string; filename: string }> {
     const { data: informe, error } = await supabaseAdmin
       .from("informes_visita")
       .select("id, numero_informe, url_pdf_generado, firmas_informe(firmado_at)")
@@ -77,6 +108,7 @@ export const pdfService = {
     }
 
     const filename = `constancia_visita_${informe.numero_informe || informeId}.pdf`;
+    const signedTtlSec = 60 * 15;
 
     const firmas = (informe.firmas_informe ?? []) as Array<{
       firmado_at: string;
@@ -90,17 +122,38 @@ export const pdfService = {
       latestFirmaMs > 0 &&
       (pdfGeneratedAtMs === null || latestFirmaMs > pdfGeneratedAtMs);
 
+    let storageUrl: string | null = null;
+
     if (informe.url_pdf_generado && !pdfEstaDesactualizado) {
-      const fromStorage = await descargarPdfDesdeStorage(
-        informe.url_pdf_generado,
-      );
-      if (fromStorage) {
-        return { buffer: fromStorage, filename };
+      const parsed = storageService.parseStorageUrl(informe.url_pdf_generado);
+      if (parsed) {
+        try {
+          // Validar que el objeto exista sin bajar el PDF completo
+          await storageService.createSignedUrl(
+            parsed.bucket,
+            parsed.path,
+            60,
+          );
+          storageUrl = informe.url_pdf_generado;
+        } catch {
+          storageUrl = null;
+        }
       }
     }
 
-    const generated = await this.generarPdfCompleto(informeId);
-    return { buffer: generated.buffer, filename: generated.filename };
+    if (!storageUrl) {
+      const generated = await this.generarPdfCompleto(informeId);
+      storageUrl = generated.publicUrl;
+    }
+
+    const url = await storageService.signUrl(storageUrl, signedTtlSec, {
+      download: filename,
+    });
+    if (!url) {
+      throw new Error("No se pudo generar la URL de descarga del PDF");
+    }
+
+    return { url, filename };
   },
 
   async generarPdfCompleto(
@@ -181,6 +234,7 @@ export const pdfService = {
         if (informe.empresas?.consultoras?.logo_url) {
           const logoBuffer = await descargarImagenBuffer(
             informe.empresas.consultoras.logo_url,
+            { maxWidth: 400 },
           );
           if (logoBuffer) {
             doc.image(logoBuffer, 50, yPos, { fit: [120, 60], valign: 'center' });
@@ -213,6 +267,7 @@ export const pdfService = {
         if (informe.empresas?.logo_url) {
           const logoBuffer = await descargarImagenBuffer(
             informe.empresas.logo_url,
+            { maxWidth: 400 },
           );
           if (logoBuffer) {
             doc.image(logoBuffer, 425, yPos, { fit: [120, 60], align: 'right', valign: 'center' });
@@ -449,7 +504,9 @@ export const pdfService = {
             // Descargar imagen si existe evidencia_url
             let fotoBuffer: Buffer | null = null;
             if (pm.evidencia_url) {
-              fotoBuffer = await descargarImagenBuffer(pm.evidencia_url);
+              fotoBuffer = await descargarImagenBuffer(pm.evidencia_url, {
+                maxWidth: 600,
+              });
             }
 
             if (fotoBuffer) {
@@ -781,7 +838,10 @@ export const pdfService = {
 
         // Dibujar las imágenes de firma si existen
         if (firmaPreventor?.firma_url) {
-          const buffer = await descargarImagenBuffer(firmaPreventor.firma_url);
+          const buffer = await descargarImagenBuffer(firmaPreventor.firma_url, {
+            maxWidth: 400,
+            format: "png",
+          });
           if (buffer) {
             try {
               doc.image(buffer, 95, yPos + 15, { height: 40 });
@@ -792,7 +852,10 @@ export const pdfService = {
         }
 
         if (firmaDueno?.firma_url) {
-          const buffer = await descargarImagenBuffer(firmaDueno.firma_url);
+          const buffer = await descargarImagenBuffer(firmaDueno.firma_url, {
+            maxWidth: 400,
+            format: "png",
+          });
           if (buffer) {
             try {
               doc.image(buffer, 350, yPos + 15, { height: 40 });
