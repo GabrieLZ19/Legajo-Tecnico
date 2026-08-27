@@ -1,9 +1,13 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useInformes, subirEvidenciaInforme } from "@/hooks/useInformes";
+import {
+  formatAutosaveLabel,
+  useInformeAutosave,
+} from "@/hooks/useInformeAutosave";
 import { usePlantillas } from "@/hooks/usePlantillas";
 import { sanitizeRichHtml } from "@/lib/sanitizeHtml";
 import { getEmpresaDetalle } from "@/hooks/useAdminEmpresas";
@@ -21,11 +25,16 @@ import {
   Building2,
   ChevronDown,
   FileText,
+  Cloud,
+  CloudOff,
+  Loader2,
+  Trash2,
 } from "lucide-react";
 
 import { useAlert } from "@/context/AlertContext";
 import { PhotoSourcePicker } from "@/components/PhotoSourcePicker";
 import { mapPool } from "@/lib/mapPool";
+import { draftHasContent } from "@/lib/informeDraft";
 
 export default function NuevoInformePage() {
   const { empresa } = useAuth();
@@ -33,18 +42,30 @@ export default function NuevoInformePage() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [draftInformeId, setDraftInformeId] = useState<string | undefined>();
+  const [editorTick, setEditorTick] = useState(0);
+  const [draftReady, setDraftReady] = useState(false);
 
   // Datos completos de la empresa cargados de la API
   const [empresaData, setEmpresaData] = useState<any>(null);
 
-  // Instanciar el hook de creación
-  const { crearInforme } = useInformes(empresa?.id);
+  // Instanciar el hook de creación / edición (borrador)
+  const { crearInforme, editarInforme, eliminarInforme } = useInformes(
+    empresa?.id,
+  );
 
   // Campos del formulario principal (según mockup W04)
   const [lugar, setLugar] = useState("Planta 1");
   const [actividad, setActividad] = useState("");
-  const [fecha, setFecha] = useState("");
-  const [hora, setHora] = useState("");
+  const [fecha, setFecha] = useState(() =>
+    new Date().toISOString().split("T")[0],
+  );
+  const [hora, setHora] = useState(() => {
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2, "0")}:${String(
+      now.getMinutes(),
+    ).padStart(2, "0")}`;
+  });
 
   interface AccionLocal {
     id?: string;
@@ -55,8 +76,10 @@ export default function NuevoInformePage() {
   // Estructura de Observaciones locales
   interface ObservacionLocal {
     id_temp: string;
+    id?: string;
     detalle: string;
     acciones: AccionLocal[];
+    evidencia_url?: string;
     imagenFile?: File;
     previewUrl?: string;
   }
@@ -88,7 +111,7 @@ export default function NuevoInformePage() {
   const [linkText, setLinkText] = useState("");
   const [savedRange, setSavedRange] = useState<Range | null>(null);
 
-  const { showAlert } = useAlert();
+  const { showAlert, showConfirm } = useAlert();
 
   // Estados de plantillas de Declaración Legal
   const DEFAULT_TEMPLATES = [
@@ -175,33 +198,155 @@ export default function NuevoInformePage() {
     }
   };
 
-  // Cargar datos de la empresa y establecer fecha/hora actuales
+  const getAutosaveSnapshot = useCallback(
+    () => ({
+      lugar,
+      actividad,
+      fecha,
+      hora,
+      declaracion_legal: editorRef.current?.innerHTML || "",
+      observaciones: observacionesCargadas,
+    }),
+    [lugar, actividad, fecha, hora, observacionesCargadas, editorTick],
+  );
+
+  const {
+    status: autosaveStatus,
+    lastSavedAt,
+    loadLocalDraftWithPhotos,
+    markCleanAfterManualSave,
+    baselineFromCurrent,
+    markDirty,
+    clearLocal,
+    resetAutosaveState,
+    syncNow,
+  } = useInformeAutosave({
+    mode: "nuevo",
+    empresaId: empresa?.id,
+    informeId: draftInformeId,
+    enabled: !!empresa?.id && draftReady,
+    pause: loading,
+    watch: [lugar, actividad, fecha, hora, observacionesCargadas, editorTick],
+    getSnapshot: getAutosaveSnapshot,
+    crearInforme: crearInforme as any,
+    editarInforme: editarInforme as any,
+    onCreated: (id) => setDraftInformeId(id),
+    onSynced: (res) => {
+      if (!res.puntos_mejora?.length) return;
+      setObservacionesCargadas((prev) =>
+        prev.map((obs) => {
+          const pm = res.puntos_mejora?.find(
+            (p) => (obs.id && p.id === obs.id) || p.detalle === obs.detalle,
+          );
+          if (!pm) return obs;
+          return {
+            ...obs,
+            id: pm.id,
+            id_temp: obs.id || pm.id,
+            imagenFile: undefined,
+          };
+        }),
+      );
+    },
+  });
+
+  // Cargar datos de la empresa y restaurar borrador local (una sola vez por empresa)
   useEffect(() => {
-    if (empresa?.id) {
-      const fetchEmpresa = async () => {
-        try {
-          const data = await getEmpresaDetalle(empresa.id);
-          setEmpresaData(data);
-        } catch (err) {
-          console.error("Error al cargar datos de la empresa:", err);
+    if (!empresa?.id) return;
+
+    const empresaId = empresa.id;
+    let cancelled = false;
+
+    // Activar autosave de inmediato (no esperar el restore async)
+    setDraftReady(true);
+
+    const fetchEmpresa = async () => {
+      try {
+        const data = await getEmpresaDetalle(empresaId);
+        if (!cancelled) setEmpresaData(data);
+      } catch (err) {
+        console.error("Error al cargar datos de la empresa:", err);
+      }
+    };
+    void fetchEmpresa();
+
+    const nowDefaults = () => {
+      const now = new Date();
+      const fechaDefault = now.toISOString().split("T")[0];
+      const horaDefault = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+      return { fechaDefault, horaDefault };
+    };
+
+    const hydrate = async () => {
+      try {
+        const { draft, photos } = await loadLocalDraftWithPhotos();
+        if (cancelled) return;
+
+        const { fechaDefault, horaDefault } = nowDefaults();
+
+        if (draft && draft.empresaId === empresaId) {
+          setLugar(draft.lugar || "Planta 1");
+          setActividad(draft.actividad || "");
+          setFecha(draft.fecha || fechaDefault);
+          setHora(draft.hora || horaDefault);
+          if (draft.informeId) setDraftInformeId(draft.informeId);
+          setObservacionesCargadas(
+            (draft.observaciones || []).map((obs) => {
+              const idTemp =
+                obs.id_temp || obs.id || Math.random().toString(36).slice(2);
+              const imagenFile = photos.get(idTemp) || photos.get(obs.id_temp);
+              return {
+                id_temp: idTemp,
+                id: obs.id,
+                detalle: obs.detalle,
+                acciones: obs.acciones?.length
+                  ? obs.acciones.map((a) => ({ ...a }))
+                  : [],
+                evidencia_url: obs.evidencia_url,
+                imagenFile,
+                previewUrl: imagenFile
+                  ? URL.createObjectURL(imagenFile)
+                  : undefined,
+              };
+            }),
+          );
+          if (editorRef.current) {
+            editorRef.current.innerHTML = sanitizeRichHtml(
+              draft.declaracion_legal || "",
+            );
+          }
+          setEditorTick((n) => n + 1);
+          // Si nunca sincronizó al server (o el local es más nuevo), forzar sync
+          const needsServerSync =
+            !draft.lastServerSyncAt ||
+            new Date(draft.savedAt).getTime() >
+              new Date(draft.lastServerSyncAt).getTime();
+          queueMicrotask(() => {
+            if (cancelled) return;
+            if (needsServerSync) {
+              markDirty();
+              void syncNow();
+            } else {
+              baselineFromCurrent();
+            }
+          });
+          return;
         }
-      };
-      fetchEmpresa();
-    }
 
-    // Inicializar la declaración legal en el editor una sola vez para evitar cursor jumping
-    if (editorRef.current) {
-      editorRef.current.innerHTML = "";
-    }
+        queueMicrotask(() => {
+          if (!cancelled) baselineFromCurrent();
+        });
+      } catch (err) {
+        console.error("Error al restaurar borrador local:", err);
+      }
+    };
 
-    // Fecha y hora actuales
-    const now = new Date();
-    setFecha(now.toISOString().split("T")[0]);
-
-    const hours = String(now.getHours()).padStart(2, "0");
-    const minutes = String(now.getMinutes()).padStart(2, "0");
-    setHora(`${hours}:${minutes}`);
-  }, [empresa]);
+    void hydrate();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [empresa?.id]);
 
   // Actualizar los estados activos de la barra de herramientas
   const updateToolbarState = () => {
@@ -316,7 +461,7 @@ export default function NuevoInformePage() {
 
     setLoading(true);
     setError(null);
-    let createdId: string | null = null;
+    let createdId: string | null = draftInformeId || null;
 
     try {
       // 1. Combinar fecha y hora
@@ -326,27 +471,52 @@ export default function NuevoInformePage() {
       const finalDeclaracion = editorRef.current?.innerHTML || "";
 
       // 2. Armar el informe con desvíos/puntos de mejora
-      const payload = {
-        empresa_id: empresa.id,
-        actividad: actividad,
-        fecha_hora_visita: dateObj.toISOString(),
-        lugar_visita: lugar,
-        contacto_visita: "Responsable de Planta",
-        declaracion_legal: finalDeclaracion,
-        observaciones: "", // ya no se usa texto plano, pero enviamos vacío
-        peligros: [],
-        puntos_mejora: observacionesCargadas.map((obs) => ({
-          detalle: obs.detalle,
-          acciones: obs.acciones.map((a) => ({
-            descripcion: a.descripcion,
-            responsable: a.responsable || undefined,
-          })),
+      const puntos_mejora = observacionesCargadas.map((obs) => ({
+        id: obs.id,
+        detalle: obs.detalle,
+        evidencia_url: obs.evidencia_url,
+        acciones: obs.acciones.map((a) => ({
+          id: a.id,
+          descripcion: a.descripcion,
+          responsable: a.responsable || undefined,
         })),
-      };
+      }));
 
-      // 3. Guardar informe
-      const res = await crearInforme(payload);
-      createdId = res.id;
+      // 3. Guardar informe (PATCH si ya hay borrador de autosave)
+      let res: { id: string; puntos_mejora?: Array<{ id: string; detalle: string }> };
+      if (draftInformeId) {
+        res = await editarInforme({
+          id: draftInformeId,
+          data: {
+            actividad,
+            fecha_hora_visita: dateObj.toISOString(),
+            lugar_visita: lugar,
+            declaracion_legal: finalDeclaracion,
+            observaciones: "",
+            puntos_mejora,
+          } as any,
+        });
+      } else {
+        res = await crearInforme({
+          empresa_id: empresa.id,
+          actividad,
+          fecha_hora_visita: dateObj.toISOString(),
+          lugar_visita: lugar,
+          contacto_visita: "Responsable de Planta",
+          declaracion_legal: finalDeclaracion,
+          observaciones: "",
+          peligros: [],
+          puntos_mejora: puntos_mejora.map(({ detalle, acciones }) => ({
+            detalle,
+            acciones: acciones.map(({ descripcion, responsable }) => ({
+              descripcion,
+              responsable,
+            })),
+          })),
+        });
+        createdId = res.id;
+        setDraftInformeId(res.id);
+      }
 
       // 4. Si hay imágenes en las observaciones, subirlas vinculándolas al desvío correspondiente
       const obsConImagen = observacionesCargadas.filter(
@@ -354,7 +524,8 @@ export default function NuevoInformePage() {
       );
       await mapPool(obsConImagen, 3, async (obs) => {
         const pmCreado = res.puntos_mejora?.find(
-          (pm: any) => pm.detalle === obs.detalle,
+          (pm: any) =>
+            (obs.id && pm.id === obs.id) || pm.detalle === obs.detalle,
         );
         if (!pmCreado) return;
         const formData = new FormData();
@@ -362,6 +533,9 @@ export default function NuevoInformePage() {
         formData.append("punto_mejora_id", pmCreado.id);
         await subirEvidenciaInforme(res.id, formData);
       });
+
+      markCleanAfterManualSave();
+      clearLocal();
 
       // 5. Redirigir a la firma
       router.push(`/informes/${res.id}/firma`);
@@ -384,16 +558,109 @@ export default function NuevoInformePage() {
     }
   };
 
+  const canDiscardDraft =
+    Boolean(draftInformeId) ||
+    draftHasContent({
+      actividad,
+      lugar,
+      declaracion_legal: editorRef.current?.innerHTML || "",
+      observaciones: observacionesCargadas,
+    });
+
+  const handleDiscardDraft = async () => {
+    const ok = await showConfirm(
+      "Descartar borrador",
+      draftInformeId
+        ? "Se eliminará el borrador de este dispositivo y también del servidor. Esta acción no se puede deshacer."
+        : "Se eliminará el borrador guardado en este dispositivo. Esta acción no se puede deshacer.",
+      {
+        type: "error",
+        confirmLabel: "Descartar",
+        cancelLabel: "Cancelar",
+      },
+    );
+    if (!ok) return;
+
+    setLoading(true);
+    try {
+      if (draftInformeId) {
+        await eliminarInforme(draftInformeId);
+      }
+      await clearLocal();
+      resetAutosaveState();
+      setDraftInformeId(undefined);
+
+      observacionesCargadas.forEach((obs) => {
+        if (obs.previewUrl) URL.revokeObjectURL(obs.previewUrl);
+      });
+      setObservacionesCargadas([]);
+      setLugar("Planta 1");
+      setActividad("");
+      const now = new Date();
+      setFecha(now.toISOString().split("T")[0]);
+      const hours = String(now.getHours()).padStart(2, "0");
+      const minutes = String(now.getMinutes()).padStart(2, "0");
+      setHora(`${hours}:${minutes}`);
+      if (editorRef.current) editorRef.current.innerHTML = "";
+      setEditorTick((n) => n + 1);
+      baselineFromCurrent();
+
+      showAlert(
+        "success",
+        "Borrador descartado",
+        "Podés empezar un informe nuevo desde cero.",
+      );
+    } catch (err: any) {
+      showAlert(
+        "error",
+        "No se pudo descartar",
+        err.response?.data?.error ||
+          err.message ||
+          "Intentá de nuevo en unos segundos.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-8">
       {/* Encabezado */}
-      <div>
-        <h1 className="text-3xl font-black text-slate-900 tracking-tight">
-          Nuevo Informe de Visita
-        </h1>
-        <p className="text-sm font-semibold text-slate-400 mt-1">
-          Completá los datos de la visita de seguridad e higiene.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
+        <div>
+          <h1 className="text-3xl font-black text-slate-900 tracking-tight">
+            Nuevo Informe de Visita
+          </h1>
+          <p className="text-sm font-semibold text-slate-400 mt-1">
+            Completá los datos de la visita de seguridad e higiene.
+          </p>
+        </div>
+        <div className="flex flex-col items-stretch sm:items-end gap-2.5">
+          <div
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-100 text-[11px] font-semibold text-slate-500"
+            title="Se guarda en este dispositivo (incluidas fotos) y se sincroniza al servidor cada minuto mientras haya conexión."
+          >
+            {autosaveStatus === "saving" ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600" />
+            ) : autosaveStatus === "offline" || autosaveStatus === "error" ? (
+              <CloudOff className="h-3.5 w-3.5 text-amber-600" />
+            ) : (
+              <Cloud className="h-3.5 w-3.5 text-emerald-600" />
+            )}
+            <span>{formatAutosaveLabel(autosaveStatus, lastSavedAt)}</span>
+          </div>
+          {canDiscardDraft && (
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => void handleDiscardDraft()}
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-red-200 bg-white text-red-600 text-xs font-bold shadow-2xs hover:bg-red-50 hover:border-red-300 active:bg-red-100/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer self-start sm:self-end"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Descartar borrador
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -616,6 +883,7 @@ export default function NuevoInformePage() {
                                   tmpl.content,
                                 );
                                 updateToolbarState();
+                                setEditorTick((n) => n + 1);
                               }
                               setShowTemplatesDropdown(false);
                             }}
@@ -648,6 +916,7 @@ export default function NuevoInformePage() {
                                     editorRef.current.innerHTML =
                                       sanitizeRichHtml(tmpl.contenido);
                                     updateToolbarState();
+                                    setEditorTick((n) => n + 1);
                                   }
                                   setShowTemplatesDropdown(false);
                                 }}
@@ -689,6 +958,7 @@ export default function NuevoInformePage() {
                 ref={editorRef}
                 contentEditable
                 suppressContentEditableWarning
+                onInput={() => setEditorTick((n) => n + 1)}
                 onKeyUp={updateToolbarState}
                 onMouseUp={updateToolbarState}
                 onFocus={updateToolbarState}

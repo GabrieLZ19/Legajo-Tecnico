@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -8,6 +8,10 @@ import {
   useInformes,
   subirEvidenciaInforme,
 } from "@/hooks/useInformes";
+import {
+  formatAutosaveLabel,
+  useInformeAutosave,
+} from "@/hooks/useInformeAutosave";
 
 import { usePlantillas } from "@/hooks/usePlantillas";
 import { sanitizeRichHtml } from "@/lib/sanitizeHtml";
@@ -26,6 +30,10 @@ import {
   ChevronDown,
   FileText,
   AlertCircle,
+  Cloud,
+  CloudOff,
+  Loader2,
+  Trash2,
 } from "lucide-react";
 import { useAlert } from "@/context/AlertContext";
 import { PhotoSourcePicker } from "@/components/PhotoSourcePicker";
@@ -35,9 +43,9 @@ export default function EditarInformePage() {
   const router = useRouter();
   const params = useParams();
   const id = params.id as string;
-  const { showAlert } = useAlert();
+  const { showAlert, showConfirm } = useAlert();
   const { user, empresa } = useAuth();
-  const { editarInforme } = useInformes(empresa?.id);
+  const { crearInforme, editarInforme } = useInformes(empresa?.id);
   // Evitar que un refetch (focus) pise el formulario / contenteditable mientras se edita
   const { data: informe, isLoading: loadingInforme } = useInformeDetalle(id, {
     refetchOnWindowFocus: false,
@@ -45,6 +53,8 @@ export default function EditarInformePage() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editorTick, setEditorTick] = useState(0);
+  const [draftReady, setDraftReady] = useState(false);
   const formHydratedForId = useRef<string | null>(null);
 
   // Campos del formulario principal
@@ -130,6 +140,54 @@ export default function EditarInformePage() {
     nombre: string;
   } | null>(null);
 
+  const getAutosaveSnapshot = useCallback(
+    () => ({
+      lugar,
+      actividad,
+      fecha,
+      hora,
+      declaracion_legal: editorRef.current?.innerHTML || "",
+      observaciones: observacionesCargadas,
+    }),
+    [lugar, actividad, fecha, hora, observacionesCargadas, editorTick],
+  );
+
+  const {
+    status: autosaveStatus,
+    lastSavedAt,
+    loadLocalDraftWithPhotos,
+    markCleanAfterManualSave,
+    baselineFromCurrent,
+    clearLocal,
+  } = useInformeAutosave({
+    mode: "editar",
+    empresaId: empresa?.id,
+    informeId: id,
+    enabled: !!empresa?.id && draftReady && !!informe,
+    pause: loading || loadingInforme,
+    watch: [lugar, actividad, fecha, hora, observacionesCargadas, editorTick],
+    getSnapshot: getAutosaveSnapshot,
+    crearInforme: crearInforme as any,
+    editarInforme: editarInforme as any,
+    onSynced: (res) => {
+      if (!res.puntos_mejora?.length) return;
+      setObservacionesCargadas((prev) =>
+        prev.map((obs) => {
+          const pm = res.puntos_mejora?.find(
+            (p) => (obs.id && p.id === obs.id) || p.detalle === obs.detalle,
+          );
+          if (!pm) return obs;
+          return {
+            ...obs,
+            id: pm.id,
+            id_temp: obs.id || pm.id,
+            imagenFile: undefined,
+          };
+        }),
+      );
+    },
+  });
+
   const openSaveTemplateModal = () => {
     if (!editorRef.current) return;
     const content = editorRef.current.innerHTML.trim();
@@ -200,50 +258,133 @@ export default function EditarInformePage() {
       return;
     }
 
-    if (formHydratedForId.current === informe.id) return;
-    formHydratedForId.current = informe.id;
+    let cancelled = false;
+    setDraftReady(true);
 
-    setLugar(informe.lugar_visita || "");
-    setActividad(informe.actividad || "");
+    const hydrateFromServer = () => {
+      if (cancelled) return;
+      setLugar(informe.lugar_visita || "");
+      setActividad(informe.actividad || "");
 
-    const dateObj = new Date(informe.fecha_hora_visita);
-    setFecha(dateObj.toISOString().split("T")[0]);
+      const dateObj = new Date(informe.fecha_hora_visita);
+      setFecha(dateObj.toISOString().split("T")[0]);
 
-    const hours = String(dateObj.getHours()).padStart(2, "0");
-    const minutes = String(dateObj.getMinutes()).padStart(2, "0");
-    setHora(`${hours}:${minutes}`);
+      const hours = String(dateObj.getHours()).padStart(2, "0");
+      const minutes = String(dateObj.getMinutes()).padStart(2, "0");
+      setHora(`${hours}:${minutes}`);
 
-    if (informe.puntos_mejora) {
-      const loadedObs = informe.puntos_mejora.map((pm: any) => {
-        const matchingAccs =
-          informe.acciones_mejora?.filter(
-            (acc: any) => acc.punto_mejora_id === pm.id,
-          ) || [];
-        return {
-          id_temp: pm.id,
-          id: pm.id,
-          detalle: pm.detalle,
-          acciones: matchingAccs.map((acc: any) => ({
-            id: acc.id,
-            descripcion: acc.descripcion,
-            responsable: acc.responsable || "",
-          })),
-          evidencia_url: pm.evidencia_url || undefined,
-        };
-      });
-      setObservacionesCargadas(loadedObs);
+      if (informe.puntos_mejora) {
+        const loadedObs = informe.puntos_mejora.map((pm: any) => {
+          const matchingAccs =
+            informe.acciones_mejora?.filter(
+              (acc: any) => acc.punto_mejora_id === pm.id,
+            ) || [];
+          return {
+            id_temp: pm.id,
+            id: pm.id,
+            detalle: pm.detalle,
+            acciones: matchingAccs.map((acc: any) => ({
+              id: acc.id,
+              descripcion: acc.descripcion,
+              responsable: acc.responsable || "",
+            })),
+            evidencia_url: pm.evidencia_url || undefined,
+          };
+        });
+        setObservacionesCargadas(loadedObs);
+      } else {
+        setObservacionesCargadas([]);
+      }
+
+      if (editorRef.current) {
+        editorRef.current.innerHTML = sanitizeRichHtml(
+          informe.declaracion_legal || "",
+        );
+      }
+
+      formHydratedForId.current = informe.id;
+      baselineFromCurrent();
+    };
+
+    const hydrate = async () => {
+      try {
+        const { draft: localDraft, photos } = await loadLocalDraftWithPhotos();
+        if (cancelled) return;
+
+        const useLocal =
+          localDraft &&
+          localDraft.informeId === informe.id &&
+          localDraft.savedAt &&
+          new Date(localDraft.savedAt).getTime() >
+            new Date(informe.updated_at || informe.fecha_hora_visita).getTime();
+
+        if (useLocal && localDraft) {
+          setLugar(localDraft.lugar || "");
+          setActividad(localDraft.actividad || "");
+          setFecha(
+            localDraft.fecha ||
+              new Date(informe.fecha_hora_visita).toISOString().split("T")[0],
+          );
+          const dateObj = new Date(informe.fecha_hora_visita);
+          const fallbackHora = `${String(dateObj.getHours()).padStart(2, "0")}:${String(dateObj.getMinutes()).padStart(2, "0")}`;
+          setHora(localDraft.hora || fallbackHora);
+          setObservacionesCargadas(
+            (localDraft.observaciones || []).map((obs) => {
+              const idTemp =
+                obs.id_temp || obs.id || Math.random().toString(36).slice(2);
+              const imagenFile = photos.get(idTemp) || photos.get(obs.id_temp);
+              return {
+                id_temp: idTemp,
+                id: obs.id,
+                detalle: obs.detalle,
+                acciones: obs.acciones?.length
+                  ? obs.acciones.map((a) => ({ ...a }))
+                  : [],
+                evidencia_url: obs.evidencia_url,
+                imagenFile,
+                previewUrl: imagenFile
+                  ? URL.createObjectURL(imagenFile)
+                  : undefined,
+              };
+            }),
+          );
+          if (editorRef.current) {
+            editorRef.current.innerHTML = sanitizeRichHtml(
+              localDraft.declaracion_legal || "",
+            );
+          }
+          setEditorTick((n) => n + 1);
+          formHydratedForId.current = informe.id;
+          baselineFromCurrent();
+          return;
+        }
+
+        hydrateFromServer();
+      } catch (err) {
+        console.error("Error al hidratar borrador local:", err);
+        if (!cancelled) hydrateFromServer();
+      }
+    };
+
+    // Evitar re-hidratar el mismo id si ya está listo (salvo remount Strict Mode)
+    if (formHydratedForId.current !== informe.id) {
+      void hydrate();
     }
 
-    if (editorRef.current) {
-      editorRef.current.innerHTML = sanitizeRichHtml(
-        informe.declaracion_legal || "",
-      );
-    }
-  }, [informe, id, router, showAlert]);
+    return () => {
+      cancelled = true;
+      // Permitir re-hidratación en Strict Mode / remount
+      if (formHydratedForId.current === informe.id) {
+        formHydratedForId.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [informe?.id]);
 
   // Si cambia el id de ruta, permitir rehidratar el formulario
   useEffect(() => {
     formHydratedForId.current = null;
+    setDraftReady(false);
   }, [id]);
 
   // Cuando el editor monta después de hidratar estado, aplicar declaración si quedó pendiente
@@ -434,6 +575,9 @@ export default function EditarInformePage() {
         await subirEvidenciaInforme(id, formData);
       });
 
+      markCleanAfterManualSave();
+      clearLocal();
+
       // Ir al detalle con datos frescos; el alert no debe bloquear la navegación
       router.replace(`/informes/${id}`);
       showAlert(
@@ -452,6 +596,71 @@ export default function EditarInformePage() {
     }
   };
 
+  const handleDiscardLocalDraft = async () => {
+    if (!informe) return;
+    const ok = await showConfirm(
+      "Descartar cambios locales",
+      "Se borrará el borrador de este dispositivo y se restaurará la última versión guardada en el servidor.",
+      {
+        type: "warning",
+        confirmLabel: "Descartar",
+        cancelLabel: "Cancelar",
+      },
+    );
+    if (!ok) return;
+
+    observacionesCargadas.forEach((obs) => {
+      if (obs.previewUrl) URL.revokeObjectURL(obs.previewUrl);
+    });
+    await clearLocal();
+
+    setLugar(informe.lugar_visita || "");
+    setActividad(informe.actividad || "");
+    const dateObj = new Date(informe.fecha_hora_visita);
+    setFecha(dateObj.toISOString().split("T")[0]);
+    const hours = String(dateObj.getHours()).padStart(2, "0");
+    const minutes = String(dateObj.getMinutes()).padStart(2, "0");
+    setHora(`${hours}:${minutes}`);
+
+    if (informe.puntos_mejora) {
+      setObservacionesCargadas(
+        informe.puntos_mejora.map((pm: any) => {
+          const matchingAccs =
+            informe.acciones_mejora?.filter(
+              (acc: any) => acc.punto_mejora_id === pm.id,
+            ) || [];
+          return {
+            id_temp: pm.id,
+            id: pm.id,
+            detalle: pm.detalle,
+            acciones: matchingAccs.map((acc: any) => ({
+              id: acc.id,
+              descripcion: acc.descripcion,
+              responsable: acc.responsable || "",
+            })),
+            evidencia_url: pm.evidencia_url || undefined,
+          };
+        }),
+      );
+    } else {
+      setObservacionesCargadas([]);
+    }
+
+    if (editorRef.current) {
+      editorRef.current.innerHTML = sanitizeRichHtml(
+        informe.declaracion_legal || "",
+      );
+    }
+    setEditorTick((n) => n + 1);
+    baselineFromCurrent();
+
+    showAlert(
+      "success",
+      "Cambios locales descartados",
+      "Se restauró la versión del servidor.",
+    );
+  };
+
   if (loadingInforme) {
     return (
       <div className="space-y-6">
@@ -464,20 +673,49 @@ export default function EditarInformePage() {
   return (
     <div className="space-y-8">
       {/* Encabezado */}
-      <div className="flex items-center gap-3.5">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3.5">
         <button
           onClick={() => router.push(`/informes/${id}`)}
-          className="h-10 w-10 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
+          className="h-10 w-10 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer shrink-0"
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
-        <div>
+        <div className="flex-1 min-w-0">
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">
             Editar Informe N° {String(informe?.numero_informe).padStart(6, "0")}
           </h1>
           <p className="text-sm font-semibold text-slate-400 mt-1">
             Modificá los datos del informe técnico y guardá los cambios.
           </p>
+        </div>
+        <div className="flex flex-col items-stretch sm:items-end gap-2.5 sm:self-end sm:pb-1">
+          <div
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-100 text-[11px] font-semibold text-slate-500"
+            title="Se guarda en este dispositivo (incluidas fotos) y se sincroniza al servidor cada minuto mientras haya conexión."
+          >
+            {autosaveStatus === "saving" ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600" />
+            ) : autosaveStatus === "offline" || autosaveStatus === "error" ? (
+              <CloudOff className="h-3.5 w-3.5 text-amber-600" />
+            ) : (
+              <Cloud className="h-3.5 w-3.5 text-emerald-600" />
+            )}
+            <span>{formatAutosaveLabel(autosaveStatus, lastSavedAt)}</span>
+          </div>
+          {(autosaveStatus === "local" ||
+            autosaveStatus === "offline" ||
+            autosaveStatus === "error" ||
+            autosaveStatus === "saved") && (
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => void handleDiscardLocalDraft()}
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-red-200 bg-white text-red-600 text-xs font-bold shadow-2xs hover:bg-red-50 hover:border-red-300 active:bg-red-100/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer self-start sm:self-end"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Descartar borrador
+            </button>
+          )}
         </div>
       </div>
 
@@ -664,6 +902,7 @@ export default function EditarInformePage() {
                                   tmpl.content,
                                 );
                                 updateToolbarState();
+                                setEditorTick((n) => n + 1);
                               }
                               setShowTemplatesDropdown(false);
                             }}
@@ -696,6 +935,7 @@ export default function EditarInformePage() {
                                     editorRef.current.innerHTML =
                                       sanitizeRichHtml(tmpl.contenido);
                                     updateToolbarState();
+                                    setEditorTick((n) => n + 1);
                                   }
                                   setShowTemplatesDropdown(false);
                                 }}
@@ -737,6 +977,7 @@ export default function EditarInformePage() {
                 ref={editorRef}
                 contentEditable
                 suppressContentEditableWarning
+                onInput={() => setEditorTick((n) => n + 1)}
                 onKeyUp={updateToolbarState}
                 onMouseUp={updateToolbarState}
                 onFocus={updateToolbarState}
