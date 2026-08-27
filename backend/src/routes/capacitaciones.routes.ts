@@ -3,6 +3,7 @@ import { requireAuth, requireRole } from "../middlewares/auth";
 import { capacitacionesController } from "../controllers/capacitaciones.controller";
 import { planAnualController } from "../controllers/planAnual.controller";
 import { uploadExcel } from "../config/multerExcel";
+import { uploadRegistroManual } from "../config/multer";
 import { publicActionLimiter } from "../middlewares/rateLimit";
 
 const router = Router();
@@ -40,6 +41,31 @@ router.post(
   planAnualController.subir,
 );
 
+// Registro manual (papel escaneado) — antes de /:id
+router.get(
+  "/registro-manual/plantilla",
+  requireAuth,
+  capacitacionesController.plantillaRegistroManual,
+);
+router.post(
+  "/registro-manual",
+  requireAuth,
+  puedeEscribirCapacitacion,
+  (req, res, next) => {
+    uploadRegistroManual.single("archivo")(req, res, (err) => {
+      if (err) {
+        return res.status(400).json({
+          error:
+            err.message ||
+            "Debés adjuntar el registro escaneado (JPG, PNG, WEBP o PDF)",
+        });
+      }
+      next();
+    });
+  },
+  capacitacionesController.crearRegistroManual,
+);
+
 router.get("/:id", requireAuth, capacitacionesController.detalle);
 router.patch(
   "/:id",
@@ -64,6 +90,12 @@ router.patch(
   requireAuth,
   puedeEscribirCapacitacion,
   capacitacionesController.actualizarRegistro,
+);
+router.delete(
+  "/:id/asistencias/:asistenciaId",
+  requireAuth,
+  puedeEscribirCapacitacion,
+  capacitacionesController.eliminarAsistencia,
 );
 router.delete(
   "/:id",

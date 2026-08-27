@@ -37,6 +37,86 @@ export const capacitacionesController = {
     }
   },
 
+  async crearRegistroManual(req: Request, res: Response, next: NextFunction) {
+    try {
+      const empresaId = String(req.body.empresa_id || "");
+      const fecha = String(req.body.fecha || "");
+      const file = req.file;
+
+      if (!empresaId) {
+        return res.status(400).json({ error: "empresa_id es requerido" });
+      }
+      if (!fecha) {
+        return res
+          .status(400)
+          .json({ error: "La fecha y hora del registro son obligatorias" });
+      }
+      if (!file) {
+        return res.status(400).json({
+          error: "Debés adjuntar el registro escaneado (imagen o PDF)",
+        });
+      }
+
+      await assertEmpresaAccess(req.user!, empresaId);
+      const cap = await capacitacionesService.crearRegistroManual({
+        empresa_id: empresaId,
+        preventor_id: req.user!.id,
+        titulo: req.body.titulo,
+        fecha,
+        instructor: req.body.instructor,
+        fechas_horario: req.body.fechas_horario,
+        cantidad_horas: req.body.cantidad_horas,
+        file,
+      });
+      res.status(201).json(cap);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async plantillaRegistroManual(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) {
+    try {
+      const empresaId = String(req.query.empresa_id || "");
+      if (!empresaId) {
+        return res.status(400).json({ error: "empresa_id es requerido" });
+      }
+      await assertEmpresaAccess(req.user!, empresaId);
+
+      const result = await capacitacionesService.generarPlantillaRegistroManual({
+        empresa_id: empresaId,
+        titulo: req.query.titulo ? String(req.query.titulo) : undefined,
+        fecha: req.query.fecha ? String(req.query.fecha) : undefined,
+        instructor: req.query.instructor
+          ? String(req.query.instructor)
+          : undefined,
+        fechas_horario: req.query.fechas_horario
+          ? String(req.query.fechas_horario)
+          : undefined,
+        cantidad_horas: req.query.cantidad_horas
+          ? String(req.query.cantidad_horas)
+          : undefined,
+      });
+
+      if (result.error) {
+        return res.status(result.code!).json({ error: result.error });
+      }
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        'attachment; filename="plantilla_registro_capacitacion.pdf"',
+      );
+      result.doc!.pipe(res);
+      result.doc!.end();
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async detalle(req: Request, res: Response, next: NextFunction) {
     try {
       const id = String(req.params.id);
@@ -129,6 +209,23 @@ export const capacitacionesController = {
       await assertCapacitacionAccess(req.user!, id);
       await capacitacionesService.eliminar(id);
       res.json({ success: true, message: "Capacitación eliminada con éxito" });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async eliminarAsistencia(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = String(req.params.id);
+      const asistenciaId = String(req.params.asistenciaId);
+      await assertCapacitacionAccess(req.user!, id);
+      const result = await capacitacionesService.eliminarAsistencia(
+        id,
+        asistenciaId,
+      );
+      if (result.error)
+        return res.status(result.code!).json({ error: result.error });
+      res.json({ success: true, message: "Participante eliminado del registro" });
     } catch (error) {
       next(error);
     }

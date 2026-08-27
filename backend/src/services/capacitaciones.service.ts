@@ -10,6 +10,9 @@ import {
   buildRegistroExcel,
   buildRegistroPdf,
 } from "./capacitacionRegistroExport.service";
+import { storageService } from "./storage.service";
+import { safeExtensionFromUpload } from "../config/multer";
+import { HttpError } from "../utils/httpError";
 
 function esRespuestaMultiple(raw: unknown): boolean {
   if (Array.isArray(raw)) return true;
@@ -21,6 +24,30 @@ function esRespuestaMultiple(raw: unknown): boolean {
   } catch {
     return false;
   }
+}
+
+/** Firma URLs de Storage privadas antes de exponerlas al frontend. */
+async function firmarUrlsCapacitacion<T extends Record<string, any>>(
+  cap: T,
+): Promise<T> {
+  const asistencias = await Promise.all(
+    (cap.capacitacion_asistencias || []).map(async (a: any) => ({
+      ...a,
+      firma_url: await storageService.signUrl(a.firma_url),
+    })),
+  );
+
+  return {
+    ...cap,
+    capacitacion_asistencias: asistencias,
+    firma_capacitador_url: await storageService.signUrl(
+      cap.firma_capacitador_url,
+    ),
+    firma_empresa_url: await storageService.signUrl(cap.firma_empresa_url),
+    registro_manual_url: await storageService.signUrl(
+      cap.registro_manual_url,
+    ),
+  };
 }
 
 export const capacitacionesService = {
@@ -38,6 +65,7 @@ export const capacitacionesService = {
       `,
       )
       .eq("empresa_id", empresaId)
+      .order("fecha", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false });
 
     if (error) throw error;
@@ -213,6 +241,69 @@ export const capacitacionesService = {
   },
 
   /**
+   * Alta de registro en papel (escaneo imagen/PDF) para mantener el historial correlativo.
+   */
+  async crearRegistroManual(params: {
+    empresa_id: string;
+    preventor_id: string;
+    titulo?: string;
+    fecha: string;
+    instructor?: string;
+    fechas_horario?: string;
+    cantidad_horas?: string;
+    file: Express.Multer.File;
+  }) {
+    const fecha = new Date(params.fecha);
+    if (Number.isNaN(fecha.getTime())) {
+      throw new HttpError(400, "La fecha y hora del registro no son válidas");
+    }
+
+    const titulo =
+      (params.titulo || "").trim() ||
+      "Registro de capacitación (manual)";
+
+    const ext = safeExtensionFromUpload(params.file);
+    const safeName = (params.file.originalname || `registro.${ext}`)
+      .replace(/[^\w.\-]+/g, "_")
+      .slice(0, 120);
+    const storagePath = `${params.empresa_id}/${Date.now()}_${randomUUID().slice(0, 8)}_${safeName}`;
+
+    await storageService.subirArchivo(
+      "capacitacion_registros",
+      storagePath,
+      params.file,
+    );
+    const registroUrl = storageService.obtenerUrlPublica(
+      "capacitacion_registros",
+      storagePath,
+    );
+
+    const { data: cap, error } = await supabaseAdmin
+      .from("capacitaciones")
+      .insert({
+        empresa_id: params.empresa_id,
+        preventor_id: params.preventor_id,
+        titulo,
+        temario: null,
+        diapositivas: [],
+        fecha: fecha.toISOString(),
+        instructor: params.instructor?.trim() || null,
+        fechas_horario: params.fechas_horario?.trim() || null,
+        cantidad_horas: params.cantidad_horas?.trim() || null,
+        con_evaluacion: false,
+        estado: "cerrada",
+        origen: "manual",
+        registro_manual_url: registroUrl,
+        registro_manual_nombre: params.file.originalname || safeName,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return firmarUrlsCapacitacion(cap);
+  },
+
+  /**
    * Obtener detalle completo de una capacitación
    */
   async obtenerPorId(id: string) {
@@ -252,7 +343,7 @@ export const capacitacionesService = {
 
     data.diapositivas = ensureDiapositivas(data.diapositivas, data.temario);
 
-    return data;
+    return firmarUrlsCapacitacion(data);
   },
 
   /**
@@ -596,6 +687,45 @@ export const capacitacionesService = {
   },
 
   /**
+   * Eliminar un participante del registro de asistencias
+   */
+  async eliminarAsistencia(capacitacionId: string, asistenciaId: string) {
+    const { data: asistencia, error: findError } = await supabaseAdmin
+      .from("capacitacion_asistencias")
+      .select("id, firma_url")
+      .eq("id", asistenciaId)
+      .eq("capacitacion_id", capacitacionId)
+      .maybeSingle();
+
+    if (findError) throw findError;
+    if (!asistencia) {
+      return { error: "Asistencia no encontrada", code: 404 as const };
+    }
+
+    const { error } = await supabaseAdmin
+      .from("capacitacion_asistencias")
+      .delete()
+      .eq("id", asistenciaId)
+      .eq("capacitacion_id", capacitacionId);
+
+    if (error) throw error;
+
+    // Best-effort: limpiar firma en Storage si era de este bucket
+    if (asistencia.firma_url) {
+      const parsed = storageService.parseStorageUrl(asistencia.firma_url);
+      if (parsed?.bucket === "firmas_digitales") {
+        try {
+          await storageService.eliminarArchivo(parsed.bucket, parsed.path);
+        } catch (err) {
+          console.error("No se pudo borrar firma de asistencia:", err);
+        }
+      }
+    }
+
+    return { success: true as const };
+  },
+
+  /**
    * Generar contenido para exportar asistencias (Excel XLSX o PDF)
    */
   async exportarAsistencias(
@@ -677,6 +807,44 @@ export const capacitacionesService = {
   },
 
   /**
+   * Plantilla en blanco del REGISTRO DE CAPACITACIÓN (PDF) para imprimir y firmar en papel.
+   */
+  async generarPlantillaRegistroManual(params: {
+    empresa_id: string;
+    titulo?: string;
+    fecha?: string;
+    instructor?: string;
+    fechas_horario?: string;
+    cantidad_horas?: string;
+  }) {
+    const { data: empresa, error } = await supabaseAdmin
+      .from("empresas")
+      .select("razon_social, logo_url")
+      .eq("id", params.empresa_id)
+      .single();
+
+    if (error || !empresa) {
+      return { error: "Empresa no encontrada", code: 404 as const };
+    }
+
+    const doc = await buildRegistroPdf({
+      titulo: (params.titulo || "").trim() || "________________",
+      fecha: params.fecha || null,
+      instructor: (params.instructor || "").trim() || null,
+      fechas_horario: (params.fechas_horario || "").trim() || null,
+      cantidad_horas: (params.cantidad_horas || "").trim() || null,
+      firma_capacitador_url: null,
+      aclaracion_capacitador: null,
+      firma_empresa_url: null,
+      aclaracion_empresa: null,
+      empresa,
+      asistencias: [],
+    });
+
+    return { type: "pdf" as const, doc };
+  },
+
+  /**
    * Actualizar datos del registro (instructor/horas/firmas) sin tocar el contenido
    */
   async actualizarRegistro(id: string, body: any) {
@@ -738,6 +906,6 @@ export const capacitacionesService = {
       .single();
 
     if (error) throw error;
-    return { data };
+    return { data: await firmarUrlsCapacitacion(data) };
   },
 };

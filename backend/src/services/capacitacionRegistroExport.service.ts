@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
+import { storageService } from "./storage.service";
 
 export type RegistroAsistente = {
   nombre_empleado?: string | null;
@@ -42,23 +43,45 @@ function splitFecha(fecha?: string | null): { dia: string; mes: string; anio: st
   };
 }
 
+function detectImageExtension(
+  buffer: Buffer,
+  url?: string | null,
+): "png" | "jpeg" {
+  // PNG magic: 89 50 4E 47
+  if (
+    buffer.length >= 4 &&
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47
+  ) {
+    return "png";
+  }
+  // JPEG magic: FF D8 FF
+  if (
+    buffer.length >= 3 &&
+    buffer[0] === 0xff &&
+    buffer[1] === 0xd8 &&
+    buffer[2] === 0xff
+  ) {
+    return "jpeg";
+  }
+  const lower = (url || "").toLowerCase();
+  if (lower.includes(".jpg") || lower.includes(".jpeg")) return "jpeg";
+  return "png";
+}
+
+/**
+ * Descarga imagen vía Storage admin (soporta buckets privados como firmas_digitales).
+ */
 async function fetchImageBuffer(
   url?: string | null,
 ): Promise<{ buffer: Buffer; extension: "png" | "jpeg" } | null> {
   if (!url) return null;
   try {
-    const response = await fetch(url);
-    if (!response.ok) return null;
-    const arrayBuffer = await response.arrayBuffer();
-    const contentType = response.headers.get("content-type") || "";
-    const extension =
-      contentType.includes("jpeg") ||
-      contentType.includes("jpg") ||
-      url.toLowerCase().includes(".jpg") ||
-      url.toLowerCase().includes(".jpeg")
-        ? "jpeg"
-        : "png";
-    return { buffer: Buffer.from(arrayBuffer), extension };
+    const buffer = await storageService.downloadBuffer(url);
+    if (!buffer || buffer.length === 0) return null;
+    return { buffer, extension: detectImageExtension(buffer, url) };
   } catch {
     return null;
   }

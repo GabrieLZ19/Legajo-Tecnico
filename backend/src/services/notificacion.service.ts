@@ -40,6 +40,48 @@ export const notificacionService = {
     return data;
   },
 
+  /**
+   * Notifica a todos los admins activos de una consultora (una fila por admin).
+   */
+  async enviarAAdmins({
+    consultora_id,
+    titulo,
+    mensaje,
+    tipo = 'info',
+  }: {
+    consultora_id: string;
+    titulo: string;
+    mensaje: string;
+    tipo?: string;
+  }) {
+    const { data: admins, error: adminsError } = await supabaseAdmin
+      .from('perfiles')
+      .select('id')
+      .eq('consultora_id', consultora_id)
+      .eq('rol', 'admin')
+      .eq('activo', true);
+
+    if (adminsError) throw adminsError;
+    if (!admins || admins.length === 0) return [];
+
+    const rows = admins.map((admin) => ({
+      consultora_id,
+      usuario_id: admin.id,
+      titulo,
+      mensaje,
+      tipo,
+      es_global: false,
+    }));
+
+    const { data, error } = await supabaseAdmin
+      .from('notificaciones')
+      .insert(rows)
+      .select();
+
+    if (error) throw error;
+    return data || [];
+  },
+
   async listarPorUsuario(usuarioId: string, consultoraId: string) {
     const { data, error } = await supabaseAdmin
       .from('notificaciones')

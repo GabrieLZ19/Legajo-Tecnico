@@ -52,3 +52,22 @@ export const upload = multer({
     }
   },
 });
+
+/** Escaneos de registro en papel (imagen/PDF), hasta 10 MB. */
+export const uploadRegistroManual = multer({
+  storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024,
+  },
+  fileFilter: (_req, file, cb) => {
+    if (isAllowedUpload(file)) {
+      cb(null, true);
+    } else {
+      cb(
+        new Error(
+          'Formato no soportado. Solo JPG, PNG, WEBP o PDF (máx. 10 MB).',
+        ),
+      );
+    }
+  },
+});

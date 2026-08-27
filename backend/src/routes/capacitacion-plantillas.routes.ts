@@ -20,6 +20,12 @@ router.put(
   puedeEscribirPlantilla,
   capacitacionPlantillasController.actualizar,
 );
+router.patch(
+  "/:id/publicacion",
+  requireAuth,
+  requireRole("admin"),
+  capacitacionPlantillasController.cambiarEstadoPublicacion,
+);
 router.delete(
   "/:id",
   requireAuth,

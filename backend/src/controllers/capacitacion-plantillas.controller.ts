@@ -1,6 +1,52 @@
 import { Request, Response, NextFunction } from "express";
 import { capacitacionPlantillasService } from "../services/capacitacion-plantillas.service";
 import { assertEmpresaAccess } from "../middlewares/empresaAccess";
+import { notificacionService } from "../services/notificacion.service";
+import { supabaseAdmin } from "../config/supabase";
+
+async function resolveConsultoraId(user: {
+  id: string;
+  consultora_id?: string;
+}): Promise<string | null> {
+  if (user.consultora_id) return user.consultora_id;
+  const { data } = await supabaseAdmin
+    .from("perfiles")
+    .select("consultora_id")
+    .eq("id", user.id)
+    .maybeSingle();
+  return data?.consultora_id || null;
+}
+
+async function avisarAdminsPlantillaPendiente(params: {
+  consultoraId: string;
+  tituloPlantilla: string;
+  autorId: string;
+  plantillaId: string;
+}) {
+  const { data: autor } = await supabaseAdmin
+    .from("perfiles")
+    .select("nombre_completo, username")
+    .eq("id", params.autorId)
+    .maybeSingle();
+
+  const autorNombre =
+    autor?.nombre_completo || autor?.username || "Un preventor";
+
+  try {
+    await notificacionService.enviarAAdmins({
+      consultora_id: params.consultoraId,
+      tipo: "warning",
+      titulo: "Nueva plantilla LT pendiente",
+      mensaje: `${autorNombre} envió “${params.tituloPlantilla}” a la biblioteca Legajo Técnico. Revisala en Capacitaciones → Biblioteca LT.`,
+    });
+  } catch (err) {
+    console.error(
+      "No se pudo notificar a admins sobre plantilla pendiente:",
+      params.plantillaId,
+      err,
+    );
+  }
+}
 
 export const capacitacionPlantillasController = {
   async listar(req: Request, res: Response, next: NextFunction) {
@@ -13,6 +59,7 @@ export const capacitacionPlantillasController = {
         return;
       }
 
+      const user = req.user!;
       const empresaId = req.query.empresa_id as string | undefined;
       if (ambito === "empresa" && !empresaId) {
         res
@@ -21,12 +68,36 @@ export const capacitacionPlantillasController = {
         return;
       }
       if (ambito === "empresa" && empresaId) {
-        await assertEmpresaAccess(req.user!, empresaId);
+        await assertEmpresaAccess(user, empresaId);
       }
+
+      const estadoQuery = req.query.estado_publicacion as string | undefined;
+      const isAdmin = user.rol === "admin";
+      const incluirNoPublicadas =
+        ambito === "global" &&
+        isAdmin &&
+        (estadoQuery === "pendiente" ||
+          estadoQuery === "rechazada" ||
+          estadoQuery === "aprobada" ||
+          estadoQuery === "todas" ||
+          req.query.incluir_pendientes === "1");
 
       const plantillas = await capacitacionPlantillasService.listar({
         ambito,
         empresa_id: empresaId,
+        incluirNoPublicadas,
+        estado_publicacion:
+          incluirNoPublicadas &&
+          (estadoQuery === "pendiente" ||
+            estadoQuery === "aprobada" ||
+            estadoQuery === "rechazada" ||
+            estadoQuery === "todas")
+            ? (estadoQuery as
+                | "pendiente"
+                | "aprobada"
+                | "rechazada"
+                | "todas")
+            : undefined,
       });
       res.json({ plantillas });
     } catch (error) {
@@ -37,13 +108,25 @@ export const capacitacionPlantillasController = {
   async detalle(req: Request, res: Response, next: NextFunction) {
     try {
       const id = String(req.params.id);
+      const user = req.user!;
       const plantilla = await capacitacionPlantillasService.obtenerPorId(id);
       if (!plantilla) {
         res.status(404).json({ error: "Plantilla no encontrada" });
         return;
       }
       if (plantilla.ambito === "empresa" && plantilla.empresa_id) {
-        await assertEmpresaAccess(req.user!, plantilla.empresa_id);
+        await assertEmpresaAccess(user, plantilla.empresa_id);
+      }
+      if (
+        plantilla.ambito === "global" &&
+        plantilla.estado_publicacion !== "aprobada" &&
+        user.rol !== "admin" &&
+        plantilla.created_by !== user.id
+      ) {
+        res.status(403).json({
+          error: "Esta plantilla aún no está publicada en la biblioteca LT",
+        });
+        return;
       }
       res.json(plantilla);
     } catch (error) {
@@ -67,9 +150,10 @@ export const capacitacionPlantillasController = {
       }
 
       if (ambito === "global") {
-        if (user.rol !== "admin") {
+        if (user.rol !== "admin" && user.rol !== "preventor") {
           res.status(403).json({
-            error: "Solo administradores pueden crear plantillas globales",
+            error:
+              "Solo administradores o preventores pueden crear plantillas en la biblioteca LT",
           });
           return;
         }
@@ -99,7 +183,24 @@ export const capacitacionPlantillasController = {
         diapositivas,
         created_by: user.id,
         preguntas,
+        // Admin publica directo; preventor envía a revisión del CRM
+        publicarDirecto: ambito === "global" && user.rol === "admin",
       });
+
+      if (
+        ambito === "global" &&
+        plantilla?.estado_publicacion === "pendiente"
+      ) {
+        const consultoraId = await resolveConsultoraId(user);
+        if (consultoraId) {
+          await avisarAdminsPlantillaPendiente({
+            consultoraId,
+            tituloPlantilla: plantilla.titulo,
+            autorId: user.id,
+            plantillaId: plantilla.id,
+          });
+        }
+      }
 
       res.status(201).json(plantilla);
     } catch (error: any) {
@@ -157,6 +258,50 @@ export const capacitacionPlantillasController = {
         preguntas,
       });
       res.json(actualizada);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async cambiarEstadoPublicacion(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) {
+    try {
+      const id = String(req.params.id);
+      const user = req.user!;
+      if (user.rol !== "admin") {
+        res.status(403).json({
+          error: "Solo administradores pueden aprobar o rechazar publicaciones",
+        });
+        return;
+      }
+
+      const { estado, rechazo_motivo } = req.body as {
+        estado?: string;
+        rechazo_motivo?: string;
+      };
+      if (estado !== "aprobada" && estado !== "rechazada") {
+        res.status(400).json({
+          error: "estado debe ser 'aprobada' o 'rechazada'",
+        });
+        return;
+      }
+
+      const result = await capacitacionPlantillasService.cambiarEstadoPublicacion(
+        id,
+        {
+          estado,
+          adminId: user.id,
+          rechazo_motivo,
+        },
+      );
+      if (result.error) {
+        res.status(result.code!).json({ error: result.error });
+        return;
+      }
+      res.json(result.data);
     } catch (error) {
       next(error);
     }

@@ -5,6 +5,7 @@ export type EstadoAccion = 'pendiente' | 'cumplida' | 'atendida';
 export type TipoFirma = 'preventor' | 'dueno' | 'asistente_capacitacion';
 export type EstadoCapacitacion = 'borrador' | 'activa' | 'cerrada';
 export type AmbitoCapacitacionPlantilla = 'empresa' | 'global';
+export type EstadoPublicacionPlantilla = 'pendiente' | 'aprobada' | 'rechazada';
 export type EstadoEntregaEpp = 'registrada' | 'firmada' | 'anulada';
 
 export interface CapacitacionDiapositiva {
@@ -21,6 +22,11 @@ export interface CapacitacionPlantilla {
   created_by?: string | null;
   created_at: string;
   updated_at: string;
+  estado_publicacion?: EstadoPublicacionPlantilla | null;
+  aprobado_por?: string | null;
+  aprobado_at?: string | null;
+  rechazo_motivo?: string | null;
+  autor_nombre?: string | null;
   total_preguntas?: number;
 }
 

@@ -7,6 +7,7 @@ const KNOWN_BUCKETS = [
   "epp_fotos",
   "capacitacion_materiales",
   "capacitacion_planes",
+  "capacitacion_registros",
   "logos_consultora",
   "logos_empresa",
 ] as const;
