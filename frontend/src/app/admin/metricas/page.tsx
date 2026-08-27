@@ -152,7 +152,7 @@ export default function AdminMetricasPage() {
   ];
 
   return (
-    <div className="space-y-8 pb-10">
+    <div className="space-y-8 pb-10 w-full max-w-full">
       {/* Header & Filters */}
       <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-6">
         <div className="space-y-1">

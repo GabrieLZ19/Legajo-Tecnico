@@ -85,7 +85,7 @@ export default function EditarPlantillaGlobalPage() {
   }
 
   return (
-    <div className="space-y-8 w-full">
+    <div className="space-y-8 w-full max-w-full">
       <div className="flex items-center gap-4">
         <Link
           href="/admin/capacitaciones-biblioteca"

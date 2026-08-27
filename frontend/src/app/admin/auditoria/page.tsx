@@ -109,7 +109,7 @@ export default function AdminAuditoriaPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 w-full max-w-full">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>

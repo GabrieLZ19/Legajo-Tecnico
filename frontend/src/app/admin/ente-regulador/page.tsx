@@ -92,7 +92,7 @@ export default function EnteReguladorAdminPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full max-w-full">
       <div>
         <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Ente regulador</h1>
         <p className="text-sm text-slate-500 mt-1">

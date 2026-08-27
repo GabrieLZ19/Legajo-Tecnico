@@ -114,6 +114,24 @@ export function useCapacitaciones() {
     }
   };
 
+  const eliminarAsistencia = async (capacitacionId: string, asistenciaId: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data } = await api.delete(
+        `/capacitaciones/${capacitacionId}/asistencias/${asistenciaId}`,
+      );
+      return data;
+    } catch (err: any) {
+      setError(
+        err.response?.data?.error || "Error al eliminar el participante",
+      );
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const exportarCapacitacion = async (
     id: string,
     format: "xlsx" | "pdf" | "csv",
@@ -170,6 +188,50 @@ export function useCapacitaciones() {
     }
   };
 
+  const crearRegistroManual = async (formData: FormData) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data } = await api.post(
+        "/capacitaciones/registro-manual",
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        },
+      );
+      return data;
+    } catch (err: any) {
+      setError(
+        err.response?.data?.error || "Error al cargar el registro manual",
+      );
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const descargarPlantillaRegistroManual = async (params: {
+    empresa_id: string;
+    titulo?: string;
+    fecha?: string;
+    instructor?: string;
+    fechas_horario?: string;
+    cantidad_horas?: string;
+  }) => {
+    const qs = new URLSearchParams({ empresa_id: params.empresa_id });
+    if (params.titulo) qs.set("titulo", params.titulo);
+    if (params.fecha) qs.set("fecha", params.fecha);
+    if (params.instructor) qs.set("instructor", params.instructor);
+    if (params.fechas_horario) qs.set("fechas_horario", params.fechas_horario);
+    if (params.cantidad_horas) qs.set("cantidad_horas", params.cantidad_horas);
+
+    const response = await api.get(
+      `/capacitaciones/registro-manual/plantilla?${qs.toString()}`,
+      { responseType: "blob" },
+    );
+    return response.data;
+  };
+
   const actualizarCapacitacion = async (id: string, payload: any) => {
     setLoading(true);
     setError(null);
@@ -193,8 +255,11 @@ export function useCapacitaciones() {
     getCapacitacionQr,
     cambiarEstadoCapacitacion,
     eliminarCapacitacion,
+    eliminarAsistencia,
     exportarCapacitacion,
     crearCapacitacion,
+    crearRegistroManual,
+    descargarPlantillaRegistroManual,
     actualizarCapacitacion,
     evaluarCapacitacion,
     actualizarRegistroCapacitacion,

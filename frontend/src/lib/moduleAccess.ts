@@ -109,6 +109,18 @@ export function canWriteAppModule(
   return canWriteModule(user, mod.module);
 }
 
+/**
+ * Publicar en la biblioteca general LT (ámbito global).
+ * Solo roles de consultora (admin/preventor): no usa permisos_personalizados
+ * del módulo Capacitaciones, porque un dueño con acceso "total" no debe
+ * poder publicar plantillas globales de Legajo Técnico.
+ */
+export function canPublishToBibliotecaLt(
+  user: Pick<Perfil, "rol"> | null | undefined,
+): boolean {
+  return user?.rol === "admin" || user?.rol === "preventor";
+}
+
 export function getVisibleAppNavModules(
   user: Pick<Perfil, "rol" | "permisos_personalizados"> | null | undefined,
 ): AppNavModule[] {
@@ -154,6 +166,7 @@ const WRITE_ROUTE_RULES: WriteRouteRule[] = [
     key: "capacitaciones",
     match: (pathname) =>
       pathname.endsWith("/capacitaciones/nuevo") ||
+      pathname.endsWith("/capacitaciones/registro-manual") ||
       pathname.startsWith("/capacitaciones/biblioteca/nueva") ||
       /\/capacitaciones\/biblioteca\/[^/]+\/?$/.test(pathname) ||
       /\/capacitaciones\/[^/]+\/editar\/?$/.test(pathname),

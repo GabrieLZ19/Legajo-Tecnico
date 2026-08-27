@@ -171,7 +171,7 @@ export default function AdminDashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full max-w-full">
       {/* Top Header Bar */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 pb-4 border-b border-slate-200/60 relative z-35">
         <div>

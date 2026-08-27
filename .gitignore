@@ -44,3 +44,4 @@ shared/
 drive_context/
 scratch/
 .agents/
+.cursor/

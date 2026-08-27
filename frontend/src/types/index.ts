@@ -157,7 +157,9 @@ export interface MetricasDashboard {
 
 // ── Capacitaciones ──
 export type EstadoCapacitacion = 'borrador' | 'activa' | 'cerrada';
+export type OrigenCapacitacion = 'digital' | 'manual';
 export type AmbitoCapacitacionPlantilla = 'empresa' | 'global';
+export type EstadoPublicacionPlantilla = 'pendiente' | 'aprobada' | 'rechazada';
 
 export interface CapacitacionDiapositiva {
   contenido: string;
@@ -179,6 +181,9 @@ export interface Capacitacion {
   firma_empresa_url?: string | null;
   aclaracion_empresa?: string | null;
   estado: EstadoCapacitacion;
+  origen?: OrigenCapacitacion;
+  registro_manual_url?: string | null;
+  registro_manual_nombre?: string | null;
   con_evaluacion?: boolean;
   created_at: string;
   total_preguntas?: number;
@@ -218,6 +223,11 @@ export interface CapacitacionPlantilla {
   created_by?: string | null;
   created_at: string;
   updated_at: string;
+  estado_publicacion?: EstadoPublicacionPlantilla | null;
+  aprobado_por?: string | null;
+  aprobado_at?: string | null;
+  rechazo_motivo?: string | null;
+  autor_nombre?: string | null;
   total_preguntas?: number;
   capacitacion_plantilla_preguntas?: CapacitacionPlantillaPregunta[];
 }

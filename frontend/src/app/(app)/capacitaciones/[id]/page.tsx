@@ -27,6 +27,8 @@ import {
   FileText,
   Search,
   Presentation,
+  FileUp,
+  ExternalLink,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
@@ -57,12 +59,13 @@ export default function DetalleCapacitacionPage() {
   const id = params.id as string;
   const router = useRouter();
   const { user } = useAuth();
-  const { showAlert } = useAlert();
+  const { showAlert, showConfirm } = useAlert();
   const {
     getCapacitacionDetalle,
     getCapacitacionQr,
     cambiarEstadoCapacitacion,
     eliminarCapacitacion: deleteCap,
+    eliminarAsistencia: deleteAsistencia,
     exportarCapacitacion,
     actualizarRegistroCapacitacion,
   } = useCapacitaciones();
@@ -78,6 +81,9 @@ export default function DetalleCapacitacionPage() {
   // Modal / Confirmación eliminar
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deletingAsistenciaId, setDeletingAsistenciaId] = useState<string | null>(
+    null,
+  );
 
   // Filtros y búsqueda de asistencias
   const [searchQuery, setSearchQuery] = useState("");
@@ -102,7 +108,7 @@ export default function DetalleCapacitacionPage() {
     try {
       const data = await getCapacitacionDetalle(id);
       setCap(data);
-      if (data) {
+      if (data && data.origen !== "manual") {
         setLoadingQr(true);
         const qr = await getCapacitacionQr(id);
         setQrData(qr);
@@ -155,6 +161,50 @@ export default function DetalleCapacitacionPage() {
     } finally {
       setDeleting(false);
       setShowConfirmDelete(false);
+    }
+  };
+
+  const eliminarParticipante = async (
+    asistenciaId: string,
+    nombre: string,
+  ) => {
+    const ok = await showConfirm(
+      "Eliminar participante",
+      `¿Eliminar a “${nombre}” del registro de asistencias? Esta acción no se puede deshacer.`,
+      {
+        type: "error",
+        confirmLabel: "Eliminar",
+        cancelLabel: "Cancelar",
+      },
+    );
+    if (!ok) return;
+
+    setDeletingAsistenciaId(asistenciaId);
+    try {
+      await deleteAsistencia(id, asistenciaId);
+      setCap((prev) =>
+        prev
+          ? {
+              ...prev,
+              capacitacion_asistencias: (
+                prev.capacitacion_asistencias || []
+              ).filter((a) => a.id !== asistenciaId),
+            }
+          : prev,
+      );
+      showAlert(
+        "success",
+        "Participante eliminado",
+        `${nombre} fue quitado del registro.`,
+      );
+    } catch {
+      showAlert(
+        "error",
+        "Error",
+        "No se pudo eliminar el participante.",
+      );
+    } finally {
+      setDeletingAsistenciaId(null);
     }
   };
 
@@ -251,7 +301,7 @@ export default function DetalleCapacitacionPage() {
 
   if (loading) {
     return (
-      <div className="space-y-4 max-w-4xl mx-auto">
+      <div className="space-y-4 max-w-7xl mx-auto">
         <div className="h-12 bg-white border border-slate-200 rounded-2xl animate-pulse" />
         <div className="h-64 bg-white border border-slate-200 rounded-2xl animate-pulse" />
       </div>
@@ -262,6 +312,152 @@ export default function DetalleCapacitacionPage() {
     return (
       <div className="text-center py-20">
         <p className="text-slate-500">Capacitación no encontrada.</p>
+      </div>
+    );
+  }
+
+  const isManual = cap.origen === "manual";
+  const registroEsPdf =
+    (cap.registro_manual_nombre || "").toLowerCase().endsWith(".pdf") ||
+    (cap.registro_manual_url || "").toLowerCase().includes(".pdf");
+
+  if (isManual) {
+    return (
+      <div className="space-y-8 max-w-7xl mx-auto">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-5">
+          <div className="flex items-center gap-3">
+            <Link
+              href="/capacitaciones"
+              className="h-10 w-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition-colors cursor-pointer shrink-0"
+            >
+              <ArrowLeft className="h-5 w-5 text-slate-600" />
+            </Link>
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight line-clamp-2">
+                {cap.titulo}
+              </h1>
+              <div className="flex flex-wrap items-center gap-3 mt-1.5">
+                <span className="text-xs text-slate-400 font-semibold flex items-center gap-1 shrink-0">
+                  <Calendar className="h-3.5 w-3.5" />
+                  {cap.fecha
+                    ? new Date(cap.fecha).toLocaleString("es-AR", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
+                    : ""}
+                </span>
+                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider border shrink-0 bg-indigo-50 text-indigo-700 border-indigo-100">
+                  Registro manual
+                </span>
+                <span
+                  className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider border shrink-0 ${estadoColor(
+                    cap.estado,
+                  )}`}
+                >
+                  {cap.estado}
+                </span>
+              </div>
+            </div>
+          </div>
+          {canDelete && (
+            <button
+              onClick={() => setShowConfirmDelete(true)}
+              disabled={deleting}
+              className="inline-flex items-center justify-center gap-2 bg-red-50 hover:bg-red-100 text-red-700 font-bold px-4 py-2.5 rounded-xl text-sm transition-all cursor-pointer disabled:opacity-50 border border-red-200"
+            >
+              <Trash2 className="h-4 w-4" />
+              Eliminar
+            </button>
+          )}
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+              <FileUp className="h-4 w-4 text-indigo-600" />
+              Registro escaneado
+            </h2>
+            {cap.registro_manual_url && (
+              <a
+                href={cap.registro_manual_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-bold px-4 py-2.5 rounded-xl text-xs"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Abrir / descargar
+              </a>
+            )}
+          </div>
+          <p className="text-xs text-slate-500 font-semibold">
+            {cap.registro_manual_nombre || "Archivo del registro en papel"}
+            {cap.instructor ? ` · Instructor: ${cap.instructor}` : ""}
+            {cap.cantidad_horas ? ` · ${cap.cantidad_horas} h` : ""}
+          </p>
+
+          {cap.registro_manual_url ? (
+            registroEsPdf ? (
+              <iframe
+                title="Registro PDF"
+                src={cap.registro_manual_url}
+                className="w-full h-[70vh] rounded-xl border border-slate-200 bg-slate-50"
+              />
+            ) : (
+              <img
+                src={cap.registro_manual_url}
+                alt="Registro de capacitación"
+                className="w-full max-h-[70vh] object-contain rounded-xl border border-slate-200 bg-slate-50"
+              />
+            )
+          ) : (
+            <p className="text-sm text-red-600 font-semibold">
+              No se encontró el archivo del registro.
+            </p>
+          )}
+        </div>
+
+        {showConfirmDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+            <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl border border-slate-100 flex flex-col space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">
+                  Eliminar registro
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmDelete(false)}
+                  className="text-slate-400 hover:text-slate-600 font-bold text-lg cursor-pointer"
+                >
+                  &times;
+                </button>
+              </div>
+              <p className="text-sm text-slate-600 font-medium">
+                ¿Eliminar este registro manual del historial? Esta acción no se
+                puede deshacer.
+              </p>
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmDelete(false)}
+                  className="flex-1 py-2.5 border border-slate-200 text-slate-600 font-bold rounded-xl text-sm hover:bg-slate-50 transition-all cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={eliminarCapacitacion}
+                  disabled={deleting}
+                  className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-sm transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {deleting ? "Eliminando..." : "Eliminar"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -293,7 +489,7 @@ export default function DetalleCapacitacionPage() {
   );
 
   return (
-    <div className="space-y-8 max-w-4xl mx-auto">
+    <div className="space-y-8 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-5">
         <div className="flex items-center gap-3">
@@ -642,20 +838,35 @@ export default function DetalleCapacitacionPage() {
                     </p>
                   </div>
                 </div>
-                <div className="text-right shrink-0">
-                  <span
-                    className={`text-lg font-black ${
-                      a.aprobado ? "text-emerald-600" : "text-red-600"
-                    }`}
-                  >
-                    {a.puntaje}%
-                  </span>
-                  <p className="text-[10px] font-bold text-slate-400">
-                    {new Date(a.created_at).toLocaleTimeString("es-AR", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </p>
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="text-right">
+                    <span
+                      className={`text-lg font-black ${
+                        a.aprobado ? "text-emerald-600" : "text-red-600"
+                      }`}
+                    >
+                      {a.puntaje}%
+                    </span>
+                    <p className="text-[10px] font-bold text-slate-400">
+                      {new Date(a.created_at).toLocaleTimeString("es-AR", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </p>
+                  </div>
+                  {canManage && (
+                    <button
+                      type="button"
+                      title="Eliminar participante"
+                      disabled={deletingAsistenciaId === a.id}
+                      onClick={() =>
+                        eliminarParticipante(a.id, a.nombre_empleado)
+                      }
+                      className="h-9 w-9 inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-400 hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-colors disabled:opacity-50 cursor-pointer"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

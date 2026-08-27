@@ -381,7 +381,7 @@ export default function AdminArchivoPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full max-w-full">
       <div className="flex flex-col gap-4 border-b border-slate-200/60 pb-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 className="text-2xl font-black tracking-tight text-slate-900">

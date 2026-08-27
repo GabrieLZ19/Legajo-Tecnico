@@ -15,9 +15,11 @@ import { CapacitacionPlantilla } from "@/types";
 import { useAuth } from "@/hooks/useAuth";
 import { useCapacitacionPlantillas } from "@/hooks/useCapacitacionPlantillas";
 import { canWriteAppModule } from "@/lib/moduleAccess";
+import { useAlert } from "@/context/AlertContext";
 
 export default function BibliotecaEmpresaPage() {
   const { empresa, user } = useAuth();
+  const { showAlert, showConfirm } = useAlert();
   const { listarPlantillas, eliminarPlantilla } = useCapacitacionPlantillas();
   const [plantillas, setPlantillas] = useState<CapacitacionPlantilla[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,12 +43,18 @@ export default function BibliotecaEmpresaPage() {
   }, [empresa?.id]);
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("¿Eliminar esta plantilla de la biblioteca?")) return;
+    const ok = await showConfirm(
+      "Eliminar plantilla",
+      "¿Eliminar esta plantilla de la biblioteca?",
+      { type: "error", confirmLabel: "Eliminar", cancelLabel: "Cancelar" },
+    );
+    if (!ok) return;
     try {
       await eliminarPlantilla(id);
       setPlantillas((prev) => prev.filter((p) => p.id !== id));
+      showAlert("success", "Eliminada", "La plantilla fue eliminada.");
     } catch {
-      alert("No se pudo eliminar la plantilla");
+      showAlert("error", "Error", "No se pudo eliminar la plantilla.");
     }
   };
 

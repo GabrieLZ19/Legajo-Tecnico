@@ -403,7 +403,7 @@ export default function NuevoInformePage() {
       )}
 
       {/* Formulario centrado a ancho completo */}
-      <form onSubmit={handleSave} className="max-w-4xl mx-auto space-y-6">
+      <form onSubmit={handleSave} className="max-w-7xl mx-auto space-y-6">
         {/* Panel Principal */}
         <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-6 shadow-2xs">
           {/* Empresa + Lugar */}

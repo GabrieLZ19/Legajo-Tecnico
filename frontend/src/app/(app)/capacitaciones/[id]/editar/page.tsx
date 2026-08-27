@@ -320,7 +320,7 @@ export default function EditarCapacitacionPage() {
   }
 
   return (
-    <div className="space-y-8 max-w-3xl mx-auto">
+    <div className="space-y-8 max-w-7xl mx-auto">
       <div className="flex items-center gap-4">
         <Link
           href={`/capacitaciones/${id}`}

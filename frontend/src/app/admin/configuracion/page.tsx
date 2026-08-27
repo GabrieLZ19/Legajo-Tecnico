@@ -118,7 +118,7 @@ export default function AdminConfiguracionPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 w-full max-w-full">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">

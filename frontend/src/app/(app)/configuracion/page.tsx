@@ -100,7 +100,7 @@ export default function ConfiguracionPage() {
 
 
   return (
-    <div className="max-w-xl mx-auto bg-white border border-slate-200 rounded-2xl p-6 shadow-2xs space-y-6">
+    <div className="max-w-7xl mx-auto bg-white border border-slate-200 rounded-2xl p-6 shadow-2xs space-y-6">
       <div>
         <h1 className="text-xl font-black text-slate-900">Configuración</h1>
         <p className="text-sm text-slate-500">

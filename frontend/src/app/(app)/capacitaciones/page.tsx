@@ -13,6 +13,7 @@ import {
   Calendar,
   BookOpen,
   CalendarRange,
+  FileUp,
 } from "lucide-react";
 
 import { useCapacitaciones } from "@/hooks/useCapacitaciones";
@@ -96,6 +97,13 @@ export default function CapacitacionesPage() {
                   Biblioteca
                 </Link>
                 <Link
+                  href="/capacitaciones/registro-manual"
+                  className="inline-flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold px-5 py-3 rounded-xl text-sm cursor-pointer"
+                >
+                  <FileUp className="h-4 w-4 text-indigo-600" />
+                  Registro manual
+                </Link>
+                <Link
                   href="/capacitaciones/nuevo"
                   className="inline-flex items-center justify-center gap-2 bg-brand-primary hover:bg-brand-primary/95 text-white font-bold px-5 py-3 rounded-xl shadow-md shadow-blue-900/10 hover:shadow-lg transition-all text-sm cursor-pointer"
                 >
@@ -164,8 +172,18 @@ export default function CapacitacionesPage() {
               className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs hover:border-slate-300 hover:shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 group cursor-pointer"
             >
               <div className="flex items-start sm:items-center gap-4 min-w-0">
-                <div className="h-11 w-11 rounded-xl bg-purple-50 flex items-center justify-center shrink-0">
-                  <GraduationCap className="h-6 w-6 text-purple-600" />
+                <div
+                  className={`h-11 w-11 rounded-xl flex items-center justify-center shrink-0 ${
+                    cap.origen === "manual"
+                      ? "bg-indigo-50"
+                      : "bg-purple-50"
+                  }`}
+                >
+                  {cap.origen === "manual" ? (
+                    <FileUp className="h-6 w-6 text-indigo-600" />
+                  ) : (
+                    <GraduationCap className="h-6 w-6 text-purple-600" />
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <h3 className="text-sm font-bold text-slate-800 group-hover:text-blue-600 transition-colors truncate">
@@ -175,19 +193,33 @@ export default function CapacitacionesPage() {
                     <span className="text-[11px] text-slate-400 font-semibold flex items-center gap-1 shrink-0">
                       <Calendar className="h-3.5 w-3.5" />
                       {cap.fecha
-                        ? cap.fecha.split("T")[0].split("-").reverse().join("/")
+                        ? new Date(cap.fecha).toLocaleString("es-AR", {
+                            day: "2-digit",
+                            month: "2-digit",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
                         : ""}
                     </span>
-                    <span className="text-[11px] text-slate-400 font-semibold flex items-center gap-1 shrink-0">
-                      <HelpCircle className="h-3.5 w-3.5" />
-                      {cap.con_evaluacion === false
-                        ? "Sin evaluación"
-                        : `${cap.total_preguntas || 0} preguntas`}
-                    </span>
-                    <span className="text-[11px] text-slate-400 font-semibold flex items-center gap-1 shrink-0">
-                      <Users className="h-3.5 w-3.5" />
-                      {cap.total_asistencias || 0} asistencias
-                    </span>
+                    {cap.origen === "manual" ? (
+                      <span className="text-[11px] text-indigo-600 font-bold shrink-0">
+                        Registro en papel
+                      </span>
+                    ) : (
+                      <>
+                        <span className="text-[11px] text-slate-400 font-semibold flex items-center gap-1 shrink-0">
+                          <HelpCircle className="h-3.5 w-3.5" />
+                          {cap.con_evaluacion === false
+                            ? "Sin evaluación"
+                            : `${cap.total_preguntas || 0} preguntas`}
+                        </span>
+                        <span className="text-[11px] text-slate-400 font-semibold flex items-center gap-1 shrink-0">
+                          <Users className="h-3.5 w-3.5" />
+                          {cap.total_asistencias || 0} asistencias
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>

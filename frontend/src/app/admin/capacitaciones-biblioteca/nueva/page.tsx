@@ -41,7 +41,7 @@ export default function NuevaPlantillaGlobalPage() {
         diapositivas,
         preguntas,
       });
-      showAlert("success", "Éxito", "Plantilla agregada a la biblioteca LT.");
+      showAlert("success", "Éxito", "Plantilla publicada en la biblioteca LT.");
       router.push("/admin/capacitaciones-biblioteca");
     } catch (err: any) {
       setError(err.response?.data?.error || "Error al guardar la plantilla.");
@@ -51,7 +51,7 @@ export default function NuevaPlantillaGlobalPage() {
   };
 
   return (
-    <div className="space-y-8 w-full">
+    <div className="space-y-8 w-full max-w-full">
       <div className="flex items-center gap-4">
         <Link
           href="/admin/capacitaciones-biblioteca"

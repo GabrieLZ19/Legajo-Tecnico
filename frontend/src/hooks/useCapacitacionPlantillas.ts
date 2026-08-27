@@ -4,6 +4,7 @@ import {
   AmbitoCapacitacionPlantilla,
   CapacitacionDiapositiva,
   CapacitacionPlantilla,
+  EstadoPublicacionPlantilla,
 } from "@/types";
 
 export interface PreguntaPlantillaForm {
@@ -57,13 +58,22 @@ export function useCapacitacionPlantillas() {
   const [error, setError] = useState<string | null>(null);
 
   const listarPlantillas = useCallback(
-    async (ambito: AmbitoCapacitacionPlantilla, empresaId?: string) => {
+    async (
+      ambito: AmbitoCapacitacionPlantilla,
+      empresaId?: string,
+      opts?: {
+        estado_publicacion?: EstadoPublicacionPlantilla | "todas";
+      },
+    ) => {
       setLoading(true);
       setError(null);
       try {
         const params = new URLSearchParams({ ambito });
         if (ambito === "empresa" && empresaId) {
           params.set("empresa_id", empresaId);
+        }
+        if (ambito === "global" && opts?.estado_publicacion) {
+          params.set("estado_publicacion", opts.estado_publicacion);
         }
         const { data } = await api.get(
           `/capacitacion-plantillas?${params.toString()}`,
@@ -164,6 +174,35 @@ export function useCapacitacionPlantillas() {
     [],
   );
 
+  const cambiarEstadoPublicacion = useCallback(
+    async (
+      id: string,
+      payload: {
+        estado: "aprobada" | "rechazada";
+        rechazo_motivo?: string;
+      },
+    ) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const { data } = await api.patch(
+          `/capacitacion-plantillas/${id}/publicacion`,
+          payload,
+        );
+        return data as CapacitacionPlantilla;
+      } catch (err: any) {
+        setError(
+          err.response?.data?.error ||
+            "Error al actualizar el estado de publicación",
+        );
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
+
   const eliminarPlantilla = useCallback(async (id: string) => {
     setLoading(true);
     setError(null);
@@ -187,6 +226,7 @@ export function useCapacitacionPlantillas() {
     getPlantillaDetalle,
     crearPlantilla,
     actualizarPlantilla,
+    cambiarEstadoPublicacion,
     eliminarPlantilla,
   };
 }

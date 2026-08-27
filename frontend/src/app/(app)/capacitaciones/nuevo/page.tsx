@@ -35,11 +35,12 @@ import {
   hasAgendaErrors,
   validateAgenda,
 } from "@/lib/cap-agenda";
+import { canPublishToBibliotecaLt } from "@/lib/moduleAccess";
 
 type ModoOrigen = "cero" | "empresa" | "lt";
 
 export default function NuevaCapacitacionPage() {
-  const { empresa } = useAuth();
+  const { empresa, user } = useAuth();
   const { showAlert } = useAlert();
   const router = useRouter();
   const { crearCapacitacion } = useCapacitaciones();
@@ -52,7 +53,11 @@ export default function NuevaCapacitacionPage() {
   >([]);
   const [plantillasLt, setPlantillasLt] = useState<CapacitacionPlantilla[]>([]);
   const [selectedPlantillaId, setSelectedPlantillaId] = useState("");
-  const [guardarEnBiblioteca, setGuardarEnBiblioteca] = useState(false);
+  const [guardarEnBibliotecaEmpresa, setGuardarEnBibliotecaEmpresa] =
+    useState(false);
+  const [guardarEnBibliotecaLt, setGuardarEnBibliotecaLt] = useState(false);
+
+  const canSaveToLt = canPublishToBibliotecaLt(user);
 
   const [titulo, setTitulo] = useState("");
   const [diapositivas, setDiapositivas] = useState<CapacitacionDiapositiva[]>([
@@ -166,22 +171,36 @@ export default function NuevaCapacitacionPage() {
           : {}),
       });
 
-      if (guardarEnBiblioteca && modoOrigen === "cero" && empresa?.id) {
+      const plantillaPayload = {
+        titulo: titulo.trim(),
+        temario,
+        diapositivas,
+        preguntas: conEvaluacion ? preguntas : [],
+      };
+      const destinos: string[] = [];
+
+      if (guardarEnBibliotecaEmpresa && empresa?.id) {
         await crearPlantilla({
           ambito: "empresa",
           empresa_id: empresa.id,
-          titulo: titulo.trim(),
-          temario,
-          diapositivas,
-          preguntas: conEvaluacion ? preguntas : [],
+          ...plantillaPayload,
         });
+        destinos.push("biblioteca de la empresa");
+      }
+
+      if (guardarEnBibliotecaLt && canSaveToLt) {
+        await crearPlantilla({
+          ambito: "global",
+          ...plantillaPayload,
+        });
+        destinos.push("biblioteca LT (pendiente de aprobación)");
       }
 
       showAlert(
         "success",
         "Éxito",
-        guardarEnBiblioteca && modoOrigen === "cero"
-          ? "Sesión creada y plantilla guardada en la biblioteca de la empresa."
+        destinos.length > 0
+          ? `Sesión creada y plantilla enviada a ${destinos.join(" y ")}.`
           : "Capacitación creada correctamente.",
       );
       router.push("/capacitaciones");
@@ -200,7 +219,7 @@ export default function NuevaCapacitacionPage() {
         : [];
 
   return (
-    <div className="space-y-8 max-w-3xl mx-auto">
+    <div className="space-y-8 max-w-7xl mx-auto">
       <div className="flex items-center gap-4">
         <Link
           href="/capacitaciones"
@@ -224,7 +243,8 @@ export default function NuevaCapacitacionPage() {
           onClick={() => {
             setModoOrigen("cero");
             resetFormContent();
-            setGuardarEnBiblioteca(false);
+            setGuardarEnBibliotecaEmpresa(false);
+            setGuardarEnBibliotecaLt(false);
           }}
           className={`py-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer ${
             modoOrigen === "cero"
@@ -240,7 +260,8 @@ export default function NuevaCapacitacionPage() {
           onClick={() => {
             setModoOrigen("empresa");
             resetFormContent();
-            setGuardarEnBiblioteca(false);
+            setGuardarEnBibliotecaEmpresa(false);
+            setGuardarEnBibliotecaLt(false);
           }}
           className={`py-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer ${
             modoOrigen === "empresa"
@@ -256,7 +277,8 @@ export default function NuevaCapacitacionPage() {
           onClick={() => {
             setModoOrigen("lt");
             resetFormContent();
-            setGuardarEnBiblioteca(false);
+            setGuardarEnBibliotecaEmpresa(false);
+            setGuardarEnBibliotecaLt(false);
           }}
           className={`py-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer ${
             modoOrigen === "lt"
@@ -404,19 +426,36 @@ export default function NuevaCapacitacionPage() {
           </div>
         </div>
 
-        {modoOrigen === "cero" && (
+        <div className="space-y-2">
           <label className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-2xl p-4 cursor-pointer">
             <input
               type="checkbox"
-              checked={guardarEnBiblioteca}
-              onChange={(e) => setGuardarEnBiblioteca(e.target.checked)}
+              checked={guardarEnBibliotecaEmpresa}
+              onChange={(e) => setGuardarEnBibliotecaEmpresa(e.target.checked)}
               className="h-4 w-4 text-blue-600 rounded-xs"
             />
             <span className="text-sm font-semibold text-slate-700">
-              También guardar en la biblioteca de la empresa
+              Guardar en biblioteca de la empresa
             </span>
           </label>
-        )}
+          {canSaveToLt && (
+            <label className="flex items-start gap-3 bg-indigo-50 border border-indigo-100 rounded-2xl p-4 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={guardarEnBibliotecaLt}
+                onChange={(e) => setGuardarEnBibliotecaLt(e.target.checked)}
+                className="h-4 w-4 text-indigo-600 rounded-xs mt-0.5"
+              />
+              <span className="text-sm font-semibold text-slate-700">
+                Guardar en biblioteca LT
+                <span className="block text-[11px] font-medium text-slate-500 mt-0.5">
+                  Se envía a revisión del CRM. Solo queda visible a los clientes
+                  cuando un admin la aprueba.
+                </span>
+              </span>
+            </label>
+          )}
+        </div>
 
         <button
           type="submit"

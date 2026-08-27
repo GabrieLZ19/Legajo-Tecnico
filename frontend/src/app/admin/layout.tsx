@@ -255,7 +255,7 @@ export default function AdminLayout({
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-w-0 pt-16 md:pt-0 overflow-y-auto">
-        <div className="flex-1 w-full p-6 md:p-8 lg:px-10 xl:px-12 pb-12">
+        <div className="flex-1 w-full max-w-full p-6 md:p-8 lg:px-10 xl:px-12 pb-12">
           {children}
         </div>
       </main>

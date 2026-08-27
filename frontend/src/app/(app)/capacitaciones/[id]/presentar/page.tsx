@@ -51,7 +51,7 @@ async function exitFullscreen() {
 }
 
 const slideHtmlClass =
-  "cap-html-content-invert prose prose-invert max-w-4xl mx-auto text-left " +
+  "cap-html-content-invert prose prose-invert max-w-7xl mx-auto text-left " +
   "[&_ul]:list-disc [&_ul]:pl-6 [&_ul]:my-3 [&_ul]:space-y-2 " +
   "[&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:my-3 [&_ol]:space-y-2 " +
   "[&_p]:mb-3 [&_h1]:text-4xl [&_h1]:font-black [&_h1]:mb-4 " +
