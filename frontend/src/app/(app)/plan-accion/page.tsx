@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
-import { usePlanAccion, exportarPlanAccion } from "@/hooks/usePlanAccion";
+import { usePlanAccion, usePlanAccionResponsables, exportarPlanAccion } from "@/hooks/usePlanAccion";
 
 import { EstadoAccion } from "@/types";
 import { FileSpreadsheet, FileText, Loader } from "lucide-react";
@@ -22,6 +22,7 @@ export default function PlanAccionPage() {
   const [filterEstado, setFilterEstado] = useState<EstadoAccion | "todos">(
     "todos",
   );
+  const [filterResponsable, setFilterResponsable] = useState<string>("todos");
   const [exportingExcel, setExportingExcel] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
   const canEdit = canWriteAppModule(user, "planAccion");
@@ -36,7 +37,10 @@ export default function PlanAccionPage() {
     empresa?.id,
     filterEstado === "todos" ? undefined : filterEstado,
     { limit: PAGE_SIZE, offset: page * PAGE_SIZE },
+    filterResponsable === "todos" ? undefined : filterResponsable,
   );
+
+  const { data: responsables = [] } = usePlanAccionResponsables(empresa?.id);
 
   const handleStatusChange = async (id: string, nuevoEstado: EstadoAccion) => {
     try {
@@ -194,25 +198,53 @@ export default function PlanAccionPage() {
       </div>
 
       {/* Filtros de Tabla */}
-      <div className="flex gap-1.5 bg-white border border-slate-200 p-1.5 rounded-xl max-w-sm shadow-2xs select-none">
-        {(["todos", "pendiente", "atendida", "cumplida"] as const).map(
-          (est) => (
-            <button
-              key={est}
-              onClick={() => {
-                setFilterEstado(est);
-                setPage(0);
-              }}
-              className={`flex-1 text-center py-1.5 px-2.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
-                filterEstado === est
-                  ? "bg-slate-900 text-white shadow-xs"
-                  : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
-              }`}
-            >
-              {est === "todos" ? "Todos" : est}
-            </button>
-          ),
-        )}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex gap-1.5 bg-white border border-slate-200 p-1.5 rounded-xl max-w-sm shadow-2xs select-none">
+          {(["todos", "pendiente", "atendida", "cumplida"] as const).map(
+            (est) => (
+              <button
+                key={est}
+                onClick={() => {
+                  setFilterEstado(est);
+                  setPage(0);
+                }}
+                className={`flex-1 text-center py-1.5 px-2.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                  filterEstado === est
+                    ? "bg-slate-900 text-white shadow-xs"
+                    : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
+                }`}
+              >
+                {est === "todos" ? "Todos" : est}
+              </button>
+            ),
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-2 rounded-xl shadow-2xs">
+          <label
+            htmlFor="filter-responsable"
+            className="text-[10px] font-black text-slate-400 uppercase tracking-wider whitespace-nowrap"
+          >
+            Responsable
+          </label>
+          <select
+            id="filter-responsable"
+            value={filterResponsable}
+            onChange={(e) => {
+              setFilterResponsable(e.target.value);
+              setPage(0);
+            }}
+            className="text-xs font-bold text-slate-700 bg-transparent border-0 outline-hidden cursor-pointer min-w-32"
+          >
+            <option value="todos">Todos</option>
+            <option value="__sin_asignar__">Sin asignar</option>
+            {responsables.map((nombre) => (
+              <option key={nombre} value={nombre}>
+                {nombre}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Listado / Tabla */}
@@ -238,6 +270,9 @@ export default function PlanAccionPage() {
                     </th>
                     <th className="px-6 py-4 text-left text-[9px] font-black text-slate-400 uppercase tracking-wider font-sans">
                       Acción de Mejora
+                    </th>
+                    <th className="px-6 py-4 text-left text-[9px] font-black text-slate-400 uppercase tracking-wider font-sans">
+                      Responsable
                     </th>
                     <th className="px-6 py-4 text-left text-[9px] font-black text-slate-400 uppercase tracking-wider font-sans">
                       Empresa · Sector · Fecha
@@ -272,19 +307,19 @@ export default function PlanAccionPage() {
 
                         {/* Acción de Mejora */}
                         <td className="px-6 py-4 text-xs font-black text-slate-900 font-sans max-w-md">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <Link
-                              href={`/informes/${acc.informe_id}?actionId=${acc.id}`}
-                              className="hover:text-blue-600 hover:underline transition-all cursor-pointer"
-                            >
-                              {acc.descripcion}
-                            </Link>
-                            {acc.responsable && (
-                              <span className="text-[9px] px-1.5 py-0.5 bg-blue-50 text-blue-655 font-bold rounded-md uppercase tracking-wider">
-                                Resp: {acc.responsable}
-                              </span>
-                            )}
-                          </div>
+                          <Link
+                            href={`/informes/${acc.informe_id}?actionId=${acc.id}`}
+                            className="hover:text-blue-600 hover:underline transition-all cursor-pointer"
+                          >
+                            {acc.descripcion}
+                          </Link>
+                        </td>
+
+                        {/* Responsable */}
+                        <td className="px-6 py-4 text-xs font-bold text-slate-600 font-sans whitespace-nowrap">
+                          {acc.responsable?.trim() || (
+                            <span className="text-slate-300">—</span>
+                          )}
                         </td>
 
                         {/* Empresa · Sector · Fecha */}
@@ -360,19 +395,20 @@ export default function PlanAccionPage() {
                     <span className="text-[10px] font-bold text-slate-400">
                       ÍTEM {page * PAGE_SIZE + index + 1}
                     </span>
-                    <h3 className="text-sm font-black text-slate-900 font-sans leading-snug flex items-center gap-2 flex-wrap">
+                    <h3 className="text-sm font-black text-slate-900 font-sans leading-snug">
                       <Link
                         href={`/informes/${acc.informe_id}?actionId=${acc.id}`}
                         className="hover:text-blue-600 hover:underline transition-all cursor-pointer"
                       >
                         {acc.descripcion}
                       </Link>
-                      {acc.responsable && (
-                        <span className="text-[9px] px-1.5 py-0.5 bg-blue-50 text-blue-655 font-bold rounded-md uppercase tracking-wider">
-                          Resp: {acc.responsable}
-                        </span>
-                      )}
                     </h3>
+                    <p className="text-xs font-bold text-slate-500 font-sans">
+                      Responsable:{" "}
+                      <span className="text-slate-700">
+                        {acc.responsable?.trim() || "Sin asignar"}
+                      </span>
+                    </p>
                     <p className="text-xs font-bold text-slate-450 font-sans pt-1">
                       {empresa?.razon_social} · {sector} · {fechaVisita}
                     </p>

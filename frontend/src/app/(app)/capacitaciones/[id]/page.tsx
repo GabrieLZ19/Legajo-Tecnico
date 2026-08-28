@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { Capacitacion } from "@/types";
 import Link from "next/link";
@@ -68,6 +68,8 @@ export default function DetalleCapacitacionPage() {
     eliminarAsistencia: deleteAsistencia,
     exportarCapacitacion,
     actualizarRegistroCapacitacion,
+    adjuntarRegistroManualCapacitacion,
+    descargarPlantillaRegistroCapacitacion,
   } = useCapacitaciones();
 
   const [cap, setCap] = useState<Capacitacion | null>(null);
@@ -77,6 +79,9 @@ export default function DetalleCapacitacionPage() {
   );
   const [loadingQr, setLoadingQr] = useState(false);
   const [updatingEstado, setUpdatingEstado] = useState(false);
+  const [uploadingRegistro, setUploadingRegistro] = useState(false);
+  const [downloadingPlantilla, setDownloadingPlantilla] = useState(false);
+  const registroFileInputRef = useRef<HTMLInputElement>(null);
 
   // Modal / Confirmación eliminar
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
@@ -214,6 +219,74 @@ export default function DetalleCapacitacionPage() {
     link.href = qrData.qr;
     link.download = `qr-capacitacion-${id}.png`;
     link.click();
+  };
+
+  const handleDescargarPlantillaRegistro = async () => {
+    if (!cap) return;
+    setDownloadingPlantilla(true);
+    try {
+      const blob = await descargarPlantillaRegistroCapacitacion(cap.id);
+      const url = window.URL.createObjectURL(
+        new Blob([blob], { type: "application/pdf" }),
+      );
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `plantilla_registro_${cap.titulo.replace(/[^\w.\-]+/g, "_").slice(0, 60)}.pdf`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+      showAlert(
+        "success",
+        "Plantilla lista",
+        "Imprimila, completá las firmas en papel y después subí el escaneo.",
+      );
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      showAlert(
+        "error",
+        "Error al descargar",
+        axiosErr.response?.data?.error ||
+          "No se pudo descargar la plantilla del registro.",
+      );
+    } finally {
+      setDownloadingPlantilla(false);
+    }
+  };
+
+  const handleRegistroFileSelected = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !cap) return;
+
+    setUploadingRegistro(true);
+    try {
+      const updated = await adjuntarRegistroManualCapacitacion(cap.id, file);
+      setCap((prev) =>
+        prev
+          ? {
+              ...prev,
+              registro_manual_url: updated.registro_manual_url,
+              registro_manual_nombre: updated.registro_manual_nombre,
+            }
+          : prev,
+      );
+      showAlert(
+        "success",
+        "Registro cargado",
+        "El registro en papel quedó adjunto a esta capacitación.",
+      );
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      showAlert(
+        "error",
+        "Error al cargar",
+        axiosErr.response?.data?.error ||
+          "No se pudo adjuntar el registro manual.",
+      );
+    } finally {
+      setUploadingRegistro(false);
+    }
   };
 
   const handleExportExcel = async () => {
@@ -670,6 +743,70 @@ export default function DetalleCapacitacionPage() {
           </div>
         )}
       </div>
+
+      {/* Registro en papel (respaldo / charla presencial) */}
+      {canManage && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                <FileUp className="h-4 w-4 text-indigo-600" />
+                Registro en papel
+              </h2>
+              <p className="text-xs text-slate-500 font-semibold mt-1">
+                Descargá la plantilla oficial con los datos de esta capacitación,
+                imprimila para firmas presenciales y subí el escaneo como respaldo.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void handleDescargarPlantillaRegistro()}
+                disabled={downloadingPlantilla}
+                className="inline-flex items-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs disabled:opacity-50 cursor-pointer"
+              >
+                <Download className="h-3.5 w-3.5 text-blue-600" />
+                {downloadingPlantilla ? "Generando..." : "Descargar plantilla"}
+              </button>
+              {cap.registro_manual_url ? (
+                <a
+                  href={cap.registro_manual_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Descargar registro manual
+                </a>
+              ) : (
+                <>
+                  <input
+                    ref={registroFileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf"
+                    className="hidden"
+                    onChange={(e) => void handleRegistroFileSelected(e)}
+                  />
+                  <button
+                    type="button"
+                    disabled={uploadingRegistro}
+                    onClick={() => registroFileInputRef.current?.click()}
+                    className="inline-flex items-center gap-2 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 font-bold px-4 py-2.5 rounded-xl text-xs disabled:opacity-50 cursor-pointer"
+                  >
+                    <FileUp className="h-3.5 w-3.5" />
+                    {uploadingRegistro ? "Subiendo..." : "Insertar registro"}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+          {cap.registro_manual_url && (
+            <p className="text-xs text-slate-500 font-semibold">
+              Archivo cargado: {cap.registro_manual_nombre || "registro manual"}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Preguntas */}
       {cap.capacitacion_preguntas && cap.capacitacion_preguntas.length > 0 && (

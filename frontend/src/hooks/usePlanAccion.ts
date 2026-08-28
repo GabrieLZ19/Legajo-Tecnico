@@ -24,18 +24,20 @@ export const usePlanAccion = (
   empresaId?: string,
   estado?: EstadoAccion,
   opts?: UsePlanAccionOpts,
+  responsable?: string,
 ) => {
   const queryClient = useQueryClient();
   const limit = opts?.limit ?? 10;
   const offset = opts?.offset ?? 0;
 
   const query = useQuery<PlanAccionListPage>({
-    queryKey: ['plan-accion', empresaId, estado, limit, offset],
+    queryKey: ['plan-accion', empresaId, estado, responsable, limit, offset],
     queryFn: async () => {
       const { data } = await api.get('/plan-accion', {
         params: {
           empresaId,
           ...(estado ? { estado } : {}),
+          ...(responsable ? { responsable } : {}),
           limit,
           offset,
         },
@@ -81,6 +83,19 @@ export const usePlanAccion = (
     actualizarEstado: actualizarMutation.mutateAsync,
     isUpdating: actualizarMutation.isPending,
   };
+};
+
+export const usePlanAccionResponsables = (empresaId?: string) => {
+  return useQuery<string[]>({
+    queryKey: ['plan-accion-responsables', empresaId],
+    queryFn: async () => {
+      const { data } = await api.get('/plan-accion/responsables', {
+        params: { empresaId },
+      });
+      return data as string[];
+    },
+    enabled: !!empresaId,
+  });
 };
 
 export const actualizarEstadoPlanAccion = async (id: string, estado: EstadoAccion) => {

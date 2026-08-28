@@ -188,6 +188,33 @@ export function useCapacitaciones() {
     }
   };
 
+  const adjuntarRegistroManualCapacitacion = async (
+    capacitacionId: string,
+    archivo: File,
+  ) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append("archivo", archivo);
+      const { data } = await api.post(
+        `/capacitaciones/${capacitacionId}/registro-manual`,
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        },
+      );
+      return data;
+    } catch (err: any) {
+      setError(
+        err.response?.data?.error || "Error al adjuntar el registro manual",
+      );
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const crearRegistroManual = async (formData: FormData) => {
     setLoading(true);
     setError(null);
@@ -208,6 +235,14 @@ export function useCapacitaciones() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const descargarPlantillaRegistroCapacitacion = async (capacitacionId: string) => {
+    const response = await api.get(
+      `/capacitaciones/${capacitacionId}/registro-manual/plantilla`,
+      { responseType: "blob" },
+    );
+    return response.data;
   };
 
   const descargarPlantillaRegistroManual = async (params: {
@@ -259,6 +294,8 @@ export function useCapacitaciones() {
     exportarCapacitacion,
     crearCapacitacion,
     crearRegistroManual,
+    adjuntarRegistroManualCapacitacion,
+    descargarPlantillaRegistroCapacitacion,
     descargarPlantillaRegistroManual,
     actualizarCapacitacion,
     evaluarCapacitacion,

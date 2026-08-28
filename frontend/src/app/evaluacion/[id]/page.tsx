@@ -223,13 +223,16 @@ export default function EvaluacionPublicaPage() {
       localStorage.removeItem(`evaluacion_state_${id}`);
     } catch (err: unknown) {
       const axiosErr = err as {
-        response?: { data?: { error?: string } };
+        response?: { status?: number; data?: { error?: string } };
         message?: string;
       };
+      const status = axiosErr.response?.status;
       setError(
-        axiosErr.response?.data?.error ||
-          axiosErr.message ||
-          "Error al enviar la evaluación.",
+        status === 429
+          ? "Hay muchas personas registrándose al mismo tiempo. Esperá 30 segundos y tocá «Confirmar Firma» de nuevo sin recargar la página."
+          : axiosErr.response?.data?.error ||
+              axiosErr.message ||
+              "Error al enviar la evaluación.",
       );
     } finally {
       setEnviando(false);

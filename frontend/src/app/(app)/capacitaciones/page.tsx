@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Capacitacion } from "@/types";
 import Link from "next/link";
@@ -14,17 +14,29 @@ import {
   BookOpen,
   CalendarRange,
   FileUp,
+  Download,
 } from "lucide-react";
 
 import { useCapacitaciones } from "@/hooks/useCapacitaciones";
 import { canWriteAppModule } from "@/lib/moduleAccess";
+import { useAlert } from "@/context/AlertContext";
 
 export default function CapacitacionesPage() {
   const { user, empresa } = useAuth();
-  const { getCapacitaciones } = useCapacitaciones();
+  const { showAlert } = useAlert();
+  const { getCapacitaciones, adjuntarRegistroManualCapacitacion, descargarPlantillaRegistroCapacitacion } =
+    useCapacitaciones();
   const [capacitaciones, setCapacitaciones] = useState<Capacitacion[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtroEstado, setFiltroEstado] = useState<string>("todas");
+  const [uploadingRegistroId, setUploadingRegistroId] = useState<string | null>(
+    null,
+  );
+  const [downloadingPlantillaId, setDownloadingPlantillaId] = useState<
+    string | null
+  >(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadTargetIdRef = useRef<string | null>(null);
 
   const canCreate = canWriteAppModule(user, "capacitaciones");
   const canViewPlan = !!user;
@@ -64,6 +76,83 @@ export default function CapacitacionesPage() {
     filtroEstado === "todas"
       ? capacitaciones
       : capacitaciones.filter((c) => c.estado === filtroEstado);
+
+  const handleInsertarRegistro = (capId: string) => {
+    uploadTargetIdRef.current = capId;
+    fileInputRef.current?.click();
+  };
+
+  const handleDescargarPlantilla = async (cap: Capacitacion) => {
+    setDownloadingPlantillaId(cap.id);
+    try {
+      const blob = await descargarPlantillaRegistroCapacitacion(cap.id);
+      const url = window.URL.createObjectURL(
+        new Blob([blob], { type: "application/pdf" }),
+      );
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `plantilla_registro_${cap.titulo.replace(/[^\w.\-]+/g, "_").slice(0, 60)}.pdf`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+      showAlert(
+        "success",
+        "Plantilla lista",
+        "Imprimila, completá las firmas en papel y después subí el escaneo con «Insertar registro».",
+      );
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      showAlert(
+        "error",
+        "Error al descargar",
+        axiosErr.response?.data?.error ||
+          "No se pudo descargar la plantilla del registro.",
+      );
+    } finally {
+      setDownloadingPlantillaId(null);
+    }
+  };
+
+  const handleRegistroFileSelected = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    const capId = uploadTargetIdRef.current;
+    e.target.value = "";
+    uploadTargetIdRef.current = null;
+
+    if (!file || !capId) return;
+
+    setUploadingRegistroId(capId);
+    try {
+      const updated = await adjuntarRegistroManualCapacitacion(capId, file);
+      setCapacitaciones((prev) =>
+        prev.map((c) =>
+          c.id === capId
+            ? {
+                ...c,
+                registro_manual_url: updated.registro_manual_url,
+                registro_manual_nombre: updated.registro_manual_nombre,
+              }
+            : c,
+        ),
+      );
+      showAlert(
+        "success",
+        "Registro cargado",
+        "El registro en papel quedó adjunto a la capacitación.",
+      );
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      showAlert(
+        "error",
+        "Error al cargar",
+        axiosErr.response?.data?.error ||
+          "No se pudo adjuntar el registro manual.",
+      );
+    } finally {
+      setUploadingRegistroId(null);
+    }
+  };
 
   return (
     <div className="space-y-8">
@@ -165,13 +254,22 @@ export default function CapacitacionesPage() {
         </div>
       ) : (
         <div className="space-y-3">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf"
+            className="hidden"
+            onChange={(e) => void handleRegistroFileSelected(e)}
+          />
           {filtered.map((cap) => (
-            <Link
+            <div
               key={cap.id}
-              href={`/capacitaciones/${cap.id}`}
-              className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs hover:border-slate-300 hover:shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 group cursor-pointer"
+              className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs hover:border-slate-300 hover:shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 group"
             >
-              <div className="flex items-start sm:items-center gap-4 min-w-0">
+              <Link
+                href={`/capacitaciones/${cap.id}`}
+                className="flex items-start sm:items-center gap-4 min-w-0 flex-1 cursor-pointer"
+              >
                 <div
                   className={`h-11 w-11 rounded-xl flex items-center justify-center shrink-0 ${
                     cap.origen === "manual"
@@ -222,8 +320,57 @@ export default function CapacitacionesPage() {
                     )}
                   </div>
                 </div>
-              </div>
+              </Link>
               <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 border-t border-slate-100 sm:border-t-0 pt-3 sm:pt-0">
+                {canCreate && cap.origen !== "manual" && (
+                  cap.registro_manual_url ? (
+                    <a
+                      href={cap.registro_manual_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 text-[11px] font-bold whitespace-nowrap"
+                    >
+                      <Download className="h-3.5 w-3.5 text-indigo-600" />
+                      Descargar registro manual
+                    </a>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={downloadingPlantillaId === cap.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleDescargarPlantilla(cap);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 text-[11px] font-bold whitespace-nowrap disabled:opacity-50 cursor-pointer"
+                      >
+                        <Download className="h-3.5 w-3.5 text-blue-600" />
+                        {downloadingPlantillaId === cap.id
+                          ? "Generando..."
+                          : "Descargar plantilla"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={uploadingRegistroId === cap.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleInsertarRegistro(cap.id);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-[11px] font-bold whitespace-nowrap disabled:opacity-50 cursor-pointer"
+                      >
+                        <FileUp className="h-3.5 w-3.5" />
+                        {uploadingRegistroId === cap.id
+                          ? "Subiendo..."
+                          : "Insertar registro"}
+                      </button>
+                    </div>
+                  )
+                )}
+                <Link
+                  href={`/capacitaciones/${cap.id}`}
+                  className="flex items-center gap-3"
+                >
                 <span
                   className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider border ${estadoColor(
                     cap.estado,
@@ -232,8 +379,9 @@ export default function CapacitacionesPage() {
                   {cap.estado}
                 </span>
                 <ChevronRight className="h-5 w-5 text-slate-300 group-hover:text-slate-500 transition-colors hidden sm:block" />
+                </Link>
               </div>
-            </Link>
+            </div>
           ))}
         </div>
       )}
