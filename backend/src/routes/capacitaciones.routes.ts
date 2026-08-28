@@ -4,7 +4,10 @@ import { capacitacionesController } from "../controllers/capacitaciones.controll
 import { planAnualController } from "../controllers/planAnual.controller";
 import { uploadExcel } from "../config/multerExcel";
 import { uploadRegistroManual } from "../config/multer";
-import { publicActionLimiter } from "../middlewares/rateLimit";
+import {
+  capacitacionPublicReadLimiter,
+  capacitacionPublicSubmitLimiter,
+} from "../middlewares/rateLimit";
 
 const router = Router();
 
@@ -67,6 +70,11 @@ router.post(
 );
 
 router.get("/:id", requireAuth, capacitacionesController.detalle);
+router.get(
+  "/:id/registro-manual/plantilla",
+  requireAuth,
+  capacitacionesController.plantillaRegistroCapacitacion,
+);
 router.patch(
   "/:id",
   requireAuth,
@@ -91,6 +99,24 @@ router.patch(
   puedeEscribirCapacitacion,
   capacitacionesController.actualizarRegistro,
 );
+router.post(
+  "/:id/registro-manual",
+  requireAuth,
+  puedeEscribirCapacitacion,
+  (req, res, next) => {
+    uploadRegistroManual.single("archivo")(req, res, (err) => {
+      if (err) {
+        return res.status(400).json({
+          error:
+            err.message ||
+            "Debés adjuntar el registro escaneado (JPG, PNG, WEBP o PDF)",
+        });
+      }
+      next();
+    });
+  },
+  capacitacionesController.adjuntarRegistroManual,
+);
 router.delete(
   "/:id/asistencias/:asistenciaId",
   requireAuth,
@@ -105,7 +131,15 @@ router.delete(
 );
 
 // Ruta PÚBLICA: evaluación del empleado (sin autenticación - accedida desde el QR)
-router.get("/:id/publica", publicActionLimiter, capacitacionesController.detallePublico);
-router.post("/:id/evaluar", publicActionLimiter, capacitacionesController.evaluar);
+router.get(
+  "/:id/publica",
+  capacitacionPublicReadLimiter,
+  capacitacionesController.detallePublico,
+);
+router.post(
+  "/:id/evaluar",
+  capacitacionPublicSubmitLimiter,
+  capacitacionesController.evaluar,
+);
 
 export default router;

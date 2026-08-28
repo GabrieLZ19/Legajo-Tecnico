@@ -70,13 +70,20 @@ export const capacitacionesService = {
 
     if (error) throw error;
 
-    return (data || []).map((cap: any) => ({
+    const mapped = (data || []).map((cap: any) => ({
       ...cap,
       total_preguntas: cap.capacitacion_preguntas?.length || 0,
       total_asistencias: cap.capacitacion_asistencias?.length || 0,
       capacitacion_preguntas: undefined,
       capacitacion_asistencias: undefined,
     }));
+
+    return Promise.all(
+      mapped.map(async (cap) => ({
+        ...cap,
+        registro_manual_url: await storageService.signUrl(cap.registro_manual_url),
+      })),
+    );
   },
 
   /**
@@ -296,6 +303,50 @@ export const capacitacionesService = {
         registro_manual_url: registroUrl,
         registro_manual_nombre: params.file.originalname || safeName,
       })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return firmarUrlsCapacitacion(cap);
+  },
+
+  /**
+   * Adjuntar registro en papel a una capacitación digital existente.
+   */
+  async adjuntarRegistroManual(id: string, file: Express.Multer.File) {
+    const { data: existing, error: existingError } = await supabaseAdmin
+      .from("capacitaciones")
+      .select("id, empresa_id")
+      .eq("id", id)
+      .single();
+
+    if (existingError || !existing) {
+      throw new HttpError(404, "Capacitación no encontrada");
+    }
+
+    const ext = safeExtensionFromUpload(file);
+    const safeName = (file.originalname || `registro.${ext}`)
+      .replace(/[^\w.\-]+/g, "_")
+      .slice(0, 120);
+    const storagePath = `${existing.empresa_id}/${id}/${Date.now()}_${randomUUID().slice(0, 8)}_${safeName}`;
+
+    await storageService.subirArchivo(
+      "capacitacion_registros",
+      storagePath,
+      file,
+    );
+    const registroUrl = storageService.obtenerUrlPublica(
+      "capacitacion_registros",
+      storagePath,
+    );
+
+    const { data: cap, error } = await supabaseAdmin
+      .from("capacitaciones")
+      .update({
+        registro_manual_url: registroUrl,
+        registro_manual_nombre: file.originalname || safeName,
+      })
+      .eq("id", id)
       .select()
       .single();
 
@@ -842,6 +893,48 @@ export const capacitacionesService = {
     });
 
     return { type: "pdf" as const, doc };
+  },
+
+  /**
+   * Plantilla del registro usando los datos de una capacitación existente.
+   */
+  async generarPlantillaRegistroPorCapacitacion(id: string) {
+    const { data: cap, error } = await supabaseAdmin
+      .from("capacitaciones")
+      .select(
+        `
+        id,
+        titulo,
+        fecha,
+        instructor,
+        fechas_horario,
+        cantidad_horas,
+        empresas(razon_social, logo_url)
+      `,
+      )
+      .eq("id", id)
+      .single();
+
+    if (error || !cap) {
+      return { error: "Capacitación no encontrada", code: 404 as const };
+    }
+
+    const doc = await buildRegistroPdf({
+      titulo: (cap.titulo || "").trim() || "________________",
+      fecha: cap.fecha || null,
+      instructor: (cap.instructor || "").trim() || null,
+      fechas_horario: (cap.fechas_horario || "").trim() || null,
+      cantidad_horas: (cap.cantidad_horas || "").trim() || null,
+      firma_capacitador_url: null,
+      aclaracion_capacitador: null,
+      firma_empresa_url: null,
+      aclaracion_empresa: null,
+      empresa: (cap as { empresas?: { razon_social?: string; logo_url?: string } })
+        .empresas,
+      asistencias: [],
+    });
+
+    return { type: "pdf" as const, doc, titulo: cap.titulo };
   },
 
   /**

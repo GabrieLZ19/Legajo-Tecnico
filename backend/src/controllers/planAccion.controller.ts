@@ -5,9 +5,32 @@ import { supabaseAdmin } from "../config/supabase";
 import { assertAccionAccess, assertEmpresaAccess } from "../middlewares/empresaAccess";
 
 export const planAccionController = {
+  async listarResponsables(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { empresaId } = req.query;
+      if (!empresaId) {
+        return res.status(400).json({ error: "empresaId es requerido" });
+      }
+
+      await assertEmpresaAccess(req.user!, empresaId as string);
+      const responsables = await planAccionService.listarResponsables(
+        empresaId as string,
+      );
+      res.json(responsables);
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async listar(req: Request, res: Response, next: NextFunction) {
     try {
-      const { empresaId, estado, limit: limitRaw, offset: offsetRaw } = req.query;
+      const {
+        empresaId,
+        estado,
+        responsable,
+        limit: limitRaw,
+        offset: offsetRaw,
+      } = req.query;
       if (!empresaId) {
         return res.status(400).json({ error: "empresaId es requerido" });
       }
@@ -19,6 +42,7 @@ export const planAccionController = {
         empresaId as string,
         estado as EstadoAccion | undefined,
         { limit, offset },
+        responsable ? (responsable as string) : undefined,
       );
       res.json(result);
     } catch (error) {

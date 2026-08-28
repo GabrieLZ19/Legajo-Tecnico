@@ -36,10 +36,30 @@ export const planAccionService = {
     };
   },
 
+  async listarResponsables(empresaId: string): Promise<string[]> {
+    const { data, error } = await supabaseAdmin
+      .from('acciones_mejora')
+      .select('responsable')
+      .eq('empresa_id', empresaId);
+
+    if (error) throw error;
+
+    const unicos = new Set<string>();
+    for (const row of data || []) {
+      const nombre = row.responsable?.trim();
+      if (nombre) unicos.add(nombre);
+    }
+
+    return Array.from(unicos).sort((a, b) =>
+      a.localeCompare(b, 'es', { sensitivity: 'base' }),
+    );
+  },
+
   async listarAcciones(
     empresaId: string,
     estado?: EstadoAccion,
     opts?: PlanAccionListOpts,
+    responsable?: string,
   ) {
     const limit = Math.min(Math.max(opts?.limit ?? 50, 1), 200);
     const offset = Math.max(opts?.offset ?? 0, 0);
@@ -54,6 +74,14 @@ export const planAccionService = {
 
     if (estado) {
       query = query.eq('estado', estado);
+    }
+
+    if (responsable) {
+      if (responsable === '__sin_asignar__') {
+        query = query.or('responsable.is.null,responsable.eq.');
+      } else {
+        query = query.eq('responsable', responsable);
+      }
     }
 
     const { data, error, count } = await query
@@ -74,7 +102,11 @@ export const planAccionService = {
   },
 
   /** Listado completo para export (sin paginar) */
-  async listarTodas(empresaId: string, estado?: EstadoAccion) {
+  async listarTodas(
+    empresaId: string,
+    estado?: EstadoAccion,
+    responsable?: string,
+  ) {
     let query = supabaseAdmin
       .from('acciones_mejora')
       .select('*, informes_visita(numero_informe, fecha_hora_visita, lugar_visita)')
@@ -82,6 +114,14 @@ export const planAccionService = {
 
     if (estado) {
       query = query.eq('estado', estado);
+    }
+
+    if (responsable) {
+      if (responsable === '__sin_asignar__') {
+        query = query.or('responsable.is.null,responsable.eq.');
+      } else {
+        query = query.eq('responsable', responsable);
+      }
     }
 
     const { data, error } = await query.order('created_at', { ascending: false });

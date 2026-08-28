@@ -6,8 +6,9 @@ const router = Router();
 
 router.use(requireAuth);
 
+router.get('/responsables', planAccionController.listarResponsables);
+router.get('/export', planAccionController.exportar);
 router.get('/', planAccionController.listar);
 router.patch('/:id', planAccionController.actualizar);
-router.get('/export', planAccionController.exportar);
 
 export default router;

@@ -74,6 +74,28 @@ export const capacitacionesController = {
     }
   },
 
+  async adjuntarRegistroManual(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const file = req.file;
+
+      if (!file) {
+        return res.status(400).json({
+          error: "Debés adjuntar el registro escaneado (imagen o PDF)",
+        });
+      }
+
+      await assertCapacitacionAccess(req.user!, id as string);
+      const cap = await capacitacionesService.adjuntarRegistroManual(
+        id as string,
+        file,
+      );
+      res.json(cap);
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async plantillaRegistroManual(
     req: Request,
     res: Response,
@@ -109,6 +131,40 @@ export const capacitacionesController = {
       res.setHeader(
         "Content-Disposition",
         'attachment; filename="plantilla_registro_capacitacion.pdf"',
+      );
+      result.doc!.pipe(res);
+      result.doc!.end();
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async plantillaRegistroCapacitacion(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) {
+    try {
+      const { id } = req.params;
+      await assertCapacitacionAccess(req.user!, id as string);
+
+      const result =
+        await capacitacionesService.generarPlantillaRegistroPorCapacitacion(
+          id as string,
+        );
+
+      if (result.error) {
+        return res.status(result.code!).json({ error: result.error });
+      }
+
+      const safeName = (result.titulo || "capacitacion")
+        .replace(/[^\w.\-]+/g, "_")
+        .slice(0, 60);
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="plantilla_registro_${safeName}.pdf"`,
       );
       result.doc!.pipe(res);
       result.doc!.end();
