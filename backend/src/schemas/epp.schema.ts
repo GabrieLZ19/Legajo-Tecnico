@@ -68,9 +68,12 @@ export const actualizarTipoSchema = z.object({
 export const registrarEntregaSchema = z.object({
   body: z.object({
     empresa_id: uuid,
-    empleado_id: uuid.optional().nullable(),
-    nombre_empleado: z.string().min(3),
-    dni_empleado: z.string().regex(/^\d{7,8}$/),
+    empleado_id: uuid,
+    nombre_empleado: z.string().min(3).optional(),
+    dni_empleado: z
+      .string()
+      .regex(/^\d{7,8}$/)
+      .optional(),
     fecha_entrega: z.string().optional(),
     firma: z.string().min(1, "La firma del trabajador es requerida"),
     firma_empleador: z.string().optional().nullable(),
@@ -84,7 +87,7 @@ export const registrarEntregaSchema = z.object({
           certificacion: z.string().optional().nullable(),
         }),
       )
-      .min(1, "Seleccioná al menos un EPP"),
+      .length(1, "Registrá un solo elemento por entrega"),
   }),
 });
 

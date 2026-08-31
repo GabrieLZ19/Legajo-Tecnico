@@ -151,6 +151,11 @@ router.get(
   capacitacionPublicReadLimiter,
   capacitacionesController.detallePublico,
 );
+router.get(
+  "/:id/intento",
+  capacitacionPublicReadLimiter,
+  capacitacionesController.consultarIntento,
+);
 router.post(
   "/:id/evaluar",
   capacitacionPublicSubmitLimiter,

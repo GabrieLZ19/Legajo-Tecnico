@@ -707,14 +707,14 @@ export const capacitacionesService = {
     const { nombre_empleado, dni_empleado, sector, respuestas, firma } = body;
 
     if (!nombre_empleado?.trim() || !dni_empleado?.trim()) {
-      throw new Error("Nombre y DNI son obligatorios");
+      throw new HttpError(400, "Nombre y DNI son obligatorios");
     }
     const dniLimpio = String(dni_empleado).replace(/\D/g, "");
     if (!/^\d{7,8}$/.test(dniLimpio)) {
-      throw new Error("DNI inválido. Debe tener 7 u 8 dígitos.");
+      throw new HttpError(400, "DNI inválido. Debe tener 7 u 8 dígitos.");
     }
     if (!firma || typeof firma !== "string" || !firma.startsWith("data:image/")) {
-      throw new Error("La firma es obligatoria");
+      throw new HttpError(400, "La firma es obligatoria");
     }
 
     const { data: cap, error: capError } = await supabaseAdmin
@@ -728,16 +728,80 @@ export const capacitacionesService = {
       .eq("id", id)
       .single();
 
-    if (capError || !cap) throw new Error("Capacitación no encontrada");
-    if (cap.estado !== "activa")
-      throw new Error("La capacitación no está activa");
+    if (capError || !cap) throw new HttpError(404, "Capacitación no encontrada");
+    if (cap.estado !== "activa") {
+      throw new HttpError(400, "La capacitación no está activa");
+    }
 
     const conEvaluacion = (cap as any).con_evaluacion !== false;
     const preguntas = conEvaluacion
       ? (cap as any).capacitacion_preguntas || []
       : [];
-    let correctas = 0;
     const totalPreguntas = preguntas.length;
+
+    if (conEvaluacion && totalPreguntas > 0) {
+      if (!respuestas || !Array.isArray(respuestas)) {
+        throw new HttpError(
+          400,
+          "Debés responder todas las preguntas antes de firmar.",
+        );
+      }
+      for (const pregunta of preguntas) {
+        const respuesta = respuestas.find(
+          (r: any) => r.pregunta_id === pregunta.id,
+        );
+        const seleccion = respuesta?.seleccion;
+        if (
+          seleccion === undefined ||
+          seleccion === null ||
+          (Array.isArray(seleccion) && seleccion.length === 0)
+        ) {
+          throw new HttpError(
+            400,
+            "Debés responder todas las preguntas antes de firmar.",
+          );
+        }
+      }
+    }
+
+    const { data: intentoPrevio } = await supabaseAdmin
+      .from("capacitacion_asistencias")
+      .select("id, puntaje, firma_url")
+      .eq("capacitacion_id", id)
+      .eq("documento", dniLimpio)
+      .maybeSingle();
+
+    if (intentoPrevio && intentoPrevio.puntaje >= 60) {
+      throw new HttpError(
+        409,
+        "Este DNI ya aprobó la evaluación. No podés volver a rendirla.",
+      );
+    }
+
+    if (intentoPrevio) {
+      if (intentoPrevio.firma_url) {
+        const parsed = storageService.parseStorageUrl(intentoPrevio.firma_url);
+        if (parsed) {
+          try {
+            await storageService.eliminarArchivo(parsed.bucket, parsed.path);
+          } catch (err) {
+            console.error("No se pudo borrar firma anterior:", err);
+          }
+        }
+      }
+      const { error: deleteError } = await supabaseAdmin
+        .from("capacitacion_asistencias")
+        .delete()
+        .eq("id", intentoPrevio.id);
+      if (deleteError) {
+        throw new HttpError(
+          500,
+          "No se pudo preparar un nuevo intento de evaluación.",
+        );
+      }
+    }
+
+    let correctas = 0;
 
     // Arreglo para la revisión del alumno tipo Google Forms
     const revision: Array<{
@@ -834,7 +898,8 @@ export const capacitacionesService = {
       .single();
 
     if (asistError) {
-      throw new Error(
+      throw new HttpError(
+        500,
         asistError.message || "No se pudo registrar la asistencia",
       );
     }
@@ -845,6 +910,46 @@ export const capacitacionesService = {
       aprobado,
       asistencia,
       revision, // Retornamos la revisión detallada
+    };
+  },
+
+  /**
+   * Consultar si un DNI ya registró intento en una capacitación activa (QR público).
+   */
+  async consultarIntentoPublico(id: string, dniRaw: string) {
+    const dniLimpio = String(dniRaw || "").replace(/\D/g, "");
+    if (!/^\d{7,8}$/.test(dniLimpio)) {
+      throw new HttpError(400, "DNI inválido. Debe tener 7 u 8 dígitos.");
+    }
+
+    const { data: cap, error: capError } = await supabaseAdmin
+      .from("capacitaciones")
+      .select("id, estado, con_evaluacion")
+      .eq("id", id)
+      .single();
+
+    if (capError || !cap) throw new HttpError(404, "Capacitación no encontrada");
+    if (cap.estado !== "activa") {
+      throw new HttpError(400, "La capacitación no está activa");
+    }
+
+    const { data: intento } = await supabaseAdmin
+      .from("capacitacion_asistencias")
+      .select("id, puntaje, nombre_empleado, firmado_at")
+      .eq("capacitacion_id", id)
+      .eq("documento", dniLimpio)
+      .maybeSingle();
+
+    if (!intento) {
+      return { registrado: false as const };
+    }
+
+    return {
+      registrado: true as const,
+      puntaje: intento.puntaje,
+      aprobado: intento.puntaje >= 60,
+      nombre_empleado: intento.nombre_empleado,
+      firmado_at: intento.firmado_at,
     };
   },
 

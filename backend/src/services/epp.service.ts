@@ -5,7 +5,97 @@ import { env } from "../config/env";
 import { storageService } from "./storage.service";
 import { eppPdfService } from "./eppPdf.service";
 import { HttpError } from "../utils/httpError";
+import {
+  normalizarEmpresaParaPlanilla,
+} from "../utils/empresaPdf";
+import {
+  clampInt,
+  parseDateFilter,
+  sanitizeSearchTerm,
+} from "../utils/searchSanitize";
 import type { RolUsuario } from "../types/database";
+
+const HISTORICO_PAGE_DEFAULT = 25;
+const HISTORICO_PAGE_MAX = 100;
+const HISTORICO_EXPORT_BATCH = 200;
+const HISTORICO_EXPORT_MAX = 10_000;
+
+type EppHistoricoFiltros = {
+  trabajador?: string;
+  producto?: string;
+  fecha_desde?: string;
+  fecha_hasta?: string;
+  limit?: number;
+  offset?: number;
+};
+
+export type EppHistoricoRow = {
+  id: string;
+  empleado_id: string | null;
+  trabajador: string;
+  dni: string;
+  producto: string;
+  cantidad: number;
+  marca: string | null;
+  modelo: string | null;
+  certificacion: string | null;
+  fecha: string;
+  pdf_disponible: boolean;
+};
+
+function applyEppHistoricoFilters(query: any, opts: EppHistoricoFiltros) {
+  const qTrabajador = sanitizeSearchTerm(opts.trabajador);
+  if (qTrabajador) {
+    const digits = qTrabajador.replace(/\D/g, "");
+    const safe = qTrabajador.replace(/'/g, "''");
+    if (digits.length >= 3) {
+      query = query.or(
+        `empleado_nombre.ilike.%${safe}%,empleado_documento.ilike.%${digits}%`,
+      );
+    } else {
+      query = query.or(
+        `empleado_nombre.ilike.%${safe}%,empleado_documento.ilike.%${safe}%`,
+      );
+    }
+  }
+
+  const qProducto = sanitizeSearchTerm(opts.producto);
+  if (qProducto) {
+    const safeProducto = qProducto.replace(/'/g, "''");
+    query = query.ilike("epp_tipos.nombre", `%${safeProducto}%`);
+  }
+
+  const desde = parseDateFilter(opts.fecha_desde);
+  if (desde) {
+    query = query.gte("entregado_at", `${desde}T00:00:00`);
+  }
+
+  const hasta = parseDateFilter(opts.fecha_hasta);
+  if (hasta) {
+    query = query.lte("entregado_at", `${hasta}T23:59:59.999`);
+  }
+
+  return query;
+}
+
+function mapEppHistoricoRows(rows: any[]): EppHistoricoRow[] {
+  return rows.map((row) => {
+    const tipo = firstRelation(row.epp_tipos);
+    return {
+      id: row.id,
+      empleado_id: row.empleado_id ?? null,
+      trabajador: row.empleado_nombre ?? "",
+      dni: row.empleado_documento ?? "",
+      producto: tipo?.nombre ?? "—",
+      cantidad: row.cantidad ?? 1,
+      marca: row.marca ?? null,
+      modelo: row.modelo ?? null,
+      certificacion: row.certificacion ?? null,
+      fecha: row.entregado_at ?? "",
+      pdf_disponible: !!row.url_registro_oficial,
+    };
+  });
+}
 
 type AuthUser = {
   id: string;
@@ -79,6 +169,14 @@ function mapEntrega(e: EntregaRow) {
     pdf_url: e.url_registro_oficial,
     epp_tipos: e.epp_tipos,
   };
+}
+
+function normalizeEntregadoAt(fechaEntrega?: string): string {
+  const now = new Date();
+  if (!fechaEntrega) return now.toISOString();
+  if (fechaEntrega.includes("T")) return fechaEntrega;
+  const timePart = now.toISOString().slice(11);
+  return `${fechaEntrega}T${timePart}`;
 }
 
 async function uploadBase64Png(bucket: string, path: string, dataUrl: string): Promise<string> {
@@ -295,7 +393,8 @@ export const eppService = {
       .from("epp_entregas")
       .select(`*, epp_tipos(id, nombre, descripcion, foto_url)`)
       .eq("empresa_id", empresaId)
-      .order("entregado_at", { ascending: false });
+      .order("entregado_at", { ascending: false, nullsFirst: false })
+      .order("id", { ascending: false });
     if (error) throw error;
     return { entregas: ((data ?? []) as EntregaRow[]).map(mapEntrega) };
   },
@@ -304,18 +403,44 @@ export const eppService = {
     user: AuthUser,
     payload: {
       empresa_id: string;
-      empleado_id?: string | null;
-      nombre_empleado: string;
-      dni_empleado: string;
+      empleado_id: string;
+      nombre_empleado?: string;
+      dni_empleado?: string;
       items: EntregaItemInput[];
       fecha_entrega?: string;
       firma: string;
       firma_empleador?: string | null;
     },
   ) {
+    const { data: empleado, error: empleadoError } = await supabaseAdmin
+      .from("empleados")
+      .select("id, nombre, documento, activo")
+      .eq("id", payload.empleado_id)
+      .eq("empresa_id", payload.empresa_id)
+      .single();
+
+    if (empleadoError || !empleado) {
+      throw new HttpError(400, "El trabajador debe estar en el padrón de la empresa");
+    }
+    if (!empleado.activo) {
+      throw new HttpError(400, "El trabajador no está activo en el padrón");
+    }
+
+    const nombreEmpleado = empleado.nombre;
+    const dniEmpleado = empleado.documento;
+
+    const { data: empresaRaw } = await supabaseAdmin
+      .from("empresas")
+      .select(
+        "razon_social, cuit, domicilio, localidad, codigo_postal, provincia, actividad, logo_url",
+      )
+      .eq("id", payload.empresa_id)
+      .single();
+    const empresaNorm = normalizarEmpresaParaPlanilla(empresaRaw);
+
     const firmaUrl = await uploadBase64Png(
       "firmas_digitales",
-      `epp/${payload.empresa_id}/${payload.dni_empleado}_${Date.now()}.png`,
+      `epp/${payload.empresa_id}/${dniEmpleado}_${Date.now()}.png`,
       payload.firma,
     );
 
@@ -328,14 +453,14 @@ export const eppService = {
       );
     }
 
-    const entregadoAt = payload.fecha_entrega || new Date().toISOString();
+    const entregadoAt = normalizeEntregadoAt(payload.fecha_entrega);
     const entregasData = payload.items.map((item) => ({
       empresa_id: payload.empresa_id,
       preventor_id: user.id,
       epp_tipo_id: item.epp_tipo_id,
-      empleado_id: payload.empleado_id || null,
-      empleado_nombre: payload.nombre_empleado,
-      empleado_documento: payload.dni_empleado,
+      empleado_id: empleado.id,
+      empleado_nombre: nombreEmpleado,
+      empleado_documento: dniEmpleado,
       cantidad: item.cantidad || 1,
       marca: item.marca || null,
       modelo: item.modelo || null,
@@ -357,10 +482,12 @@ export const eppService = {
       throw new HttpError(500, "No se pudieron registrar las entregas");
     }
 
-    // PDF en background: la entrega queda registrada aunque el PDF tarde
-    void this.generarYGuardarPdf(user, rows).catch((err) => {
-      console.error("Error generando PDF de entrega EPP:", err);
-    });
+    // Un PDF oficial por cada entrega (1 ítem = 1 línea en planilla Anexo I)
+    for (const row of rows) {
+      void this.generarYGuardarPdf(user, row).catch((err) => {
+        console.error(`Error generando PDF de entrega EPP ${row.id}:`, err);
+      });
+    }
 
     const mapped = rows.map((e) => mapEntrega(e));
 
@@ -369,53 +496,69 @@ export const eppService = {
       entregas: mapped,
       pdf_url: null,
       pdf_generando: true,
+      advertencia_empresa: empresaNorm.datos_incompletos
+        ? "La empresa tiene datos incompletos (provincia, domicilio, etc.). En el PDF aparecerá «Sin especificar». Completá los datos en Administración > Empresas."
+        : null,
     };
   },
 
-  async generarYGuardarPdf(_user: AuthUser, entregas: EntregaRow[]): Promise<string> {
-    const first = entregas[0];
-    const { data: empresa, error: empresaError } = await supabaseAdmin
+  async generarYGuardarPdf(_user: AuthUser, entrega: EntregaRow): Promise<string> {
+    const { data: empresaRaw, error: empresaError } = await supabaseAdmin
       .from("empresas")
-      .select("razon_social, cuit, actividad, logo_url, consultora_id")
-      .eq("id", first.empresa_id)
+      .select(
+        "razon_social, cuit, actividad, logo_url, domicilio, localidad, codigo_postal, provincia, consultora_id",
+      )
+      .eq("id", entrega.empresa_id)
       .single();
     if (empresaError) throw empresaError;
+    const empresa = normalizarEmpresaParaPlanilla(empresaRaw);
 
-    let consultora: { nombre: string; logo_url: string | null } | null = null;
-    if (empresa?.consultora_id) {
-      const { data } = await supabaseAdmin
-        .from("consultoras")
-        .select("nombre, logo_url")
-        .eq("id", empresa.consultora_id)
-        .single();
-      consultora = data;
+    let empleadoSector: string | null = null;
+    if (entrega.empleado_id) {
+      const { data: empleado } = await supabaseAdmin
+        .from("empleados")
+        .select("sector")
+        .eq("id", entrega.empleado_id)
+        .maybeSingle();
+      empleadoSector = empleado?.sector ?? null;
     }
 
-    const { data: preventor } = await supabaseAdmin
-      .from("perfiles")
-      .select("nombre_completo")
-      .eq("id", first.preventor_id)
-      .maybeSingle();
+    const firmaBuffer = await storageService.downloadBuffer(
+      entrega.firma_empleado_url,
+    );
 
-    const pdfBuffer = await eppPdfService.generarConstanciaSRT299({
-      empresa: empresa ?? { razon_social: "", cuit: "", actividad: null },
-      consultora,
-      empleado: { nombre: first.empleado_nombre, dni: first.empleado_documento },
-      items: entregas.map((e) => ({
-        epp_tipos: e.epp_tipos,
-        cantidad: e.cantidad,
-        marca: e.marca,
-        modelo: e.modelo,
-        certificacion: e.certificacion,
-        fecha_entrega: e.entregado_at,
-      })),
-      fecha: first.entregado_at,
-      firmaUrl: first.firma_empleado_url,
-      firmaEmpleadorUrl: first.firma_empleador_url,
-      preventorNombre: preventor?.nombre_completo ?? null,
+    const pdfBuffer = await eppPdfService.generarPlanillaAnexoI({
+      empresa: {
+        razon_social: empresa.razon_social,
+        cuit: empresa.cuit,
+        domicilio: empresa.domicilio,
+        localidad: empresa.localidad,
+        codigo_postal: empresa.codigo_postal,
+        provincia: empresa.provincia,
+        actividad: empresa.actividad,
+        logo_url: empresa.logo_url,
+      },
+      empleado: {
+        nombre: entrega.empleado_nombre,
+        dni: entrega.empleado_documento,
+        puesto: empleadoSector,
+        epp_necesarios: empleadoSector,
+      },
+      items: [
+        {
+          epp_tipos: entrega.epp_tipos,
+          cantidad: entrega.cantidad,
+          marca: entrega.marca,
+          modelo: entrega.modelo,
+          certificacion: entrega.certificacion,
+          fecha_entrega: entrega.entregado_at,
+          firmaUrl: entrega.firma_empleado_url,
+          firmaBuffer,
+        },
+      ],
     });
 
-    const pdfPath = `epp/pdf/${first.empresa_id}/${first.empleado_documento}_${Date.now()}.pdf`;
+    const pdfPath = `epp/pdf/${entrega.empresa_id}/${entrega.empleado_documento}_${entrega.id}.pdf`;
     const { error: pdfUploadError } = await supabaseAdmin.storage
       .from("informes_pdf")
       .upload(pdfPath, pdfBuffer, {
@@ -424,12 +567,21 @@ export const eppService = {
       });
 
     if (pdfUploadError) {
-      throw new HttpError(500, `La entrega se registró pero falló el PDF: ${pdfUploadError.message}`);
+      throw new HttpError(
+        500,
+        `La entrega se registró pero falló el PDF: ${pdfUploadError.message}`,
+      );
     }
 
-    const pdfUrl = supabaseAdmin.storage.from("informes_pdf").getPublicUrl(pdfPath).data.publicUrl;
-    const ids = entregas.map((e) => e.id);
-    await supabaseAdmin.from("epp_entregas").update({ url_registro_oficial: pdfUrl }).in("id", ids);
+    const pdfUrl = supabaseAdmin.storage
+      .from("informes_pdf")
+      .getPublicUrl(pdfPath).data.publicUrl;
+
+    await supabaseAdmin
+      .from("epp_entregas")
+      .update({ url_registro_oficial: pdfUrl })
+      .eq("id", entrega.id);
+
     return pdfUrl;
   },
 
@@ -441,15 +593,10 @@ export const eppService = {
       .single();
     if (error || !entrega) throw new HttpError(404, "Entrega de EPP no encontrada");
 
-    const { data: hermanas } = await supabaseAdmin
-      .from("epp_entregas")
-      .select(`*, epp_tipos(id, nombre, descripcion, foto_url)`)
-      .eq("empresa_id", entrega.empresa_id)
-      .eq("empleado_documento", entrega.empleado_documento)
-      .eq("entregado_at", entrega.entregado_at);
-
-    const rows = (hermanas && hermanas.length > 0 ? hermanas : [entrega]) as EntregaRow[];
-    const pdfUrl = await this.generarYGuardarPdf(user, rows);
+    const pdfUrl = await this.generarYGuardarPdf(
+      user,
+      entrega as EntregaRow,
+    );
     return { success: true, pdf_url: pdfUrl };
   },
 
@@ -710,5 +857,190 @@ export const eppService = {
 
     if (updateError) throw updateError;
     return data;
+  },
+
+  async listarHistorico(empresaId: string, opts: EppHistoricoFiltros = {}) {
+    const limit = clampInt(opts.limit, HISTORICO_PAGE_DEFAULT, 1, HISTORICO_PAGE_MAX);
+    const offset = clampInt(opts.offset, 0, 0, 500_000);
+
+    let query = supabaseAdmin
+      .from("epp_entregas")
+      .select(
+        `
+        id,
+        empleado_id,
+        empleado_nombre,
+        empleado_documento,
+        cantidad,
+        marca,
+        modelo,
+        certificacion,
+        entregado_at,
+        url_registro_oficial,
+        epp_tipos(id, nombre)
+      `,
+        { count: "exact" },
+      )
+      .eq("empresa_id", empresaId)
+      .neq("estado", "anulada");
+
+    query = applyEppHistoricoFilters(query, opts);
+
+    const { data, error, count } = await query
+      .order("entregado_at", { ascending: false, nullsFirst: false })
+      .order("id", { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) throw error;
+
+    return {
+      registros: mapEppHistoricoRows(data ?? []),
+      total: count ?? 0,
+      limit,
+      offset,
+    };
+  },
+
+  async exportarHistorico(empresaId: string, opts: EppHistoricoFiltros = {}) {
+    const allRows: EppHistoricoRow[] = [];
+    let offset = 0;
+    let total = 0;
+
+    do {
+      const page = await this.listarHistorico(empresaId, {
+        ...opts,
+        limit: HISTORICO_EXPORT_BATCH,
+        offset,
+      });
+      total = page.total;
+      allRows.push(...page.registros);
+      offset += HISTORICO_EXPORT_BATCH;
+      if (allRows.length >= HISTORICO_EXPORT_MAX) break;
+    } while (offset < total);
+
+    if (total > HISTORICO_EXPORT_MAX) {
+      throw new HttpError(
+        400,
+        `Hay más de ${HISTORICO_EXPORT_MAX} registros. Acotá los filtros antes de exportar.`,
+      );
+    }
+
+    const escape = (value: string) => {
+      const s = String(value ?? "");
+      if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+      return s;
+    };
+
+    const header =
+      "Trabajador,DNI,Producto,Cantidad,Marca,Modelo,Certificación,Fecha";
+    const lines = allRows.map((r) => {
+      const fecha = r.fecha
+        ? new Date(r.fecha).toLocaleString("es-AR", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : "";
+      return [
+        escape(r.trabajador),
+        escape(r.dni),
+        escape(r.producto),
+        escape(String(r.cantidad)),
+        escape(r.marca ?? ""),
+        escape(r.modelo ?? ""),
+        escape(r.certificacion ?? ""),
+        escape(fecha),
+      ].join(",");
+    });
+
+    return Buffer.from(`\uFEFF${header}\n${lines.join("\n")}`, "utf-8");
+  },
+
+  async generarPlanillaHistoricaEmpleado(empleadoId: string) {
+    const { data: empleado, error: empleadoError } = await supabaseAdmin
+      .from("empleados")
+      .select("id, empresa_id, nombre, documento, sector")
+      .eq("id", empleadoId)
+      .single();
+
+    if (empleadoError || !empleado) {
+      throw new HttpError(404, "Trabajador no encontrado");
+    }
+
+    const { data: entregas, error: entregasError } = await supabaseAdmin
+      .from("epp_entregas")
+      .select(`*, epp_tipos(id, nombre, descripcion, foto_url)`)
+      .eq("empresa_id", empleado.empresa_id)
+      .neq("estado", "anulada")
+      .or(
+        `empleado_id.eq.${empleadoId},and(empleado_id.is.null,empleado_documento.eq.${empleado.documento})`,
+      )
+      .order("entregado_at", { ascending: true });
+
+    if (entregasError) throw entregasError;
+    if (!entregas?.length) {
+      throw new HttpError(404, "No hay entregas registradas para este trabajador");
+    }
+
+    const entregasUnicas = Array.from(
+      new Map((entregas as EntregaRow[]).map((e) => [e.id, e])).values(),
+    );
+
+    const { data: empresaRaw, error: empresaError } = await supabaseAdmin
+      .from("empresas")
+      .select(
+        "razon_social, cuit, actividad, logo_url, domicilio, localidad, codigo_postal, provincia",
+      )
+      .eq("id", empleado.empresa_id)
+      .single();
+    if (empresaError) throw empresaError;
+
+    const empresa = normalizarEmpresaParaPlanilla(empresaRaw);
+    const items = await Promise.all(
+      entregasUnicas.map(async (entrega) => {
+        const firmaBuffer = entrega.firma_empleado_url
+          ? await storageService.downloadBuffer(entrega.firma_empleado_url)
+          : null;
+
+        return {
+          epp_tipos: entrega.epp_tipos,
+          cantidad: entrega.cantidad,
+          marca: entrega.marca,
+          modelo: entrega.modelo,
+          certificacion: entrega.certificacion,
+          fecha_entrega: entrega.entregado_at,
+          firmaUrl: entrega.firma_empleado_url,
+          firmaBuffer,
+        };
+      }),
+    );
+
+    const pdfBuffer = await eppPdfService.generarPlanillaAnexoI({
+      empresa: {
+        razon_social: empresa.razon_social,
+        cuit: empresa.cuit,
+        domicilio: empresa.domicilio,
+        localidad: empresa.localidad,
+        codigo_postal: empresa.codigo_postal,
+        provincia: empresa.provincia,
+        actividad: empresa.actividad,
+        logo_url: empresa.logo_url,
+      },
+      empleado: {
+        nombre: empleado.nombre,
+        dni: empleado.documento,
+        puesto: empleado.sector,
+        epp_necesarios: empleado.sector,
+      },
+      items,
+      informacion_adicional: `Registro histórico consolidado — ${entregasUnicas.length} entrega(s)`,
+    });
+
+    return {
+      buffer: pdfBuffer,
+      filename: `Planilla_EPP_historica_${empleado.documento}.pdf`,
+    };
   },
 };

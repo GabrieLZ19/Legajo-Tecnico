@@ -1,4 +1,5 @@
 import PDFDocument from "pdfkit";
+import { storageService } from "./storage.service";
 
 export interface EppPdfItem {
   epp_tipos?: { nombre: string; descripcion?: string | null } | null;
@@ -7,26 +8,34 @@ export interface EppPdfItem {
   modelo?: string | null;
   certificacion?: string | null;
   fecha_entrega: string;
+  firmaUrl?: string | null;
+  firmaBuffer?: Buffer | null;
 }
 
 export interface EppPdfData {
   empresa: {
     razon_social: string;
     cuit: string;
-    actividad: string | null;
+    domicilio?: string | null;
+    localidad?: string | null;
+    codigo_postal?: string | null;
+    provincia?: string | null;
+    actividad?: string | null;
     logo_url?: string | null;
   };
-  consultora?: {
-    nombre?: string | null;
-    logo_url?: string | null;
-  } | null;
-  empleado: { nombre: string; dni: string; sector?: string | null };
+  empleado: {
+    nombre: string;
+    dni: string;
+    puesto?: string | null;
+    epp_necesarios?: string | null;
+  };
   items: EppPdfItem[];
-  fecha: string;
-  firmaUrl: string | null;
-  firmaEmpleadorUrl?: string | null;
-  preventorNombre?: string | null;
+  informacion_adicional?: string | null;
 }
+
+const ROWS_PER_PAGE = 18;
+const PAGE_LEFT = 36;
+const PAGE_WIDTH = 595.28 - PAGE_LEFT * 2;
 
 const formatLocalDate = (dateInput: string): string => {
   if (!dateInput) return "";
@@ -39,270 +48,388 @@ const formatLocalDate = (dateInput: string): string => {
   return new Date(dateInput).toLocaleDateString("es-AR");
 };
 
-async function fetchBuffer(url: string | null | undefined): Promise<Buffer | null> {
-  if (!url) return null;
+const formatCertificacion = (value?: string | null): string => {
+  if (!value?.trim()) return "";
+  const v = value.trim().toUpperCase();
+  if (v === "NO" || v === "N" || v === "0" || v === "FALSE") return "NO";
+  return "SI";
+};
+
+async function loadSignatureBuffer(
+  item: EppPdfItem,
+): Promise<Buffer | null> {
+  if (item.firmaBuffer) return item.firmaBuffer;
+  if (!item.firmaUrl) return null;
+  return storageService.downloadBuffer(item.firmaUrl);
+}
+
+function drawCellBorder(
+  doc: InstanceType<typeof PDFDocument>,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+) {
+  doc.rect(x, y, w, h).stroke("#000000");
+}
+
+function drawCellText(
+  doc: InstanceType<typeof PDFDocument>,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  text: string,
+  opts?: {
+    bold?: boolean;
+    align?: "left" | "center" | "right";
+    fontSize?: number;
+    valign?: "top" | "middle";
+  },
+) {
+  const fontSize = opts?.fontSize ?? 7;
+  const padding = 3;
+  const textH = fontSize + 2;
+  const textY =
+    opts?.valign === "middle" ? y + (h - textH) / 2 : y + padding;
+
+  doc
+    .font(opts?.bold ? "Helvetica-Bold" : "Helvetica")
+    .fontSize(fontSize)
+    .fillColor("#000000")
+    .text(text, x + padding, textY, {
+      width: w - padding * 2,
+      align: opts?.align ?? "left",
+      lineBreak: true,
+    });
+}
+
+function drawSignatureInCell(
+  doc: InstanceType<typeof PDFDocument>,
+  sigBuf: Buffer,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+) {
+  doc.save();
+  doc.rect(x, y, w, h).clip();
   try {
-    const response = await fetch(url);
-    if (!response.ok) return null;
-    return Buffer.from(await response.arrayBuffer());
-  } catch {
-    return null;
+    doc.image(sigBuf, x + 3, y + 3, {
+      fit: [w - 6, h - 6],
+      align: "center",
+      valign: "center",
+    });
+  } catch (err) {
+    console.error("No se pudo incrustar firma en planilla EPP:", err);
   }
+  doc.restore();
+}
+
+function drawLabeledValue(
+  doc: InstanceType<typeof PDFDocument>,
+  label: string,
+  value: string,
+  x: number,
+  y: number,
+  width: number,
+) {
+  doc.font("Helvetica-Bold").fontSize(8).fillColor("#000000");
+  const labelW = doc.widthOfString(label);
+  doc.text(label, x, y, { lineBreak: false });
+  doc
+    .font("Helvetica")
+    .text(value || "", x + labelW + 2, y, {
+      width: Math.max(20, width - labelW - 4),
+      lineBreak: false,
+      ellipsis: true,
+    });
 }
 
 export const eppPdfService = {
-  async generarConstanciaSRT299(data: EppPdfData): Promise<Buffer> {
-    const [signatureBuffer, employerSigBuffer, logoEmpresa, logoConsultora] =
-      await Promise.all([
-        fetchBuffer(data.firmaUrl),
-        fetchBuffer(data.firmaEmpleadorUrl ?? null),
-        fetchBuffer(data.empresa.logo_url),
-        fetchBuffer(data.consultora?.logo_url),
-      ]);
+  async generarPlanillaAnexoI(data: EppPdfData): Promise<Buffer> {
+    const signatureBuffers = await Promise.all(
+      data.items.map((item) => loadSignatureBuffer(item)),
+    );
+
+    const paddedItems: EppPdfItem[] = [...data.items];
+    while (
+      paddedItems.length % ROWS_PER_PAGE !== 0 &&
+      paddedItems.length < ROWS_PER_PAGE
+    ) {
+      paddedItems.push({
+        epp_tipos: null,
+        cantidad: 0,
+        marca: null,
+        modelo: null,
+        certificacion: null,
+        fecha_entrega: "",
+      });
+    }
+
+    const pages: EppPdfItem[][] = [];
+    for (let i = 0; i < paddedItems.length; i += ROWS_PER_PAGE) {
+      pages.push(paddedItems.slice(i, i + ROWS_PER_PAGE));
+    }
+
+    const colWidths = [24, 98, 80, 64, 72, 40, 64, PAGE_WIDTH - (24 + 98 + 80 + 64 + 72 + 40 + 64)];
+    const rowH = 34;
+    const headerRowH = 36;
 
     return new Promise((resolve, reject) => {
       try {
         const doc = new PDFDocument({
           size: "A4",
-          margins: { top: 40, bottom: 40, left: 50, right: 50 },
+          margins: { top: 28, bottom: 28, left: PAGE_LEFT, right: PAGE_LEFT },
         });
 
         const chunks: Buffer[] = [];
         doc.on("data", (chunk: Buffer) => chunks.push(chunk));
         doc.on("end", () => resolve(Buffer.concat(chunks)));
 
-        const pageWidth = 595.28 - 100;
+        pages.forEach((pageItems, pageIndex) => {
+          if (pageIndex > 0) doc.addPage();
 
-        if (logoConsultora) {
-          try {
-            doc.image(logoConsultora, 50, 28, { fit: [80, 40] });
-          } catch {
-            // ignore invalid image
-          }
-        }
-        if (logoEmpresa) {
-          try {
-            doc.image(logoEmpresa, 465, 28, { fit: [80, 40], align: "right" });
-          } catch {
-            // ignore invalid image
-          }
-        }
+          let y = 28;
 
-        doc
-          .fontSize(12)
-          .font("Helvetica-Bold")
-          .fillColor("#1e3a8a")
-          .text("CONSTANCIA DE ENTREGA DE ELEMENTOS DE PROTECCIÓN PERSONAL", 50, 78, {
-            width: pageWidth,
-            align: "left",
-          });
-
-        doc
-          .fontSize(9)
-          .font("Helvetica-Oblique")
-          .fillColor("#475569")
-          .text("Resolución SRT N° 299/11 - Anexo I", 50, doc.y + 2);
-
-        if (data.consultora?.nombre) {
           doc
             .fontSize(8)
-            .font("Helvetica")
-            .fillColor("#64748b")
-            .text(data.consultora.nombre, 50, doc.y + 2);
-        }
+            .font("Helvetica-Bold")
+            .text("Resolución 299/11, Anexo I", PAGE_LEFT, y);
+          y += 14;
 
-        doc.moveDown(1.2);
-        const sectionLineY = doc.y;
-        doc
-          .moveTo(50, sectionLineY)
-          .lineTo(50 + pageWidth, sectionLineY)
-          .lineWidth(1)
-          .stroke("#cbd5e1");
-        doc.moveDown(1);
-
-        const labelWidth = 120;
-        const valueX = 50 + labelWidth;
-
-        doc.fontSize(10).font("Helvetica-Bold").fillColor("#0f172a").text("DATOS DEL EMPLEADOR");
-        doc.moveDown(0.3);
-
-        const writeRow = (label: string, value: string) => {
-          doc.font("Helvetica-Bold").fontSize(9).fillColor("#334155").text(label, 50, doc.y, {
-            width: labelWidth,
-          });
           doc
-            .font("Helvetica")
-            .fillColor("#0f172a")
-            .text(value, valueX, doc.y - doc.currentLineHeight(), {
-              width: pageWidth - labelWidth,
-            });
-          doc.moveDown(0.2);
-        };
+            .fontSize(9.5)
+            .font("Helvetica-Bold")
+            .text(
+              "ENTREGA DE ROPA DE TRABAJO Y ELEMENTOS DE PROTECCIÓN PERSONAL",
+              PAGE_LEFT,
+              y,
+              { width: PAGE_WIDTH, align: "center" },
+            );
+          y += 20;
 
-        writeRow("Razón Social:", data.empresa.razon_social);
-        writeRow("C.U.I.T.:", data.empresa.cuit);
-        writeRow("Actividad:", data.empresa.actividad || "N/A");
-
-        doc.moveDown(1);
-        doc.fontSize(10).font("Helvetica-Bold").fillColor("#0f172a").text("DATOS DEL TRABAJADOR");
-        doc.moveDown(0.3);
-        writeRow("Nombre y Apellido:", data.empleado.nombre);
-        writeRow("D.N.I.:", data.empleado.dni);
-        if (data.empleado.sector) {
-          writeRow("Sector:", data.empleado.sector);
-        }
-
-        doc.moveDown(1.2);
-        doc
-          .fontSize(10)
-          .font("Helvetica-Bold")
-          .fillColor("#0f172a")
-          .text("ELEMENTOS DE PROTECCIÓN PERSONAL ENTREGADOS");
-        doc.moveDown(0.5);
-
-        const tableTop = doc.y;
-        const colWidths = [28, 130, 36, 80, 80, 70, 71];
-        const colHeaders = [
-          "N°",
-          "Elemento",
-          "Cant.",
-          "Marca",
-          "Modelo",
-          "Certificación",
-          "Fecha",
-        ];
-
-        doc.rect(50, tableTop - 3, 495, 18).fill("#1e3a8a");
-
-        let xPos = 50;
-        doc.fontSize(7.5).font("Helvetica-Bold");
-        colHeaders.forEach((header, i) => {
-          doc
-            .fillColor("#ffffff")
-            .text(header, xPos + 2, tableTop, {
-              width: colWidths[i] - 4,
-              align: i === 0 || i === 2 ? "center" : "left",
-            });
-          xPos += colWidths[i];
-        });
-
-        let rowY = tableTop + 18;
-        data.items.forEach((item, idx) => {
-          const rowBg = idx % 2 === 0 ? "#f8fafc" : "#ffffff";
-          doc.rect(50, rowY - 2, 495, 18).fill(rowBg);
-          doc.fillColor("#0f172a").fontSize(7.5).font("Helvetica");
-          xPos = 50;
-          const rowData = [
-            String(idx + 1),
-            item.epp_tipos?.nombre || "N/A",
-            String(item.cantidad),
-            item.marca || "N/A",
-            item.modelo || "N/A",
-            item.certificacion || "N/A",
-            formatLocalDate(item.fecha_entrega),
-          ];
-          rowData.forEach((cell, i) => {
-            doc.text(cell, xPos + 2, rowY, {
-              width: colWidths[i] - 4,
-              align: i === 0 || i === 2 ? "center" : "left",
-            });
-            xPos += colWidths[i];
-          });
-          rowY += 18;
-        });
-
-        doc
-          .rect(50, tableTop - 3, 495, rowY - tableTop + 3)
-          .lineWidth(0.7)
-          .stroke("#cbd5e1");
-
-        doc.y = rowY + 15;
-        doc
-          .fontSize(7.5)
-          .font("Helvetica-Oblique")
-          .fillColor("#475569")
-          .text(
-            "Se deja constancia que los elementos de protección personal arriba mencionados fueron entregados al trabajador, " +
-              "quien se compromete a utilizarlos durante el desarrollo de las tareas asignadas, conforme a las indicaciones recibidas " +
-              "en relación a su correcto uso, mantenimiento y conservación (Resolución SRT N° 299/2011).",
-            50,
-            doc.y,
-            { width: pageWidth, align: "justify", lineGap: 2 },
+          drawLabeledValue(
+            doc,
+            "Razón Social: ",
+            data.empresa.razon_social,
+            PAGE_LEFT,
+            y,
+            PAGE_WIDTH * 0.62,
           );
+          drawLabeledValue(
+            doc,
+            "C.U.I.T.: ",
+            data.empresa.cuit,
+            PAGE_LEFT + PAGE_WIDTH * 0.62,
+            y,
+            PAGE_WIDTH * 0.38,
+          );
+          y += 14;
 
-        doc.moveDown(2);
-        const firmaY = Math.max(doc.y, 620);
-        const firmaWidth = pageWidth / 2 - 20;
+          drawLabeledValue(
+            doc,
+            "Dirección: ",
+            data.empresa.domicilio || "",
+            PAGE_LEFT,
+            y,
+            PAGE_WIDTH * 0.42,
+          );
+          drawLabeledValue(
+            doc,
+            "Localidad: ",
+            data.empresa.localidad || "",
+            PAGE_LEFT + PAGE_WIDTH * 0.42,
+            y,
+            PAGE_WIDTH * 0.28,
+          );
+          drawLabeledValue(
+            doc,
+            "C.P.: ",
+            data.empresa.codigo_postal || "",
+            PAGE_LEFT + PAGE_WIDTH * 0.7,
+            y,
+            PAGE_WIDTH * 0.14,
+          );
+          y += 14;
 
-        if (signatureBuffer) {
-          try {
-            doc.image(signatureBuffer, 50 + (firmaWidth - 110) / 2, firmaY - 15, {
-              width: 110,
-              height: 45,
-            });
-          } catch {
-            // ignore
-          }
-        }
+          drawLabeledValue(
+            doc,
+            "Provincia: ",
+            data.empresa.provincia || "",
+            PAGE_LEFT,
+            y,
+            PAGE_WIDTH * 0.45,
+          );
+          y += 14;
 
-        doc.fillColor("#0f172a").font("Helvetica").fontSize(9);
-        doc.text("________________________", 50, firmaY + 30, {
-          width: firmaWidth,
-          align: "center",
-        });
-        doc.text("Firma del Trabajador", 50, firmaY + 45, {
-          width: firmaWidth,
-          align: "center",
-        });
-        doc.font("Helvetica-Bold").text(data.empleado.nombre, 50, firmaY + 58, {
-          width: firmaWidth,
-          align: "center",
-        });
-        doc.font("Helvetica").text(`DNI: ${data.empleado.dni}`, 50, firmaY + 70, {
-          width: firmaWidth,
-          align: "center",
-        });
+          drawLabeledValue(
+            doc,
+            "Nombre y Apellido del Trabajador: ",
+            data.empleado.nombre,
+            PAGE_LEFT,
+            y,
+            PAGE_WIDTH * 0.68,
+          );
+          drawLabeledValue(
+            doc,
+            "D.N.I.: ",
+            data.empleado.dni,
+            PAGE_LEFT + PAGE_WIDTH * 0.68,
+            y,
+            PAGE_WIDTH * 0.32,
+          );
+          y += 16;
 
-        const rightX = 50 + firmaWidth + 40;
-        if (employerSigBuffer) {
-          try {
-            doc.image(employerSigBuffer, rightX + (firmaWidth - 110) / 2, firmaY - 15, {
-              width: 110,
-              height: 45,
-            });
-          } catch {
-            // ignore
-          }
-        }
-        doc.text("________________________", rightX, firmaY + 30, {
-          width: firmaWidth,
-          align: "center",
-        });
-        doc.text("Firma del Responsable / Empleador", rightX, firmaY + 45, {
-          width: firmaWidth,
-          align: "center",
-        });
-        if (data.preventorNombre) {
-          doc.font("Helvetica-Bold").text(data.preventorNombre, rightX, firmaY + 58, {
-            width: firmaWidth,
-            align: "center",
+          const boxH = 34;
+          const halfW = PAGE_WIDTH / 2 - 4;
+          doc.rect(PAGE_LEFT, y, halfW, boxH).stroke("#000000");
+          doc.rect(PAGE_LEFT + halfW + 8, y, halfW, boxH).stroke("#000000");
+
+          doc.font("Helvetica-Bold").fontSize(6.5);
+          doc.text(
+            "Descripción breve del puesto/s de trabajo en el/los cuales se desempeña el trabajador:",
+            PAGE_LEFT + 4,
+            y + 4,
+            { width: halfW - 8 },
+          );
+          doc.text(
+            "Elementos de protección personal necesarios según el puesto de trabajo:",
+            PAGE_LEFT + halfW + 12,
+            y + 4,
+            { width: halfW - 8 },
+          );
+          doc.font("Helvetica").fontSize(7);
+          doc.text(data.empleado.puesto || "", PAGE_LEFT + 4, y + 20, {
+            width: halfW - 8,
+            height: 12,
           });
-        }
+          doc.text(
+            data.empleado.epp_necesarios || "",
+            PAGE_LEFT + halfW + 12,
+            y + 20,
+            { width: halfW - 8, height: 12 },
+          );
+          y += boxH + 8;
 
-        doc.y = firmaY + 95;
-        doc
-          .fontSize(8)
-          .font("Helvetica")
-          .fillColor("#64748b")
-          .text(`Fecha de emisión: ${formatLocalDate(data.fecha)}`, 50, doc.y, {
-            align: "right",
-            width: pageWidth,
+          const tableTop = y;
+          let x = PAGE_LEFT;
+          const headers = [
+            "",
+            "Producto",
+            "Tipo // Modelo",
+            "Marca",
+            "Certificación SI // NO",
+            "Cant.",
+            "Fecha de entrega",
+            "Firma del trabajador",
+          ];
+
+          headers.forEach((header, i) => {
+            drawCellBorder(doc, x, tableTop, colWidths[i], headerRowH);
+            drawCellText(doc, x, tableTop, colWidths[i], headerRowH, header, {
+              bold: true,
+              align: "center",
+              fontSize: 6.5,
+              valign: "middle",
+            });
+            x += colWidths[i];
           });
+
+          let rowY = tableTop + headerRowH;
+          pageItems.forEach((item, idx) => {
+            const globalIdx = pageIndex * ROWS_PER_PAGE + idx;
+            x = PAGE_LEFT;
+
+            const cells = [
+              String(globalIdx + 1),
+              item.epp_tipos?.nombre || "",
+              item.modelo || "",
+              item.marca || "",
+              formatCertificacion(item.certificacion),
+              item.cantidad > 0 ? String(item.cantidad) : "",
+              item.fecha_entrega ? formatLocalDate(item.fecha_entrega) : "",
+            ];
+
+            cells.forEach((cell, i) => {
+              drawCellBorder(doc, x, rowY, colWidths[i], rowH);
+              drawCellText(doc, x, rowY, colWidths[i], rowH, cell, {
+                align: i === 0 || i === 5 ? "center" : "left",
+                fontSize: 7,
+                valign: "middle",
+              });
+              x += colWidths[i];
+            });
+
+            const firmaColX = x;
+            drawCellBorder(doc, firmaColX, rowY, colWidths[7], rowH);
+
+            const sigBuf =
+              globalIdx < signatureBuffers.length
+                ? signatureBuffers[globalIdx]
+                : null;
+            if (sigBuf) {
+              drawSignatureInCell(
+                doc,
+                sigBuf,
+                firmaColX,
+                rowY,
+                colWidths[7],
+                rowH,
+              );
+            }
+
+            rowY += rowH;
+          });
+
+          y = rowY + 8;
+          doc.font("Helvetica-Bold").fontSize(8);
+          doc.text("Información adicional:", PAGE_LEFT, y);
+          y += 12;
+          doc
+            .font("Helvetica")
+            .fontSize(7.5)
+            .text(data.informacion_adicional || "", PAGE_LEFT + 4, y, {
+              width: PAGE_WIDTH - 8,
+              height: 28,
+            });
+        });
 
         doc.end();
       } catch (err) {
         reject(err);
       }
+    });
+  },
+
+  /** @deprecated Usar generarPlanillaAnexoI */
+  async generarConstanciaSRT299(
+    data: EppPdfData & {
+      fecha: string;
+      firmaUrl: string | null;
+      firmaEmpleadorUrl?: string | null;
+      preventorNombre?: string | null;
+      consultora?: { nombre?: string | null; logo_url?: string | null } | null;
+    },
+  ): Promise<Buffer> {
+    const items =
+      data.items.length > 0
+        ? data.items
+        : [
+            {
+              epp_tipos: { nombre: "N/A" },
+              cantidad: 1,
+              marca: null,
+              modelo: null,
+              certificacion: null,
+              fecha_entrega: data.fecha,
+              firmaUrl: data.firmaUrl,
+            },
+          ];
+    return this.generarPlanillaAnexoI({
+      empresa: data.empresa,
+      empleado: data.empleado,
+      items,
     });
   },
 };

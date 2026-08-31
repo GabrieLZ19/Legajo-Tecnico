@@ -25,6 +25,9 @@ router.patch(
   eppController.actualizarTipo,
 );
 
+router.get("/historico", requireAuth, eppController.historico);
+router.get("/historico/exportar", requireAuth, eppController.exportarHistorico);
+
 router.get("/empleados", requireAuth, eppController.listarEmpleados);
 router.post(
   "/empleados",
@@ -43,6 +46,11 @@ router.get(
   requireAuth,
   puedeEscribirEpp,
   eppController.buscarEmpleadoPorQr,
+);
+router.get(
+  "/empleados/:id/planilla-historica",
+  requireAuth,
+  eppController.planillaHistoricaEmpleado,
 );
 router.get(
   "/empleados/:id/qr",

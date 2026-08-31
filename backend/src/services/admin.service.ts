@@ -214,11 +214,12 @@ export const adminService = {
       domicilio?: string;
       localidad?: string;
       codigo_postal?: string;
+      provincia?: string;
       telefono?: string;
       contacto?: string;
     }
   ) {
-    const { cuit, razon_social, actividad, domicilio, localidad, codigo_postal, telefono, contacto } = empresaData;
+    const { cuit, razon_social, actividad, domicilio, localidad, codigo_postal, provincia, telefono, contacto } = empresaData;
     if (!consultoraIdToken) {
       throw new HttpError(403, "El usuario no tiene consultora asignada");
     }
@@ -234,6 +235,7 @@ export const adminService = {
         domicilio,
         localidad,
         codigo_postal,
+        provincia,
         telefono,
         contacto,
         porcentaje_cumplimiento: 100,
@@ -266,11 +268,12 @@ export const adminService = {
       domicilio?: string;
       localidad?: string;
       codigo_postal?: string;
+      provincia?: string;
       telefono?: string;
       contacto?: string;
     }
   ) {
-    const { cuit, razon_social, actividad, domicilio, localidad, codigo_postal, telefono, contacto } = empresaData;
+    const { cuit, razon_social, actividad, domicilio, localidad, codigo_postal, provincia, telefono, contacto } = empresaData;
 
     // Obtener CUIT anterior antes de actualizar
     const { data: oldEmpresa } = await supabaseAdmin
@@ -288,6 +291,7 @@ export const adminService = {
         domicilio,
         localidad,
         codigo_postal,
+        provincia,
         telefono,
         contacto,
       })

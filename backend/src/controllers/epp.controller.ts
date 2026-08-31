@@ -15,11 +15,28 @@ import {
 } from "../schemas/epp.schema";
 import { HttpError } from "../utils/httpError";
 import {
+  clampInt,
+  parseDateFilter,
+} from "../utils/searchSanitize";
+import {
   assertEmpresaAccess,
   assertEmpleadoAccess,
   assertEntregaAccess,
 } from "../middlewares/empresaAccess";
 import { actualizarVisibilidadEnte } from "../services/visibilidadEnte.service";
+
+function parseHistoricoQuery(req: Request) {
+  return {
+    trabajador: req.query.trabajador
+      ? String(req.query.trabajador)
+      : undefined,
+    producto: req.query.producto ? String(req.query.producto) : undefined,
+    fecha_desde: parseDateFilter(req.query.fecha_desde),
+    fecha_hasta: parseDateFilter(req.query.fecha_hasta),
+    limit: clampInt(req.query.limit, 25, 1, 100),
+    offset: clampInt(req.query.offset, 0, 0, 500_000),
+  };
+}
 
 function param(value: string | string[] | undefined): string {
   if (Array.isArray(value)) return value[0];
@@ -288,6 +305,60 @@ export const eppController = {
         visible_ente_regulador,
       );
       res.json(data);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async historico(req: Request, res: Response, next: NextFunction) {
+    try {
+      const empresaId = String(req.query.empresa_id || "");
+      if (!empresaId) throw new HttpError(400, "empresa_id es requerido");
+      await assertEmpresaAccess(requireUser(req), empresaId);
+      const data = await eppService.listarHistorico(empresaId, parseHistoricoQuery(req));
+      res.json(data);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async exportarHistorico(req: Request, res: Response, next: NextFunction) {
+    try {
+      const empresaId = String(req.query.empresa_id || "");
+      if (!empresaId) throw new HttpError(400, "empresa_id es requerido");
+      await assertEmpresaAccess(requireUser(req), empresaId);
+      const filtros = parseHistoricoQuery(req);
+      const buffer = await eppService.exportarHistorico(empresaId, {
+        trabajador: filtros.trabajador,
+        producto: filtros.producto,
+        fecha_desde: filtros.fecha_desde,
+        fecha_hasta: filtros.fecha_hasta,
+      });
+      res.setHeader("Content-Type", "text/csv;charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename=base_historica_epp_${empresaId.slice(0, 8)}.csv`,
+      );
+      res.send(buffer);
+    } catch (error) {
+      if (error instanceof HttpError) {
+        return res.status(error.statusCode).json({ error: error.message });
+      }
+      next(error);
+    }
+  },
+
+  async planillaHistoricaEmpleado(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parsed = idParamSchema.parse({ params: { id: param(req.params.id) } });
+      await assertEmpleadoAccess(requireUser(req), parsed.params.id);
+      const file = await eppService.generarPlanillaHistoricaEmpleado(parsed.params.id);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${file.filename}"`,
+      );
+      res.send(file.buffer);
     } catch (error) {
       next(error);
     }

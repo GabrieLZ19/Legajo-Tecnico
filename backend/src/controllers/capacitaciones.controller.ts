@@ -253,6 +253,24 @@ export const capacitacionesController = {
     }
   },
 
+  async consultarIntento(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = String(req.params.id);
+      const dni = String(req.query.dni || "");
+      const result = await capacitacionesService.consultarIntentoPublico(
+        id,
+        dni,
+      );
+      res.json(result);
+    } catch (error) {
+      if (error instanceof HttpError) {
+        next(error);
+        return;
+      }
+      next(error);
+    }
+  },
+
   async evaluar(req: Request, res: Response, next: NextFunction) {
     try {
       const id = String(req.params.id);
