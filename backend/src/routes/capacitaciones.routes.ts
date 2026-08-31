@@ -7,6 +7,7 @@ import { uploadRegistroManual } from "../config/multer";
 import {
   capacitacionPublicReadLimiter,
   capacitacionPublicSubmitLimiter,
+  exportHistoricoLimiter,
 } from "../middlewares/rateLimit";
 
 const router = Router();
@@ -69,7 +70,21 @@ router.post(
   capacitacionesController.crearRegistroManual,
 );
 
+router.get("/historico", requireAuth, capacitacionesController.historico);
+router.get(
+  "/historico/exportar",
+  requireAuth,
+  exportHistoricoLimiter,
+  capacitacionesController.exportarHistorico,
+);
+
 router.get("/:id", requireAuth, capacitacionesController.detalle);
+router.patch(
+  "/:id/visibilidad-ente",
+  requireAuth,
+  puedeEscribirCapacitacion,
+  capacitacionesController.actualizarVisibilidadEnte,
+);
 router.get(
   "/:id/registro-manual/plantilla",
   requireAuth,

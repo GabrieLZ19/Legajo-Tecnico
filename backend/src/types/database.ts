@@ -99,13 +99,16 @@ export interface PuntoMejora {
 
 export interface AccionMejora {
   id: string;
-  informe_id: string;
+  informe_id: string | null;
   empresa_id: string;
   punto_mejora_id?: string;
   numero_item?: number;
   descripcion: string;
   estado: EstadoAccion;
   responsable?: string;
+  sector?: string;
+  es_manual?: boolean;
+  visible_ente_regulador?: boolean;
   fecha_cumplimiento?: string;
   created_at: string;
 }

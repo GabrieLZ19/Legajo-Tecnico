@@ -5,6 +5,29 @@ import { supabaseAdmin } from "../config/supabase";
 import { assertAccionAccess, assertEmpresaAccess } from "../middlewares/empresaAccess";
 
 export const planAccionController = {
+  async crearManual(req: Request, res: Response, next: NextFunction) {
+    try {
+      const {
+        empresa_id,
+        descripcion,
+        responsable,
+        sector,
+        visible_ente_regulador,
+      } = req.body;
+
+      await assertEmpresaAccess(req.user!, empresa_id as string);
+      const accion = await planAccionService.crearManual(empresa_id as string, {
+        descripcion,
+        responsable,
+        sector,
+        visible_ente_regulador,
+      });
+      res.status(201).json(accion);
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async listarResponsables(req: Request, res: Response, next: NextFunction) {
     try {
       const { empresaId } = req.query;
@@ -53,17 +76,26 @@ export const planAccionController = {
   async actualizar(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const { estado } = req.body;
+      const { estado, visible_ente_regulador } = req.body;
 
-      if (!estado || !["pendiente", "cumplida", "atendida"].includes(estado)) {
-        return res.status(400).json({ error: "Estado inválido o no provisto" });
+      if (
+        estado !== undefined &&
+        !["pendiente", "cumplida", "atendida"].includes(estado)
+      ) {
+        return res.status(400).json({ error: "Estado inválido" });
+      }
+
+      if (estado === undefined && visible_ente_regulador === undefined) {
+        return res.status(400).json({
+          error: "Debe enviar estado o visible_ente_regulador",
+        });
       }
 
       await assertAccionAccess(req.user!, id as string);
-      const accion = await planAccionService.actualizarEstado(
-        id as string,
-        estado as EstadoAccion,
-      );
+      const accion = await planAccionService.actualizarAccion(id as string, {
+        estado: estado as EstadoAccion | undefined,
+        visible_ente_regulador,
+      });
       res.json(accion);
     } catch (error) {
       next(error);

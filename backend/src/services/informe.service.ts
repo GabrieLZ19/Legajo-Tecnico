@@ -393,6 +393,9 @@ export const informeService = {
     if (typeof restData.declaracion_legal === "string") {
       restData.declaracion_legal = sanitizeRichHtml(restData.declaracion_legal);
     }
+    if ("evidencias_urls" in restData) {
+      (restData as Record<string, unknown>).url_pdf_generado = null;
+    }
 
     const { error } = await supabaseAdmin
       .from("informes_visita")

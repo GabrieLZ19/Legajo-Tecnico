@@ -13,6 +13,202 @@ import {
 import { storageService } from "./storage.service";
 import { safeExtensionFromUpload } from "../config/multer";
 import { HttpError } from "../utils/httpError";
+import {
+  clampInt,
+  parseDateFilter,
+  parseHistoricoResultado,
+  sanitizeSearchTerm,
+  type HistoricoResultadoFiltro,
+} from "../utils/searchSanitize";
+
+const HISTORICO_PAGE_DEFAULT = 25;
+const HISTORICO_PAGE_MAX = 100;
+const HISTORICO_EXPORT_MAX = 10_000;
+const HISTORICO_EXPORT_BATCH = 500;
+const MAX_PARTICIPANTES_MANUAL = 200;
+
+export type ParticipanteManualInput = {
+  nombre_empleado: string;
+  dni_empleado: string;
+  calificacion?: number;
+  sector?: string;
+};
+
+export function parseParticipantesManuales(raw: unknown): ParticipanteManualInput[] {
+  if (raw === undefined || raw === null || raw === "") return [];
+
+  let parsed: unknown;
+  if (typeof raw === "string") {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new HttpError(400, "El formato de participantes no es válido");
+    }
+  } else if (Array.isArray(raw)) {
+    parsed = raw;
+  } else {
+    throw new HttpError(400, "El formato de participantes no es válido");
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new HttpError(400, "El formato de participantes no es válido");
+  }
+
+  if (parsed.length > MAX_PARTICIPANTES_MANUAL) {
+    throw new HttpError(
+      400,
+      `Podés cargar hasta ${MAX_PARTICIPANTES_MANUAL} participantes por registro`,
+    );
+  }
+
+  const seenDni = new Set<string>();
+  const result: ParticipanteManualInput[] = [];
+
+  for (const item of parsed) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    const nombre = String(row.nombre_empleado ?? row.nombre ?? "")
+      .trim()
+      .slice(0, 120);
+    const dni = String(row.dni_empleado ?? row.dni ?? "").replace(/\D/g, "");
+
+    if (!nombre && !dni) continue;
+    if (!nombre) {
+      throw new HttpError(400, "Cada participante debe tener nombre");
+    }
+    if (!/^\d{7,8}$/.test(dni)) {
+      throw new HttpError(
+        400,
+        `DNI inválido para «${nombre}». Debe tener 7 u 8 dígitos.`,
+      );
+    }
+    if (seenDni.has(dni)) {
+      throw new HttpError(400, `El DNI ${dni} está repetido en la lista`);
+    }
+    seenDni.add(dni);
+
+    let calificacion: number | undefined;
+    const rawCalif = row.calificacion;
+    if (rawCalif !== undefined && rawCalif !== null && rawCalif !== "") {
+      calificacion = Math.round(Number(rawCalif));
+      if (Number.isNaN(calificacion) || calificacion < 0 || calificacion > 100) {
+        throw new HttpError(
+          400,
+          `Calificación inválida para «${nombre}». Usá un valor entre 0 y 100.`,
+        );
+      }
+    }
+
+    const sector = String(row.sector ?? "").trim().slice(0, 80) || undefined;
+    result.push({
+      nombre_empleado: nombre,
+      dni_empleado: dni,
+      calificacion,
+      sector,
+    });
+  }
+
+  return result;
+}
+
+async function insertarAsistenciasManuales(
+  capacitacionId: string,
+  firmadoAt: string,
+  participantes: ParticipanteManualInput[],
+) {
+  if (participantes.length === 0) return;
+
+  const rows = participantes.map((p) => ({
+    capacitacion_id: capacitacionId,
+    nombre_empleado: p.nombre_empleado,
+    documento: p.dni_empleado,
+    sector: p.sector ?? null,
+    puntaje: p.calificacion != null ? p.calificacion : 100,
+    firma_url: null,
+    firmado_at: firmadoAt,
+  }));
+
+  const { error } = await supabaseAdmin
+    .from("capacitacion_asistencias")
+    .insert(rows);
+
+  if (error) throw error;
+}
+
+function historicoCalificacionMeta(
+  cap: { con_evaluacion?: boolean; origen?: string } | null,
+  puntajeRaw: unknown,
+) {
+  const puntaje = Number(puntajeRaw ?? 100);
+  const esManual = cap?.origen === "manual";
+  const conEvaluacion = cap?.con_evaluacion !== false;
+  const tieneCalifManual = esManual && puntaje !== 100;
+  const mostrarCalif = conEvaluacion || tieneCalifManual;
+
+  return {
+    calificacion: mostrarCalif ? puntaje : null,
+    aprobado: mostrarCalif ? puntaje >= 60 : true,
+    con_evaluacion: mostrarCalif,
+  };
+}
+
+export type HistoricoFiltros = {
+  participante?: string;
+  tema?: string;
+  fecha_desde?: string;
+  fecha_hasta?: string;
+  resultado?: HistoricoResultadoFiltro;
+  limit?: number;
+  offset?: number;
+};
+
+function applyHistoricoFilters(query: any, opts: HistoricoFiltros) {
+  const qParticipante = sanitizeSearchTerm(opts.participante);
+  if (qParticipante) {
+    const digits = qParticipante.replace(/\D/g, "");
+    const safe = qParticipante.replace(/'/g, "''");
+    if (digits.length >= 3) {
+      query = query.or(
+        `nombre_empleado.ilike.%${safe}%,documento.ilike.%${digits}%`,
+      );
+    } else {
+      query = query.or(
+        `nombre_empleado.ilike.%${safe}%,documento.ilike.%${safe}%`,
+      );
+    }
+  }
+
+  const qTema = sanitizeSearchTerm(opts.tema);
+  if (qTema) {
+    const safeTema = qTema.replace(/'/g, "''");
+    query = query.ilike("capacitaciones.titulo", `%${safeTema}%`);
+  }
+
+  const desde = parseDateFilter(opts.fecha_desde);
+  if (desde) {
+    query = query.gte("capacitaciones.fecha", `${desde}T00:00:00`);
+  }
+
+  const hasta = parseDateFilter(opts.fecha_hasta);
+  if (hasta) {
+    query = query.lte("capacitaciones.fecha", `${hasta}T23:59:59.999`);
+  }
+
+  const resultado = opts.resultado ?? "todos";
+  if (resultado === "aprobado") {
+    query = query
+      .eq("capacitaciones.con_evaluacion", true)
+      .gte("puntaje", 60);
+  } else if (resultado === "desaprobado") {
+    query = query
+      .eq("capacitaciones.con_evaluacion", true)
+      .lt("puntaje", 60);
+  } else if (resultado === "sin_evaluacion") {
+    query = query.eq("capacitaciones.con_evaluacion", false);
+  }
+
+  return query;
+}
 
 function esRespuestaMultiple(raw: unknown): boolean {
   if (Array.isArray(raw)) return true;
@@ -258,32 +454,47 @@ export const capacitacionesService = {
     instructor?: string;
     fechas_horario?: string;
     cantidad_horas?: string;
-    file: Express.Multer.File;
+    file?: Express.Multer.File;
+    participantes?: ParticipanteManualInput[];
   }) {
     const fecha = new Date(params.fecha);
     if (Number.isNaN(fecha.getTime())) {
       throw new HttpError(400, "La fecha y hora del registro no son válidas");
     }
 
+    const participantes = params.participantes ?? [];
+    if (!params.file && participantes.length === 0) {
+      throw new HttpError(
+        400,
+        "Adjuntá el escaneo del registro o cargá al menos un participante.",
+      );
+    }
+
     const titulo =
       (params.titulo || "").trim() ||
       "Registro de capacitación (manual)";
 
-    const ext = safeExtensionFromUpload(params.file);
-    const safeName = (params.file.originalname || `registro.${ext}`)
-      .replace(/[^\w.\-]+/g, "_")
-      .slice(0, 120);
-    const storagePath = `${params.empresa_id}/${Date.now()}_${randomUUID().slice(0, 8)}_${safeName}`;
+    let registroUrl: string | null = null;
+    let registroNombre: string | null = null;
 
-    await storageService.subirArchivo(
-      "capacitacion_registros",
-      storagePath,
-      params.file,
-    );
-    const registroUrl = storageService.obtenerUrlPublica(
-      "capacitacion_registros",
-      storagePath,
-    );
+    if (params.file) {
+      const ext = safeExtensionFromUpload(params.file);
+      const safeName = (params.file.originalname || `registro.${ext}`)
+        .replace(/[^\w.\-]+/g, "_")
+        .slice(0, 120);
+      const storagePath = `${params.empresa_id}/${Date.now()}_${randomUUID().slice(0, 8)}_${safeName}`;
+
+      await storageService.subirArchivo(
+        "capacitacion_registros",
+        storagePath,
+        params.file,
+      );
+      registroUrl = storageService.obtenerUrlPublica(
+        "capacitacion_registros",
+        storagePath,
+      );
+      registroNombre = params.file.originalname || safeName;
+    }
 
     const { data: cap, error } = await supabaseAdmin
       .from("capacitaciones")
@@ -301,12 +512,21 @@ export const capacitacionesService = {
         estado: "cerrada",
         origen: "manual",
         registro_manual_url: registroUrl,
-        registro_manual_nombre: params.file.originalname || safeName,
+        registro_manual_nombre: registroNombre,
       })
       .select()
       .single();
 
     if (error) throw error;
+
+    if (participantes.length > 0) {
+      await insertarAsistenciasManuales(
+        cap.id,
+        fecha.toISOString(),
+        participantes,
+      );
+    }
+
     return firmarUrlsCapacitacion(cap);
   },
 
@@ -1001,4 +1221,143 @@ export const capacitacionesService = {
     if (error) throw error;
     return { data: await firmarUrlsCapacitacion(data) };
   },
+
+  /**
+   * Base histórica paginada: asistencias de la empresa con tema y calificación.
+   */
+  async listarHistorico(empresaId: string, opts: HistoricoFiltros = {}) {
+    const limit = clampInt(opts.limit, HISTORICO_PAGE_DEFAULT, 1, HISTORICO_PAGE_MAX);
+    const offset = clampInt(opts.offset, 0, 0, 500_000);
+
+    let query = supabaseAdmin
+      .from("capacitacion_asistencias")
+      .select(
+        `
+        id,
+        capacitacion_id,
+        nombre_empleado,
+        documento,
+        puntaje,
+        firmado_at,
+        capacitaciones!inner (
+          titulo,
+          fecha,
+          con_evaluacion,
+          origen,
+          empresa_id
+        )
+      `,
+        { count: "exact" },
+      )
+      .eq("capacitaciones.empresa_id", empresaId);
+
+    query = applyHistoricoFilters(query, opts);
+
+    const { data, error, count } = await query
+      .order("firmado_at", { ascending: false, nullsFirst: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) throw error;
+
+    const registros = mapHistoricoRows(data ?? []);
+
+    return {
+      registros,
+      total: count ?? 0,
+      limit,
+      offset,
+    };
+  },
+
+  async exportarHistorico(empresaId: string, opts: HistoricoFiltros = {}) {
+    const allRows: CapacitacionHistoricoRow[] = [];
+    let offset = 0;
+    let total = 0;
+
+    do {
+      const page = await this.listarHistorico(empresaId, {
+        ...opts,
+        limit: HISTORICO_EXPORT_BATCH,
+        offset,
+      });
+      total = page.total;
+      allRows.push(...page.registros);
+      offset += HISTORICO_EXPORT_BATCH;
+      if (allRows.length >= HISTORICO_EXPORT_MAX) break;
+    } while (offset < total);
+
+    if (total > HISTORICO_EXPORT_MAX) {
+      throw new HttpError(
+        400,
+        `Hay más de ${HISTORICO_EXPORT_MAX} registros. Acotá los filtros antes de exportar.`,
+      );
+    }
+
+    const escape = (value: string) => {
+      const s = String(value ?? "");
+      if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+      return s;
+    };
+
+    const header = "Participante,DNI,Tema de capacitación,Fecha,Calificación";
+    const lines = allRows.map((r) => {
+      const calif = r.con_evaluacion
+        ? `${r.calificacion ?? 0}%`
+        : "Asistió";
+      const fecha = r.fecha
+        ? new Date(r.fecha).toLocaleString("es-AR", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : "";
+      return [
+        escape(r.participante),
+        escape(r.dni),
+        escape(r.tema),
+        escape(fecha),
+        escape(calif),
+      ].join(",");
+    });
+
+    const csv = `\uFEFF${header}\n${lines.join("\n")}`;
+    return Buffer.from(csv, "utf-8");
+  },
+};
+
+function mapHistoricoRows(rows: any[]): CapacitacionHistoricoRow[] {
+  return rows.map((row) => {
+    const cap = row.capacitaciones as {
+      titulo?: string;
+      fecha?: string;
+      con_evaluacion?: boolean;
+      origen?: string;
+    } | null;
+    const califMeta = historicoCalificacionMeta(cap, row.puntaje);
+    return {
+      id: row.id,
+      capacitacion_id: row.capacitacion_id,
+      participante: row.nombre_empleado ?? "",
+      dni: row.documento ?? "",
+      tema: cap?.titulo ?? "—",
+      fecha: cap?.fecha || row.firmado_at || "",
+      calificacion: califMeta.calificacion,
+      aprobado: califMeta.aprobado,
+      con_evaluacion: califMeta.con_evaluacion,
+    };
+  });
+}
+
+export type CapacitacionHistoricoRow = {
+  id: string;
+  capacitacion_id: string;
+  participante: string;
+  dni: string;
+  tema: string;
+  fecha: string;
+  calificacion: number | null;
+  aprobado: boolean;
+  con_evaluacion: boolean;
 };

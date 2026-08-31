@@ -19,6 +19,7 @@ import {
   assertEmpleadoAccess,
   assertEntregaAccess,
 } from "../middlewares/empresaAccess";
+import { actualizarVisibilidadEnte } from "../services/visibilidadEnte.service";
 
 function param(value: string | string[] | undefined): string {
   if (Array.isArray(value)) return value[0];
@@ -268,6 +269,25 @@ export const eppController = {
       });
       const data = await eppService.cargarCotizacionPublica(parsed.params.token, parsed.body);
       res.json({ success: true, cotizacion: data });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async actualizarVisibilidadEnteEntrega(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parsed = idParamSchema.parse({ params: { id: param(req.params.id) } });
+      const { visible_ente_regulador } = req.body;
+      if (typeof visible_ente_regulador !== "boolean") {
+        return res.status(400).json({ error: "visible_ente_regulador debe ser boolean" });
+      }
+      await assertEntregaAccess(requireUser(req), parsed.params.id);
+      const data = await actualizarVisibilidadEnte(
+        "epp_entregas",
+        parsed.params.id,
+        visible_ente_regulador,
+      );
+      res.json(data);
     } catch (error) {
       next(error);
     }

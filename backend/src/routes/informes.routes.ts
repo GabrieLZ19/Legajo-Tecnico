@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { validate } from '../middlewares/validate';
 import { requireAuth, requireRole } from '../middlewares/auth';
 import { crearInformeSchema, editarInformeSchema, firmaSchema, subirEvidenciaSchema } from '../schemas/informe.schema';
+import { visibilidadEnteSchema } from '../schemas/planAccion.schema';
 import { informesController } from '../controllers/informes.controller';
 import { upload } from '../config/multer';
 
@@ -16,6 +17,12 @@ router.post('/', puedeEscribirInforme, validate(crearInformeSchema), informesCon
 router.get('/', informesController.listarInformes);
 router.get('/:id', informesController.obtenerInforme);
 router.patch('/:id', puedeEscribirInforme, validate(editarInformeSchema), informesController.editarInforme);
+router.patch(
+  '/:id/visibilidad-ente',
+  puedeEscribirInforme,
+  validate(visibilidadEnteSchema),
+  informesController.actualizarVisibilidadEnte,
+);
 router.delete('/:id', puedeEscribirInforme, informesController.eliminarInforme);
 
 // Subida de archivos (acepta hasta 10 imágenes)

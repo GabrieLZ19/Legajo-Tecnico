@@ -82,12 +82,22 @@ export const enteService = {
   async obtenerDashboard(enteId: string) {
     const asignadas = await this.listarEmpresasAsignadas(enteId);
     const conMetricas = asignadas.filter((a) => a.permisos.metricas);
-    const empresaIds = conMetricas.map((a) => a.empresa_id);
+    const empresaIdsMetricas = conMetricas.map((a) => a.empresa_id);
 
-    if (empresaIds.length === 0) {
+    const informeEmpresaIds = asignadas
+      .filter((a) => a.permisos.informes)
+      .map((a) => a.empresa_id);
+    const capEmpresaIds = asignadas
+      .filter((a) => a.permisos.capacitaciones)
+      .map((a) => a.empresa_id);
+    const eppEmpresaIds = asignadas
+      .filter((a) => a.permisos.epp)
+      .map((a) => a.empresa_id);
+
+    if (asignadas.length === 0) {
       return {
         empresas: asignadas,
-        totalEmpresas: asignadas.length,
+        totalEmpresas: 0,
         totalInformes: 0,
         totalCapacitaciones: 0,
         totalEntregasEpp: 0,
@@ -95,34 +105,43 @@ export const enteService = {
       };
     }
 
-    const [{ count: totalInformes }, { count: totalCapacitaciones }, { count: totalEntregasEpp }, { count: observacionesAbiertas }] =
-      await Promise.all([
-        supabaseAdmin
-          .from("informes_visita")
-          .select("*", { count: "exact", head: true })
-          .in("empresa_id", empresaIds),
-        supabaseAdmin
-          .from("capacitaciones")
-          .select("*", { count: "exact", head: true })
-          .in("empresa_id", empresaIds),
-        supabaseAdmin
-          .from("epp_entregas")
-          .select("*", { count: "exact", head: true })
-          .in("empresa_id", empresaIds),
-        supabaseAdmin
-          .from("acciones_mejora")
-          .select("*", { count: "exact", head: true })
-          .eq("estado", "pendiente")
-          .in("empresa_id", empresaIds),
-      ]);
+    const countVisible = async (
+      table: "informes_visita" | "capacitaciones" | "epp_entregas" | "acciones_mejora",
+      empresaIds: string[],
+      extra?: { estado?: string },
+    ) => {
+      if (empresaIds.length === 0) return 0;
+      let query = supabaseAdmin
+        .from(table)
+        .select("*", { count: "exact", head: true })
+        .in("empresa_id", empresaIds)
+        .eq("visible_ente_regulador", true);
+      if (extra?.estado) {
+        query = query.eq("estado", extra.estado);
+      }
+      const { count } = await query;
+      return count ?? 0;
+    };
+
+    const [
+      totalInformes,
+      totalCapacitaciones,
+      totalEntregasEpp,
+      observacionesAbiertas,
+    ] = await Promise.all([
+      countVisible("informes_visita", informeEmpresaIds),
+      countVisible("capacitaciones", capEmpresaIds),
+      countVisible("epp_entregas", eppEmpresaIds),
+      countVisible("acciones_mejora", empresaIdsMetricas, { estado: "pendiente" }),
+    ]);
 
     return {
       empresas: asignadas,
       totalEmpresas: asignadas.length,
-      totalInformes: totalInformes ?? 0,
-      totalCapacitaciones: totalCapacitaciones ?? 0,
-      totalEntregasEpp: totalEntregasEpp ?? 0,
-      observacionesAbiertas: observacionesAbiertas ?? 0,
+      totalInformes,
+      totalCapacitaciones,
+      totalEntregasEpp,
+      observacionesAbiertas,
     };
   },
 
@@ -133,30 +152,42 @@ export const enteService = {
       informe: [],
       capacitacion: [],
       epp: [],
+      accion: [],
     };
 
     for (const row of asignadas) {
       if (row.permisos.informes) empresaIdsByTipo.informe.push(row.empresa_id);
-      if (row.permisos.capacitaciones) empresaIdsByTipo.capacitacion.push(row.empresa_id);
+      if (row.permisos.capacitaciones) {
+        empresaIdsByTipo.capacitacion.push(row.empresa_id);
+      }
       if (row.permisos.epp) empresaIdsByTipo.epp.push(row.empresa_id);
+      if (row.permisos.metricas) empresaIdsByTipo.accion.push(row.empresa_id);
     }
 
     const incluir: TipoDocumentoArchivo[] = [];
     if (empresaIdsByTipo.informe.length) incluir.push("informe");
     if (empresaIdsByTipo.capacitacion.length) incluir.push("capacitacion");
     if (empresaIdsByTipo.epp.length) incluir.push("epp");
+    if (empresaIdsByTipo.accion.length) incluir.push("accion");
 
     const empresaIds = Array.from(
       new Set([
         ...empresaIdsByTipo.informe,
         ...empresaIdsByTipo.capacitacion,
         ...empresaIdsByTipo.epp,
+        ...empresaIdsByTipo.accion,
       ]),
     );
 
-    const { documentos } = await archivoService.listar({ empresaIds, incluir });
+    const { documentos } = await archivoService.listar({
+      empresaIds,
+      incluir,
+      soloVisibleEnte: true,
+    });
     return {
-      documentos: documentos.filter((doc) => empresaIdsByTipo[doc.tipo].includes(doc.empresa_id)),
+      documentos: documentos.filter((doc) =>
+        empresaIdsByTipo[doc.tipo].includes(doc.empresa_id),
+      ),
       empresas: asignadas,
     };
   },

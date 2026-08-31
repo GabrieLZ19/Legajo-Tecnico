@@ -1,7 +1,27 @@
 import { Request, Response, NextFunction } from "express";
-import { capacitacionesService } from "../services/capacitaciones.service";
+import {
+  capacitacionesService,
+  parseParticipantesManuales,
+} from "../services/capacitaciones.service";
 import { assertCapacitacionAccess, assertEmpresaAccess } from "../middlewares/empresaAccess";
+import { actualizarVisibilidadEnte } from "../services/visibilidadEnte.service";
 import { HttpError } from "../utils/httpError";
+import { clampInt, parseDateFilter, parseHistoricoResultado } from "../utils/searchSanitize";
+import type { HistoricoFiltros } from "../services/capacitaciones.service";
+
+function parseHistoricoQuery(req: Request): HistoricoFiltros {
+  return {
+    participante: req.query.participante
+      ? String(req.query.participante)
+      : undefined,
+    tema: req.query.tema ? String(req.query.tema) : undefined,
+    fecha_desde: parseDateFilter(req.query.fecha_desde),
+    fecha_hasta: parseDateFilter(req.query.fecha_hasta),
+    resultado: parseHistoricoResultado(req.query.resultado),
+    limit: clampInt(req.query.limit, 25, 1, 100),
+    offset: clampInt(req.query.offset, 0, 0, 500_000),
+  };
+}
 
 const MAX_FIRMA_CHARS = 400_000;
 
@@ -51,13 +71,16 @@ export const capacitacionesController = {
           .status(400)
           .json({ error: "La fecha y hora del registro son obligatorias" });
       }
-      if (!file) {
+      await assertEmpresaAccess(req.user!, empresaId);
+      const participantes = parseParticipantesManuales(req.body.participantes);
+
+      if (!file && participantes.length === 0) {
         return res.status(400).json({
-          error: "Debés adjuntar el registro escaneado (imagen o PDF)",
+          error:
+            "Adjuntá el escaneo del registro (Paso 2) o cargá al menos un participante (Paso 3).",
         });
       }
 
-      await assertEmpresaAccess(req.user!, empresaId);
       const cap = await capacitacionesService.crearRegistroManual({
         empresa_id: empresaId,
         preventor_id: req.user!.id,
@@ -66,10 +89,14 @@ export const capacitacionesController = {
         instructor: req.body.instructor,
         fechas_horario: req.body.fechas_horario,
         cantidad_horas: req.body.cantidad_horas,
-        file,
+        file: file ?? undefined,
+        participantes,
       });
       res.status(201).json(cap);
     } catch (error) {
+      if (error instanceof HttpError) {
+        return res.status(error.statusCode).json({ error: error.message });
+      }
       next(error);
     }
   },
@@ -349,6 +376,74 @@ export const capacitacionesController = {
       res.json(result.data);
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Error al guardar registro" });
+    }
+  },
+
+  async actualizarVisibilidadEnte(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = String(req.params.id);
+      const { visible_ente_regulador } = req.body;
+      if (typeof visible_ente_regulador !== "boolean") {
+        return res.status(400).json({ error: "visible_ente_regulador debe ser boolean" });
+      }
+      await assertCapacitacionAccess(req.user!, id);
+      const data = await actualizarVisibilidadEnte(
+        "capacitaciones",
+        id,
+        visible_ente_regulador,
+      );
+      res.json(data);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async historico(req: Request, res: Response, next: NextFunction) {
+    try {
+      const empresaId = String(req.query.empresa_id || "");
+      if (!empresaId) {
+        return res.status(400).json({ error: "empresa_id es requerido" });
+      }
+      await assertEmpresaAccess(req.user!, empresaId);
+      const result = await capacitacionesService.listarHistorico(
+        empresaId,
+        parseHistoricoQuery(req),
+      );
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async exportarHistorico(req: Request, res: Response, next: NextFunction) {
+    try {
+      const empresaId = String(req.query.empresa_id || "");
+      if (!empresaId) {
+        return res.status(400).json({ error: "empresa_id es requerido" });
+      }
+      await assertEmpresaAccess(req.user!, empresaId);
+      const filtros = parseHistoricoQuery(req);
+      const buffer = await capacitacionesService.exportarHistorico(
+        empresaId,
+        {
+          participante: filtros.participante,
+          tema: filtros.tema,
+          fecha_desde: filtros.fecha_desde,
+          fecha_hasta: filtros.fecha_hasta,
+          resultado: filtros.resultado,
+        },
+      );
+      res.setHeader("Content-Type", "text/csv;charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename=base_historica_capacitaciones_${empresaId.slice(0, 8)}.csv`,
+      );
+      res.send(buffer);
+    } catch (error) {
+      if (error instanceof HttpError) {
+        return res.status(error.statusCode).json({ error: error.message });
+      }
+      next(error);
     }
   },
 };

@@ -5,6 +5,7 @@ import { supabaseAdmin } from '../config/supabase';
 import { storageService } from '../services/storage.service';
 import { pdfService } from '../services/pdf.service';
 import { assertEmpresaAccess, assertInformeAccess, requireConsultoraId } from '../middlewares/empresaAccess';
+import { actualizarVisibilidadEnte } from '../services/visibilidadEnte.service';
 import { safeExtensionFromUpload } from '../config/multer';
 import { randomUUID } from 'crypto';
 
@@ -186,13 +187,33 @@ export const informesController = {
           .update({ evidencia_url: urls[0] })
           .eq('id', punto_mejora_id);
         dbError = error;
+        if (!dbError) {
+          await supabaseAdmin
+            .from('informes_visita')
+            .update({ url_pdf_generado: null })
+            .eq('id', informeId);
+        }
       } else {
-        // Guardar como evidencias generales del informe de visita
-        const { error } = await supabaseAdmin
+        // Agregar a evidencias generales del informe (no reemplazar las existentes)
+        const { data: current, error: errCurrent } = await supabaseAdmin
           .from('informes_visita')
-          .update({ evidencias_urls: urls })
-          .eq('id', informeId);
-        dbError = error;
+          .select('evidencias_urls')
+          .eq('id', informeId)
+          .single();
+
+        if (errCurrent || !current) {
+          dbError = errCurrent;
+        } else {
+          const merged = [...(current.evidencias_urls || []), ...urls];
+          const { error } = await supabaseAdmin
+            .from('informes_visita')
+            .update({ evidencias_urls: merged, url_pdf_generado: null })
+            .eq('id', informeId);
+          dbError = error;
+          if (!dbError) {
+            urls.splice(0, urls.length, ...merged);
+          }
+        }
       }
 
       if (dbError) {
@@ -226,5 +247,24 @@ export const informesController = {
     } catch (error) {
       next(error);
     }
-  }
+  },
+
+  async actualizarVisibilidadEnte(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = req.params.id as string;
+      const { visible_ente_regulador } = req.body;
+      if (typeof visible_ente_regulador !== 'boolean') {
+        return res.status(400).json({ error: 'visible_ente_regulador debe ser boolean' });
+      }
+      await assertInformeAccess(req.user!, id);
+      const data = await actualizarVisibilidadEnte(
+        'informes_visita',
+        id,
+        visible_ente_regulador,
+      );
+      res.json(data);
+    } catch (error) {
+      next(error);
+    }
+  },
 };

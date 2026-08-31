@@ -130,7 +130,7 @@ export const planAccionService = {
   },
 
   async actualizarEstado(accionId: string, estado: EstadoAccion) {
-    const updateData: any = { estado };
+    const updateData: Record<string, unknown> = { estado };
     
     if (estado === 'cumplida' || estado === 'atendida') {
       updateData.fecha_cumplimiento = new Date().toISOString();
@@ -152,5 +152,75 @@ export const planAccionService = {
     }
 
     return data;
-  }
+  },
+
+  async actualizarAccion(
+    accionId: string,
+    patch: { estado?: EstadoAccion; visible_ente_regulador?: boolean },
+  ) {
+    const updateData: Record<string, unknown> = {};
+
+    if (patch.visible_ente_regulador !== undefined) {
+      updateData.visible_ente_regulador = patch.visible_ente_regulador;
+    }
+
+    if (patch.estado !== undefined) {
+      updateData.estado = patch.estado;
+      if (patch.estado === 'cumplida' || patch.estado === 'atendida') {
+        updateData.fecha_cumplimiento = new Date().toISOString();
+      } else {
+        updateData.fecha_cumplimiento = null;
+      }
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('acciones_mejora')
+      .update(updateData)
+      .eq('id', accionId)
+      .select(
+        '*, informes_visita(numero_informe, fecha_hora_visita, lugar_visita)',
+      )
+      .single();
+
+    if (error) throw error;
+
+    if (patch.estado !== undefined && data?.empresa_id) {
+      await recalcularCumplimientoEmpresa(data.empresa_id);
+    }
+
+    return data;
+  },
+
+  async crearManual(
+    empresaId: string,
+    payload: {
+      descripcion: string;
+      responsable?: string;
+      sector?: string;
+      visible_ente_regulador?: boolean;
+    },
+  ) {
+    const { data, error } = await supabaseAdmin
+      .from('acciones_mejora')
+      .insert({
+        empresa_id: empresaId,
+        informe_id: null,
+        punto_mejora_id: null,
+        descripcion: payload.descripcion.trim(),
+        responsable: payload.responsable?.trim() || null,
+        sector: payload.sector?.trim() || 'Planta',
+        es_manual: true,
+        visible_ente_regulador: payload.visible_ente_regulador ?? false,
+        estado: 'pendiente',
+      })
+      .select(
+        '*, informes_visita(numero_informe, fecha_hora_visita, lugar_visita)',
+      )
+      .single();
+
+    if (error) throw error;
+
+    await recalcularCumplimientoEmpresa(empresaId);
+    return data;
+  },
 };

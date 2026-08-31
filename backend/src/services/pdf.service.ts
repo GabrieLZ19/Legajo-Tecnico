@@ -72,13 +72,59 @@ function limpiarHtmlParaPdf(html: string): string {
   return texto;
 }
 
-/** Extrae el Date.now() embebido en `informe_{n}_{timestamp}.pdf`. */
+/** Versión del layout/contenido del PDF. Subir al cambiar secciones (ej. evidencias de visita). */
+const PDF_TEMPLATE_VERSION = 2;
+
+/** Extrae el Date.now() embebido en `informe_{n}_{timestamp}.pdf` o `..._{timestamp}_v2.pdf`. */
 function extractPdfGeneratedAtMs(url: string | null | undefined): number | null {
   if (!url) return null;
-  const match = url.match(/informe_\d+_(\d+)\.pdf/i);
+  const match = url.match(/informe_\d+_(\d+)(?:_v\d+)?\.pdf/i);
   if (!match) return null;
   const ts = Number(match[1]);
   return Number.isFinite(ts) ? ts : null;
+}
+
+function extractPdfTemplateVersion(url: string | null | undefined): number {
+  if (!url) return 0;
+  const match = url.match(/_v(\d+)\.pdf/i);
+  if (match) {
+    const v = Number(match[1]);
+    return Number.isFinite(v) ? v : 1;
+  }
+  return 1;
+}
+
+function pdfCacheEstaDesactualizado(opts: {
+  urlPdf: string | null | undefined;
+  updatedAt: string | null | undefined;
+  latestFirmaMs: number;
+}): boolean {
+  const { urlPdf, updatedAt, latestFirmaMs } = opts;
+
+  if (!urlPdf) return true;
+  if (extractPdfTemplateVersion(urlPdf) < PDF_TEMPLATE_VERSION) return true;
+
+  const pdfGeneratedAtMs = extractPdfGeneratedAtMs(urlPdf);
+  if (pdfGeneratedAtMs === null) return true;
+
+  const informeUpdatedAtMs = updatedAt
+    ? new Date(updatedAt).getTime()
+    : 0;
+  if (
+    informeUpdatedAtMs > 0 &&
+    informeUpdatedAtMs > pdfGeneratedAtMs + 500
+  ) {
+    return true;
+  }
+
+  if (
+    latestFirmaMs > 0 &&
+    (pdfGeneratedAtMs === null || latestFirmaMs > pdfGeneratedAtMs)
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 export const pdfService = {
@@ -97,7 +143,9 @@ export const pdfService = {
   ): Promise<{ url: string; filename: string }> {
     const { data: informe, error } = await supabaseAdmin
       .from("informes_visita")
-      .select("id, numero_informe, url_pdf_generado, firmas_informe(firmado_at)")
+      .select(
+        "id, numero_informe, url_pdf_generado, updated_at, firmas_informe(firmado_at)",
+      )
       .eq("id", informeId)
       .single();
 
@@ -117,10 +165,11 @@ export const pdfService = {
       const t = new Date(f.firmado_at).getTime();
       return Number.isFinite(t) && t > max ? t : max;
     }, 0);
-    const pdfGeneratedAtMs = extractPdfGeneratedAtMs(informe.url_pdf_generado);
-    const pdfEstaDesactualizado =
-      latestFirmaMs > 0 &&
-      (pdfGeneratedAtMs === null || latestFirmaMs > pdfGeneratedAtMs);
+    const pdfEstaDesactualizado = pdfCacheEstaDesactualizado({
+      urlPdf: informe.url_pdf_generado,
+      updatedAt: informe.updated_at,
+      latestFirmaMs,
+    });
 
     let storageUrl: string | null = null;
 
@@ -188,7 +237,7 @@ export const pdfService = {
       doc.on("end", async () => {
         try {
           const pdfBuffer = Buffer.concat(buffers);
-          const filePath = `${informe.empresa_id}/informe_${informe.numero_informe}_${Date.now()}.pdf`;
+          const filePath = `${informe.empresa_id}/informe_${informe.numero_informe}_${Date.now()}_v${PDF_TEMPLATE_VERSION}.pdf`;
           const filename = `constancia_visita_${informe.numero_informe}.pdf`;
 
           // Subir a Supabase Storage
@@ -412,6 +461,83 @@ export const pdfService = {
             });
             doc.moveDown(1.5);
           }
+        }
+
+        // 2b. Evidencia fotográfica general de la visita (independiente de observaciones)
+        const evidenciasVisita = (informe.evidencias_urls || []).filter(
+          (url: string) => Boolean(url),
+        );
+        if (evidenciasVisita.length > 0) {
+          yPos = doc.y;
+          if (yPos > 650) {
+            doc.addPage();
+            yPos = 50;
+          }
+
+          doc.rect(50, yPos, 495, 20).fill(secondaryColor);
+          doc
+            .fillColor("#FFFFFF")
+            .font("Helvetica-Bold")
+            .fontSize(9)
+            .text("EVIDENCIA FOTOGRÁFICA DE LA VISITA", 55, yPos + 6);
+
+          const cols = 3;
+          const cellW = 155;
+          const imgH = 100;
+          const rowH = imgH + 18;
+          const gapX = 12;
+          let currentY = yPos + 20 + 10;
+
+          for (let rowStart = 0; rowStart < evidenciasVisita.length; rowStart += cols) {
+            if (currentY + rowH > 740) {
+              doc.addPage();
+              currentY = 50;
+            }
+
+            const rowUrls = evidenciasVisita.slice(rowStart, rowStart + cols);
+            for (let col = 0; col < rowUrls.length; col++) {
+              const url = rowUrls[col];
+              const x = 50 + col * (cellW + gapX);
+              const fotoBuffer = await descargarImagenBuffer(url, {
+                maxWidth: 700,
+              });
+
+              doc
+                .roundedRect(x, currentY, cellW, imgH, 4)
+                .strokeColor("#E5E7EB")
+                .lineWidth(0.8)
+                .stroke();
+
+              if (fotoBuffer) {
+                try {
+                  doc.image(fotoBuffer, x + 2, currentY + 2, {
+                    fit: [cellW - 4, imgH - 4],
+                    align: "center",
+                    valign: "center",
+                  });
+                } catch (imgError) {
+                  console.error(
+                    "Error al renderizar imagen de visita en el PDF:",
+                    imgError,
+                  );
+                }
+              }
+
+              doc
+                .fillColor(secondaryColor)
+                .font("Helvetica")
+                .fontSize(7)
+                .text(`Imagen ${rowStart + col + 1}`, x, currentY + imgH + 4, {
+                  width: cellW,
+                  align: "center",
+                });
+            }
+
+            currentY += rowH;
+          }
+
+          doc.y = currentY + 8;
+          doc.moveDown(1);
         }
 
         // 3. Peligros Detectados (Si existen)

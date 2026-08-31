@@ -45,3 +45,14 @@ export const capacitacionPublicSubmitLimiter = rateLimit({
       "No pudimos registrar tu firma porque hay muchas solicitudes simultáneas. Esperá 30 segundos y tocá «Confirmar Firma» de nuevo sin recargar la página.",
   },
 });
+
+/** Exportaciones CSV de base histórica (evita abuso de CPU/memoria). */
+export const exportHistoricoLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: {
+    error: "Demasiadas exportaciones seguidas. Esperá unos minutos e intentá de nuevo.",
+  },
+});
