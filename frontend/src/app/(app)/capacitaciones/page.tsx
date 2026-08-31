@@ -15,11 +15,14 @@ import {
   CalendarRange,
   FileUp,
   Download,
+  Database,
 } from "lucide-react";
 
 import { useCapacitaciones } from "@/hooks/useCapacitaciones";
 import { canWriteAppModule } from "@/lib/moduleAccess";
 import { useAlert } from "@/context/AlertContext";
+import { VisibleEnteToggle } from "@/components/VisibleEnteToggle";
+import { actualizarVisibilidadCapacitacion } from "@/lib/visibilidadEnte";
 
 export default function CapacitacionesPage() {
   const { user, empresa } = useAuth();
@@ -39,6 +42,7 @@ export default function CapacitacionesPage() {
   const uploadTargetIdRef = useRef<string | null>(null);
 
   const canCreate = canWriteAppModule(user, "capacitaciones");
+  const canEdit = canCreate;
   const canViewPlan = !!user;
 
   useEffect(() => {
@@ -154,6 +158,25 @@ export default function CapacitacionesPage() {
     }
   };
 
+  const handleVisibilidadChange = async (id: string, visible: boolean) => {
+    try {
+      await actualizarVisibilidadCapacitacion(id, visible);
+      setCapacitaciones((prev) =>
+        prev.map((c) =>
+          c.id === id ? { ...c, visible_ente_regulador: visible } : c,
+        ),
+      );
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      showAlert(
+        "error",
+        "Error",
+        axiosErr.response?.data?.error ||
+          "No se pudo actualizar la visibilidad ante el ente regulador.",
+      );
+    }
+  };
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -205,7 +228,8 @@ export default function CapacitacionesPage() {
       </div>
 
       {/* Filtros */}
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex gap-2 flex-wrap">
         {[
           { key: "todas", label: "Todas" },
           { key: "activa", label: "Activas" },
@@ -224,6 +248,17 @@ export default function CapacitacionesPage() {
             {f.label}
           </button>
         ))}
+        </div>
+
+        {canViewPlan && (
+          <Link
+            href="/capacitaciones/base-datos"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 font-bold text-xs cursor-pointer shrink-0"
+          >
+            <Database className="h-4 w-4 text-indigo-600" />
+            Base de datos
+          </Link>
+        )}
       </div>
 
       {/* Lista */}
@@ -321,7 +356,12 @@ export default function CapacitacionesPage() {
                   </div>
                 </div>
               </Link>
-              <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 border-t border-slate-100 sm:border-t-0 pt-3 sm:pt-0">
+              <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 border-t border-slate-100 sm:border-t-0 pt-3 sm:pt-0 flex-wrap">
+                <VisibleEnteToggle
+                  checked={Boolean(cap.visible_ente_regulador)}
+                  disabled={!canEdit}
+                  onChange={(v) => void handleVisibilidadChange(cap.id, v)}
+                />
                 {canCreate && cap.origen !== "manual" && (
                   cap.registro_manual_url ? (
                     <a

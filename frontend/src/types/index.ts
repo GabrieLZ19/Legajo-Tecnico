@@ -79,20 +79,23 @@ export interface PuntoMejora {
 
 export interface AccionMejora {
   id: string;
-  informe_id: string;
+  informe_id: string | null;
   empresa_id: string;
   punto_mejora_id?: string;
   numero_item?: number;
   descripcion: string;
   estado: EstadoAccion;
   responsable?: string;
+  sector?: string;
+  es_manual?: boolean;
+  visible_ente_regulador?: boolean;
   fecha_cumplimiento?: string;
   created_at: string;
   informes_visita?: {
     numero_informe: number;
     fecha_hora_visita: string;
     lugar_visita?: string;
-  };
+  } | null;
 }
 
 export interface FirmaInforme {
@@ -124,6 +127,7 @@ export interface InformeVisita {
   evidencia_url?: string;
   evidencias_urls?: string[];
   estado_firma: EstadoFirmaInforme;
+  visible_ente_regulador?: boolean;
   url_pdf_generado?: string;
   created_at: string;
   updated_at: string;
@@ -181,6 +185,7 @@ export interface Capacitacion {
   firma_empresa_url?: string | null;
   aclaracion_empresa?: string | null;
   estado: EstadoCapacitacion;
+  visible_ente_regulador?: boolean;
   origen?: OrigenCapacitacion;
   registro_manual_url?: string | null;
   registro_manual_nombre?: string | null;
@@ -212,6 +217,34 @@ export interface CapacitacionAsistencia {
   firma_url?: string;
   created_at: string;
 }
+
+export interface CapacitacionHistoricoRow {
+  id: string;
+  capacitacion_id: string;
+  participante: string;
+  dni: string;
+  tema: string;
+  fecha: string;
+  calificacion: number | null;
+  aprobado: boolean;
+  con_evaluacion: boolean;
+}
+
+export type HistoricoResultadoFiltro =
+  | "todos"
+  | "aprobado"
+  | "desaprobado"
+  | "sin_evaluacion";
+
+export type CapacitacionHistoricoFiltros = {
+  participante?: string;
+  tema?: string;
+  fecha_desde?: string;
+  fecha_hasta?: string;
+  resultado?: HistoricoResultadoFiltro;
+  limit?: number;
+  offset?: number;
+};
 
 export interface CapacitacionPlantilla {
   id: string;
@@ -311,7 +344,7 @@ export interface EppLicitacion {
 
 export interface DocumentoArchivo {
   id: string;
-  tipo: "informe" | "capacitacion" | "epp";
+  tipo: "informe" | "capacitacion" | "epp" | "accion";
   titulo: string;
   fecha: string;
   empresa_id: string;
@@ -332,6 +365,7 @@ export interface EppEntrega {
   modelo?: string;
   certificacion?: string;
   fecha_entrega: string;
+  visible_ente_regulador?: boolean;
   firma_url?: string;
   estado: EstadoEntregaEpp;
   pdf_url?: string;

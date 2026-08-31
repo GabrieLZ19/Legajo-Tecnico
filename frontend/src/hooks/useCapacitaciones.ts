@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { api } from "@/lib/api";
-
+import type {
+  CapacitacionHistoricoFiltros,
+  CapacitacionHistoricoRow,
+} from "@/types";
 export function useCapacitaciones() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +50,63 @@ export function useCapacitaciones() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const getHistoricoCapacitaciones = async (
+    empresaId: string,
+    opts?: CapacitacionHistoricoFiltros,
+  ) => {
+    try {
+      const params: Record<string, string | number> = { empresa_id: empresaId };
+      if (opts?.participante?.trim()) {
+        params.participante = opts.participante.trim().slice(0, 80);
+      }
+      if (opts?.tema?.trim()) {
+        params.tema = opts.tema.trim().slice(0, 80);
+      }
+      if (opts?.fecha_desde) params.fecha_desde = opts.fecha_desde;
+      if (opts?.fecha_hasta) params.fecha_hasta = opts.fecha_hasta;
+      if (opts?.resultado && opts.resultado !== "todos") {
+        params.resultado = opts.resultado;
+      }
+      if (opts?.limit != null) params.limit = opts.limit;
+      if (opts?.offset != null) params.offset = opts.offset;
+      const { data } = await api.get("/capacitaciones/historico", { params });
+      return {
+        registros: (data.registros || []) as CapacitacionHistoricoRow[],
+        total: Number(data.total ?? 0),
+        limit: Number(data.limit ?? 25),
+        offset: Number(data.offset ?? 0),
+      };
+    } catch (err: any) {
+      setError(
+        err.response?.data?.error || "Error al cargar la base histórica",
+      );
+      throw err;
+    }
+  };
+
+  const exportarHistoricoCapacitaciones = async (
+    empresaId: string,
+    opts?: Omit<CapacitacionHistoricoFiltros, "limit" | "offset">,
+  ) => {
+    const params = new URLSearchParams({ empresa_id: empresaId });
+    if (opts?.participante?.trim()) {
+      params.set("participante", opts.participante.trim().slice(0, 80));
+    }
+    if (opts?.tema?.trim()) {
+      params.set("tema", opts.tema.trim().slice(0, 80));
+    }
+    if (opts?.fecha_desde) params.set("fecha_desde", opts.fecha_desde);
+    if (opts?.fecha_hasta) params.set("fecha_hasta", opts.fecha_hasta);
+    if (opts?.resultado && opts.resultado !== "todos") {
+      params.set("resultado", opts.resultado);
+    }
+    const response = await api.get(
+      `/capacitaciones/historico/exportar?${params.toString()}`,
+      { responseType: "blob" },
+    );
+    return response.data as Blob;
   };
 
   const evaluarCapacitacion = async (
@@ -287,6 +347,8 @@ export function useCapacitaciones() {
     getCapacitaciones,
     getCapacitacionDetalle,
     getCapacitacionPublica,
+    getHistoricoCapacitaciones,
+    exportarHistoricoCapacitaciones,
     getCapacitacionQr,
     cambiarEstadoCapacitacion,
     eliminarCapacitacion,

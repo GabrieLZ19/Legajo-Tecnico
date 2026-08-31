@@ -147,6 +147,16 @@ export const subirEvidenciaInforme = async (id: string, formData: FormData) => {
   return data;
 };
 
+/** Sube imágenes generales de la visita (sin vincular a una observación). */
+export const subirImagenesVisita = async (id: string, files: File[]) => {
+  if (files.length === 0) return null;
+  const formData = new FormData();
+  for (const file of files) {
+    formData.append('evidencia', file);
+  }
+  return subirEvidenciaInforme(id, formData);
+};
+
 export const firmarInforme = async (
   endpoint: string,
   payload: { firma_base64: string },

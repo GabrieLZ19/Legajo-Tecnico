@@ -7,6 +7,7 @@ import {
   draftHasContent,
   draftKeyEditar,
   draftKeyNuevo,
+  InformeDraftImagenVisita,
   InformeDraftObservacion,
   InformeDraftPayload,
   readInformeDraft,
@@ -36,6 +37,10 @@ type ObsConImagen = InformeDraftObservacion & {
   imagenFile?: File;
 };
 
+type ImagenVisitaConArchivo = InformeDraftImagenVisita & {
+  imagenFile?: File;
+};
+
 type Snapshot = {
   lugar: string;
   actividad: string;
@@ -43,6 +48,7 @@ type Snapshot = {
   hora: string;
   declaracion_legal: string;
   observaciones: ObsConImagen[];
+  imagenes_visita: ImagenVisitaConArchivo[];
 };
 
 type CrearFn = (payload: Record<string, unknown>) => Promise<{
@@ -73,12 +79,19 @@ type Options = {
   editarInforme: EditarFn;
   /** Tras crear borrador en /nuevo. */
   onCreated?: (informeId: string) => void;
-  /** Tras sync exitoso: actualizar ids de puntos_mejora en el form. */
+  /** Tras sync exitoso: actualizar ids de puntos_mejora / evidencias de visita. */
   onSynced?: (res: {
     id: string;
     puntos_mejora?: Array<{ id: string; detalle: string }>;
+    evidencias_urls?: string[];
   }) => void;
 };
+
+function stripImagenesForLocal(
+  imagenes: ImagenVisitaConArchivo[],
+): InformeDraftImagenVisita[] {
+  return imagenes.map(({ id_temp, url }) => ({ id_temp, url }));
+}
 
 function stripObsForLocal(obs: ObsConImagen[]): InformeDraftObservacion[] {
   return obs.map(({ id_temp, id, detalle, acciones, evidencia_url }) => ({
@@ -102,9 +115,13 @@ function fingerprint(snapshot: Snapshot): string {
     hora: snapshot.hora,
     declaracion_legal: snapshot.declaracion_legal,
     observaciones: stripObsForLocal(snapshot.observaciones),
+    imagenes_visita: stripImagenesForLocal(snapshot.imagenes_visita),
     pendingImages: snapshot.observaciones
       .filter((o) => o.imagenFile)
       .map((o) => o.id_temp),
+    pendingVisitImages: snapshot.imagenes_visita
+      .filter((i) => i.imagenFile)
+      .map((i) => i.id_temp),
   });
 }
 
@@ -188,13 +205,17 @@ export function useInformeAutosave(options: Options) {
       hora: snap.hora,
       declaracion_legal: snap.declaracion_legal,
       observaciones: stripObsForLocal(snap.observaciones),
+      imagenes_visita: stripImagenesForLocal(snap.imagenes_visita),
       savedAt: new Date().toISOString(),
     };
 
     if (!draftHasContent(draft) && !informeIdRef.current) return;
 
     writeInformeDraft(key, draft);
-    void syncDraftPhotos(key, snap.observaciones);
+    void syncDraftPhotos(key, [
+      ...snap.observaciones,
+      ...snap.imagenes_visita,
+    ]);
     setLastSavedAt(new Date());
     setStatus((s) => (s === "saving" ? s : "local"));
   }, [empresaId, storageKey]);
@@ -273,6 +294,7 @@ export function useInformeAutosave(options: Options) {
       lugar: snap.lugar,
       declaracion_legal: snap.declaracion_legal,
       observaciones: stripObsForLocal(snap.observaciones),
+      imagenes_visita: stripImagenesForLocal(snap.imagenes_visita),
     };
     if (!draftHasContent(base) && !informeIdRef.current) return false;
 
@@ -304,6 +326,10 @@ export function useInformeAutosave(options: Options) {
       const currentId = informeIdRef.current;
 
       if (currentId) {
+        const retainedUrls = snap.imagenes_visita
+          .filter((img) => img.url && !img.imagenFile)
+          .map((img) => img.url!);
+
         res = await editarRef.current({
           id: currentId,
           data: {
@@ -313,6 +339,7 @@ export function useInformeAutosave(options: Options) {
             declaracion_legal: snap.declaracion_legal,
             observaciones: "",
             puntos_mejora,
+            evidencias_urls: retainedUrls,
           },
         });
       } else {
@@ -357,6 +384,23 @@ export function useInformeAutosave(options: Options) {
         });
       }
 
+      const visitPending = snap.imagenes_visita.filter((img) => img.imagenFile);
+      let evidenciasUrls: string[] | undefined =
+        currentId
+          ? snap.imagenes_visita
+              .filter((img) => img.url && !img.imagenFile)
+              .map((img) => img.url!)
+          : undefined;
+
+      if (visitPending.length > 0) {
+        const formData = new FormData();
+        for (const img of visitPending) {
+          if (img.imagenFile) formData.append("evidencia", img.imagenFile);
+        }
+        const uploadRes = await subirEvidenciaInforme(res.id, formData);
+        evidenciasUrls = uploadRes?.evidencias_urls;
+      }
+
       dirtyRef.current = false;
       lastFpRef.current = fingerprint(getSnapshotRef.current());
       const now = new Date();
@@ -374,24 +418,34 @@ export function useInformeAutosave(options: Options) {
         hora: snap.hora,
         declaracion_legal: snap.declaracion_legal,
         observaciones: stripObsForLocal(snap.observaciones),
+        imagenes_visita: stripImagenesForLocal(
+          evidenciasUrls
+            ? evidenciasUrls.map((url) => ({ id_temp: url, url }))
+            : snap.imagenes_visita.filter((i) => !i.imagenFile),
+        ),
         savedAt: now.toISOString(),
         lastServerSyncAt: now.toISOString(),
       });
       // Tras subir evidencia, limpiar fotos locales pendientes de esas obs
       void syncDraftPhotos(
         key,
-        snap.observaciones.map((o) =>
-          o.imagenFile &&
-          res.puntos_mejora?.some(
-            (pm) =>
-              (o.id && pm.id === o.id) || pm.detalle === o.detalle,
-          )
-            ? { id_temp: o.id_temp }
-            : o,
-        ),
+        [
+          ...snap.observaciones.map((o) =>
+            o.imagenFile &&
+            res.puntos_mejora?.some(
+              (pm) =>
+                (o.id && pm.id === o.id) || pm.detalle === o.detalle,
+            )
+              ? { id_temp: o.id_temp }
+              : o,
+          ),
+          ...(evidenciasUrls
+            ? evidenciasUrls.map((url) => ({ id_temp: url, url }))
+            : snap.imagenes_visita.filter((i) => !i.imagenFile)),
+        ],
       );
 
-      onSyncedRef.current?.(res);
+      onSyncedRef.current?.({ ...res, evidencias_urls: evidenciasUrls });
       return true;
     } catch (err) {
       console.warn("Autosave de informe falló:", err);

@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { useEpp } from "@/hooks/useEpp";
 import { useAlert } from "@/context/AlertContext";
+import { VisibleEnteToggle } from "@/components/VisibleEnteToggle";
+import { actualizarVisibilidadEppEntrega } from "@/lib/visibilidadEnte";
 import { CatalogoTab } from "./_components/CatalogoTab";
 import { PersonalTab } from "./_components/PersonalTab";
 import { LicitacionesTab } from "./_components/LicitacionesTab";
@@ -50,6 +52,26 @@ export default function EppPage() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   const canCreate = canWriteAppModule(user, "epp");
+  const canEdit = canCreate;
+
+  const handleVisibilidadChange = async (id: string, visible: boolean) => {
+    try {
+      await actualizarVisibilidadEppEntrega(id, visible);
+      setEntregas((prev) =>
+        prev.map((e) =>
+          e.id === id ? { ...e, visible_ente_regulador: visible } : e,
+        ),
+      );
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      showAlert(
+        "error",
+        "Error",
+        axiosErr.response?.data?.error ||
+          "No se pudo actualizar la visibilidad ante el ente regulador.",
+      );
+    }
+  };
 
   const fetchData = async () => {
     if (!empresa?.id) return;
@@ -174,7 +196,10 @@ export default function EppPage() {
           ) : (
             <ul className="divide-y divide-slate-50">
               {entregas.map((e) => (
-                <li key={e.id} className="py-4 flex items-center justify-between gap-3">
+                <li
+                  key={e.id}
+                  className="py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+                >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="h-10 w-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
                       <HardHat className="h-5 w-5" />
@@ -190,16 +215,24 @@ export default function EppPage() {
                       </p>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleDownloadPdf(e.id, e.dni_empleado)}
-                    disabled={downloadingId === e.id}
-                    className="inline-flex items-center justify-center gap-2 shrink-0 min-h-11 px-4 py-2.5 bg-slate-900 text-white text-sm font-bold rounded-xl cursor-pointer disabled:opacity-50"
-                    title="Descargar PDF SRT 299/11"
-                  >
-                    <Download className="h-4 w-4" />
-                    PDF
-                  </button>
+                  <div className="flex flex-wrap items-center gap-3 shrink-0">
+                    <VisibleEnteToggle
+                      checked={Boolean(e.visible_ente_regulador)}
+                      disabled={!canEdit}
+                      onChange={(v) => void handleVisibilidadChange(e.id, v)}
+                      label="Visible ente regulador"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadPdf(e.id, e.dni_empleado)}
+                      disabled={downloadingId === e.id}
+                      className="inline-flex items-center justify-center gap-2 shrink-0 min-h-11 px-4 py-2.5 bg-slate-900 text-white text-sm font-bold rounded-xl cursor-pointer disabled:opacity-50"
+                      title="Descargar PDF SRT 299/11"
+                    >
+                      <Download className="h-4 w-4" />
+                      PDF
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>

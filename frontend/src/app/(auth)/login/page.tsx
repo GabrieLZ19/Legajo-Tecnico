@@ -35,8 +35,12 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       await login(cuit.replace(/\D/g, ""), username.trim(), password);
-    } catch (err: any) {
-      setError(err.message || "Error al iniciar sesión. Inténtalo de nuevo.");
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Error al iniciar sesión. Inténtalo de nuevo.",
+      );
       setSubmitting(false);
     }
   };
@@ -183,7 +187,9 @@ export default function LoginPage() {
                 disabled={submitting}
                 className="w-full py-3.5 px-4 border border-transparent text-sm font-bold rounded-xl text-white bg-brand-primary hover:bg-brand-primary/95 shadow-md shadow-brand-primary/20 hover:shadow-lg focus:outline-hidden transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer text-center"
               >
-                {submitting ? "Ingresando..." : "Ingresar"}
+                {submitting
+                  ? "Conectando con el servidor…"
+                  : "Ingresar"}
               </button>
 
               <div className="text-center space-y-2">

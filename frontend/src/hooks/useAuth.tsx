@@ -3,6 +3,11 @@
 import React, { createContext, useContext, useState, useLayoutEffect } from "react";
 import Cookies from "js-cookie";
 import { api } from "@/lib/api";
+import {
+  loginErrorMessage,
+  postWithTransientRetry,
+  warmupApi,
+} from "@/lib/apiResilience";
 import { Perfil, Empresa } from "@/types";
 import { useRouter } from "next/navigation";
 
@@ -154,7 +159,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const login = async (cuit: string, username: string, pass: string) => {
     try {
-      const response = await api.post("/auth/login", {
+      await warmupApi();
+      const response = await postWithTransientRetry<{
+        perfil: Perfil;
+        empresa?: Empresa | null;
+      }>("/auth/login", {
         cuit,
         username,
         password: pass,
@@ -169,21 +178,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       const dest = next && next.startsWith("/") ? next : "/dashboard";
       postLoginRedirect(dest);
     } catch (error: unknown) {
-      const message =
-        error && typeof error === "object" && "response" in error
-          ? (error as { response?: { data?: { error?: string } } }).response
-              ?.data?.error
-          : undefined;
-      throw new Error(message || "Error al iniciar sesión");
+      throw new Error(loginErrorMessage(error, "Error al iniciar sesión"));
     }
   };
 
   const loginAdmin = async (email: string, pass: string) => {
     try {
-      const response = await api.post("/auth/login-admin", {
-        email,
-        password: pass,
-      });
+      await warmupApi();
+      const response = await postWithTransientRetry<{ perfil: Perfil }>(
+        "/auth/login-admin",
+        {
+          email,
+          password: pass,
+        },
+      );
       const { perfil } = response.data;
       Cookies.remove("token");
       persistProfile(perfil);
@@ -204,13 +212,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       }
       postLoginRedirect(dest);
     } catch (error: unknown) {
-      const message =
-        error && typeof error === "object" && "response" in error
-          ? (error as { response?: { data?: { error?: string } } }).response
-              ?.data?.error
-          : undefined;
       throw new Error(
-        message || "Error al iniciar sesión como administrador",
+        loginErrorMessage(error, "Error al iniciar sesión como administrador"),
       );
     }
   };

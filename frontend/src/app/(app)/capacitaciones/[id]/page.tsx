@@ -394,6 +394,34 @@ export default function DetalleCapacitacionPage() {
     (cap.registro_manual_nombre || "").toLowerCase().endsWith(".pdf") ||
     (cap.registro_manual_url || "").toLowerCase().includes(".pdf");
 
+  const sectors = Array.from(
+    new Set(
+      (cap.capacitacion_asistencias || [])
+        .map((a) => a.sector)
+        .filter((s): s is string => !!s),
+    ),
+  );
+
+  const filteredAsistencias = (cap.capacitacion_asistencias || []).filter(
+    (a) => {
+      const matchesSearch =
+        a.nombre_empleado?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        a.dni_empleado?.includes(searchQuery);
+
+      const matchesSector =
+        selectedSector === "todos" || a.sector === selectedSector;
+
+      const matchesEstado =
+        selectedEstado === "todos" ||
+        (selectedEstado === "aprobado" && a.aprobado) ||
+        (selectedEstado === "desaprobado" && !a.aprobado);
+
+      return matchesSearch && matchesSector && matchesEstado;
+    },
+  );
+
+  const asistenciasCount = cap.capacitacion_asistencias?.length ?? 0;
+
   if (isManual) {
     return (
       <div className="space-y-8 max-w-7xl mx-auto">
@@ -451,7 +479,7 @@ export default function DetalleCapacitacionPage() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
               <FileUp className="h-4 w-4 text-indigo-600" />
-              Registro escaneado
+              Registro en papel
             </h2>
             {cap.registro_manual_url && (
               <a
@@ -466,7 +494,10 @@ export default function DetalleCapacitacionPage() {
             )}
           </div>
           <p className="text-xs text-slate-500 font-semibold">
-            {cap.registro_manual_nombre || "Archivo del registro en papel"}
+            {cap.registro_manual_nombre ||
+              (cap.registro_manual_url
+                ? "Archivo del registro en papel"
+                : "Sin escaneo cargado")}
             {cap.instructor ? ` · Instructor: ${cap.instructor}` : ""}
             {cap.cantidad_horas ? ` · ${cap.cantidad_horas} h` : ""}
           </p>
@@ -486,9 +517,209 @@ export default function DetalleCapacitacionPage() {
               />
             )
           ) : (
-            <p className="text-sm text-red-600 font-semibold">
-              No se encontró el archivo del registro.
-            </p>
+            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center space-y-4">
+              <FileUp className="h-10 w-10 text-slate-300 mx-auto" />
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-slate-700">
+                  {asistenciasCount > 0
+                    ? "Los asistentes ya están en la base de datos."
+                    : "Todavía no hay escaneo del registro en papel."}
+                </p>
+                <p className="text-xs text-slate-500 font-semibold max-w-md mx-auto">
+                  {asistenciasCount > 0
+                    ? "Podés adjuntar el PDF o la foto firmada cuando lo tengas, o dejar el registro solo con la lista de asistentes."
+                    : "Descargá la plantilla, imprimila con firmas y subí el escaneo cuando esté listo."}
+                </p>
+              </div>
+              {canManage && (
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleDescargarPlantillaRegistro()}
+                    disabled={downloadingPlantilla}
+                    className="inline-flex items-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs disabled:opacity-50 cursor-pointer"
+                  >
+                    <Download className="h-3.5 w-3.5 text-blue-600" />
+                    {downloadingPlantilla
+                      ? "Generando..."
+                      : "Descargar plantilla"}
+                  </button>
+                  <input
+                    ref={registroFileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf"
+                    className="hidden"
+                    onChange={(e) => void handleRegistroFileSelected(e)}
+                  />
+                  <button
+                    type="button"
+                    disabled={uploadingRegistro}
+                    onClick={() => registroFileInputRef.current?.click()}
+                    className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs disabled:opacity-50 cursor-pointer"
+                  >
+                    <FileUp className="h-3.5 w-3.5" />
+                    {uploadingRegistro ? "Subiendo..." : "Subir escaneo"}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+              <Users className="h-4 w-4 text-blue-600" />
+              Asistentes ({asistenciasCount})
+            </h2>
+            <div className="flex gap-2">
+              {asistenciasCount > 0 && (
+                <>
+                  <button
+                    onClick={handleExportExcel}
+                    disabled={exportingExcel}
+                    className="inline-flex items-center justify-center gap-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold px-3 py-2 rounded-xl text-xs transition-all cursor-pointer border border-slate-200 disabled:opacity-50"
+                  >
+                    <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+                    {exportingExcel ? "Exportando..." : "Excel"}
+                  </button>
+                  <button
+                    onClick={handleExportPDF}
+                    disabled={exportingPdf}
+                    className="inline-flex items-center justify-center gap-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold px-3 py-2 rounded-xl text-xs transition-all cursor-pointer border border-slate-200 disabled:opacity-50"
+                  >
+                    <FileText className="h-3.5 w-3.5 text-blue-600" />
+                    {exportingPdf ? "Exportando..." : "PDF"}
+                  </button>
+                </>
+              )}
+              <Link
+                href="/capacitaciones/base-datos"
+                className="inline-flex items-center justify-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold px-3 py-2 rounded-xl text-xs transition-all border border-blue-200"
+              >
+                Ver en base de datos
+              </Link>
+            </div>
+          </div>
+
+          {asistenciasCount > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar por empleado o DNI..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <select
+                  value={selectedSector}
+                  onChange={(e) => setSelectedSector(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500"
+                >
+                  <option value="todos">Todos los sectores</option>
+                  {sectors.map((sec) => (
+                    <option key={sec} value={sec}>
+                      {sec}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <select
+                  value={selectedEstado}
+                  onChange={(e) => setSelectedEstado(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500"
+                >
+                  <option value="todos">Todos los estados</option>
+                  <option value="aprobado">Aprobados</option>
+                  <option value="desaprobado">Reprobados</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {asistenciasCount === 0 ? (
+            <div className="text-center py-8 rounded-xl border border-dashed border-slate-200 bg-slate-50/80">
+              <Users className="h-10 w-10 text-slate-300 mx-auto mb-3" />
+              <p className="text-sm text-slate-600 font-semibold">
+                No hay asistentes cargados en este registro.
+              </p>
+              <p className="text-xs text-slate-500 font-semibold mt-1">
+                Podés cargarlos al crear el registro manual o adjuntar solo el
+                escaneo en papel.
+              </p>
+            </div>
+          ) : filteredAsistencias.length === 0 ? (
+            <div className="text-center py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+              <Search className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+              <p className="text-xs text-slate-500 font-semibold">
+                No se encontraron asistentes que coincidan con los filtros.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {filteredAsistencias.map((a) => (
+                <div
+                  key={a.id}
+                  className="flex items-center justify-between bg-slate-50 rounded-xl p-4 border border-slate-100"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 ${
+                        a.aprobado
+                          ? "bg-emerald-100 text-emerald-600"
+                          : "bg-red-100 text-red-600"
+                      }`}
+                    >
+                      {a.aprobado ? (
+                        <CheckCircle2 className="h-5 w-5" />
+                      ) : (
+                        <XCircle className="h-5 w-5" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-slate-800 truncate">
+                        {a.nombre_empleado}
+                      </p>
+                      <p className="text-[11px] text-slate-400 font-semibold">
+                        DNI: {a.dni_empleado}
+                        {a.sector && ` • ${a.sector}`}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <div className="text-right">
+                      <span
+                        className={`text-lg font-black ${
+                          a.aprobado ? "text-emerald-600" : "text-red-600"
+                        }`}
+                      >
+                        {cap.con_evaluacion === false && a.puntaje >= 100
+                          ? "Asistió"
+                          : `${a.puntaje}%`}
+                      </span>
+                    </div>
+                    {canManage && (
+                      <button
+                        type="button"
+                        title="Eliminar participante"
+                        disabled={deletingAsistenciaId === a.id}
+                        onClick={() =>
+                          eliminarParticipante(a.id, a.nombre_empleado)
+                        }
+                        className="h-9 w-9 inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-400 hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-colors disabled:opacity-50 cursor-pointer"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
 
@@ -534,32 +765,6 @@ export default function DetalleCapacitacionPage() {
       </div>
     );
   }
-
-  const sectors = Array.from(
-    new Set(
-      (cap?.capacitacion_asistencias || [])
-        .map((a) => a.sector)
-        .filter((s): s is string => !!s),
-    ),
-  );
-
-  const filteredAsistencias = (cap?.capacitacion_asistencias || []).filter(
-    (a) => {
-      const matchesSearch =
-        a.nombre_empleado?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        a.dni_empleado?.includes(searchQuery);
-
-      const matchesSector =
-        selectedSector === "todos" || a.sector === selectedSector;
-
-      const matchesEstado =
-        selectedEstado === "todos" ||
-        (selectedEstado === "aprobado" && a.aprobado) ||
-        (selectedEstado === "desaprobado" && !a.aprobado);
-
-      return matchesSearch && matchesSector && matchesEstado;
-    },
-  );
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">

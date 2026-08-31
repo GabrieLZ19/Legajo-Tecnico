@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
-import { useInformes, subirEvidenciaInforme } from "@/hooks/useInformes";
+import { useInformes, subirEvidenciaInforme, subirImagenesVisita } from "@/hooks/useInformes";
 import {
   formatAutosaveLabel,
   useInformeAutosave,
@@ -33,6 +33,11 @@ import {
 
 import { useAlert } from "@/context/AlertContext";
 import { PhotoSourcePicker } from "@/components/PhotoSourcePicker";
+import {
+  ImagenesVisitaSection,
+  ImagenVisitaLocal,
+  imagenesFromUrls,
+} from "@/components/ImagenesVisitaSection";
 import { mapPool } from "@/lib/mapPool";
 import { draftHasContent } from "@/lib/informeDraft";
 
@@ -86,6 +91,7 @@ export default function NuevoInformePage() {
   const [observacionesCargadas, setObservacionesCargadas] = useState<
     ObservacionLocal[]
   >([]);
+  const [imagenesVisita, setImagenesVisita] = useState<ImagenVisitaLocal[]>([]);
 
   // Estados del modal de Observaciones
   const [showObsModal, setShowObsModal] = useState(false);
@@ -206,8 +212,9 @@ export default function NuevoInformePage() {
       hora,
       declaracion_legal: editorRef.current?.innerHTML || "",
       observaciones: observacionesCargadas,
+      imagenes_visita: imagenesVisita,
     }),
-    [lugar, actividad, fecha, hora, observacionesCargadas, editorTick],
+    [lugar, actividad, fecha, hora, observacionesCargadas, imagenesVisita, editorTick],
   );
 
   const {
@@ -226,12 +233,15 @@ export default function NuevoInformePage() {
     informeId: draftInformeId,
     enabled: !!empresa?.id && draftReady,
     pause: loading,
-    watch: [lugar, actividad, fecha, hora, observacionesCargadas, editorTick],
+    watch: [lugar, actividad, fecha, hora, observacionesCargadas, imagenesVisita, editorTick],
     getSnapshot: getAutosaveSnapshot,
     crearInforme: crearInforme as any,
     editarInforme: editarInforme as any,
     onCreated: (id) => setDraftInformeId(id),
     onSynced: (res) => {
+      if (res.evidencias_urls) {
+        setImagenesVisita(imagenesFromUrls(res.evidencias_urls));
+      }
       if (!res.puntos_mejora?.length) return;
       setObservacionesCargadas((prev) =>
         prev.map((obs) => {
@@ -303,6 +313,19 @@ export default function NuevoInformePage() {
                   ? obs.acciones.map((a) => ({ ...a }))
                   : [],
                 evidencia_url: obs.evidencia_url,
+                imagenFile,
+                previewUrl: imagenFile
+                  ? URL.createObjectURL(imagenFile)
+                  : undefined,
+              };
+            }),
+          );
+          setImagenesVisita(
+            (draft.imagenes_visita || []).map((img) => {
+              const imagenFile = photos.get(img.id_temp);
+              return {
+                id_temp: img.id_temp,
+                url: img.url,
                 imagenFile,
                 previewUrl: imagenFile
                   ? URL.createObjectURL(imagenFile)
@@ -534,6 +557,13 @@ export default function NuevoInformePage() {
         await subirEvidenciaInforme(res.id, formData);
       });
 
+      const visitPending = imagenesVisita
+        .filter((img) => img.imagenFile)
+        .map((img) => img.imagenFile!);
+      if (visitPending.length > 0) {
+        await subirImagenesVisita(res.id, visitPending);
+      }
+
       markCleanAfterManualSave();
       clearLocal();
 
@@ -565,6 +595,10 @@ export default function NuevoInformePage() {
       lugar,
       declaracion_legal: editorRef.current?.innerHTML || "",
       observaciones: observacionesCargadas,
+      imagenes_visita: imagenesVisita.map(({ id_temp, url }) => ({
+        id_temp,
+        url,
+      })),
     });
 
   const handleDiscardDraft = async () => {
@@ -593,7 +627,11 @@ export default function NuevoInformePage() {
       observacionesCargadas.forEach((obs) => {
         if (obs.previewUrl) URL.revokeObjectURL(obs.previewUrl);
       });
+      imagenesVisita.forEach((img) => {
+        if (img.previewUrl && img.imagenFile) URL.revokeObjectURL(img.previewUrl);
+      });
       setObservacionesCargadas([]);
+      setImagenesVisita([]);
       setLugar("Planta 1");
       setActividad("");
       const now = new Date();
@@ -967,6 +1005,13 @@ export default function NuevoInformePage() {
               />
             </div>
           </div>
+
+          {/* Imágenes generales de la visita */}
+          <ImagenesVisitaSection
+            imagenes={imagenesVisita}
+            onChange={setImagenesVisita}
+            disabled={loading}
+          />
 
           {/* Observaciones y desvíos estructurados */}
           <div className="space-y-4">

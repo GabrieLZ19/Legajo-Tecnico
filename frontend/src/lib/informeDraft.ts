@@ -6,6 +6,11 @@ export type InformeDraftAccion = {
   responsable: string;
 };
 
+export type InformeDraftImagenVisita = {
+  id_temp: string;
+  url?: string;
+};
+
 export type InformeDraftObservacion = {
   id_temp: string;
   id?: string;
@@ -24,6 +29,7 @@ export type InformeDraftPayload = {
   hora: string;
   declaracion_legal: string;
   observaciones: InformeDraftObservacion[];
+  imagenes_visita?: InformeDraftImagenVisita[];
   savedAt: string;
   lastServerSyncAt?: string;
 };
@@ -75,7 +81,7 @@ export function clearInformeDraft(key: string): void {
 export function draftHasContent(
   draft: Pick<
     InformeDraftPayload,
-    "actividad" | "lugar" | "declaracion_legal" | "observaciones"
+    "actividad" | "lugar" | "declaracion_legal" | "observaciones" | "imagenes_visita"
   >,
 ): boolean {
   const decl = (draft.declaracion_legal || "")
@@ -87,6 +93,7 @@ export function draftHasContent(
   return (
     Boolean(draft.actividad?.trim()) ||
     draft.observaciones.length > 0 ||
+    (draft.imagenes_visita?.length ?? 0) > 0 ||
     Boolean(decl)
   );
 }

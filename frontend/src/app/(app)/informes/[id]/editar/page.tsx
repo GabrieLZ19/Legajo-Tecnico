@@ -7,6 +7,7 @@ import {
   useInformeDetalle,
   useInformes,
   subirEvidenciaInforme,
+  subirImagenesVisita,
 } from "@/hooks/useInformes";
 import {
   formatAutosaveLabel,
@@ -37,6 +38,11 @@ import {
 } from "lucide-react";
 import { useAlert } from "@/context/AlertContext";
 import { PhotoSourcePicker } from "@/components/PhotoSourcePicker";
+import {
+  ImagenesVisitaSection,
+  ImagenVisitaLocal,
+  imagenesFromUrls,
+} from "@/components/ImagenesVisitaSection";
 import { mapPool } from "@/lib/mapPool";
 
 export default function EditarInformePage() {
@@ -81,6 +87,10 @@ export default function EditarInformePage() {
   }
   const [observacionesCargadas, setObservacionesCargadas] = useState<
     ObservacionLocal[]
+  >([]);
+  const [imagenesVisita, setImagenesVisita] = useState<ImagenVisitaLocal[]>([]);
+  const [imagenesVisitaOriginales, setImagenesVisitaOriginales] = useState<
+    string[]
   >([]);
 
   // Estados del modal de Observaciones
@@ -148,8 +158,9 @@ export default function EditarInformePage() {
       hora,
       declaracion_legal: editorRef.current?.innerHTML || "",
       observaciones: observacionesCargadas,
+      imagenes_visita: imagenesVisita,
     }),
-    [lugar, actividad, fecha, hora, observacionesCargadas, editorTick],
+    [lugar, actividad, fecha, hora, observacionesCargadas, imagenesVisita, editorTick],
   );
 
   const {
@@ -165,11 +176,15 @@ export default function EditarInformePage() {
     informeId: id,
     enabled: !!empresa?.id && draftReady && !!informe,
     pause: loading || loadingInforme,
-    watch: [lugar, actividad, fecha, hora, observacionesCargadas, editorTick],
+    watch: [lugar, actividad, fecha, hora, observacionesCargadas, imagenesVisita, editorTick],
     getSnapshot: getAutosaveSnapshot,
     crearInforme: crearInforme as any,
     editarInforme: editarInforme as any,
     onSynced: (res) => {
+      if (res.evidencias_urls) {
+        setImagenesVisita(imagenesFromUrls(res.evidencias_urls));
+        setImagenesVisitaOriginales(res.evidencias_urls);
+      }
       if (!res.puntos_mejora?.length) return;
       setObservacionesCargadas((prev) =>
         prev.map((obs) => {
@@ -296,6 +311,10 @@ export default function EditarInformePage() {
         setObservacionesCargadas([]);
       }
 
+      const urls = informe.evidencias_urls || [];
+      setImagenesVisita(imagenesFromUrls(urls));
+      setImagenesVisitaOriginales(urls);
+
       if (editorRef.current) {
         editorRef.current.innerHTML = sanitizeRichHtml(
           informe.declaracion_legal || "",
@@ -347,6 +366,24 @@ export default function EditarInformePage() {
                   : undefined,
               };
             }),
+          );
+          setImagenesVisita(
+            (localDraft.imagenes_visita || []).map((img) => {
+              const imagenFile = photos.get(img.id_temp);
+              return {
+                id_temp: img.id_temp,
+                url: img.url,
+                imagenFile,
+                previewUrl: imagenFile
+                  ? URL.createObjectURL(imagenFile)
+                  : undefined,
+              };
+            }),
+          );
+          setImagenesVisitaOriginales(
+            (localDraft.imagenes_visita || [])
+              .map((img) => img.url)
+              .filter(Boolean) as string[],
           );
           if (editorRef.current) {
             editorRef.current.innerHTML = sanitizeRichHtml(
@@ -575,6 +612,27 @@ export default function EditarInformePage() {
         await subirEvidenciaInforme(id, formData);
       });
 
+      const remainingUrls = imagenesVisita
+        .filter((img) => img.url && !img.imagenFile)
+        .map((img) => img.url!);
+      const urlsRemoved =
+        imagenesVisitaOriginales.length !== remainingUrls.length ||
+        imagenesVisitaOriginales.some((url) => !remainingUrls.includes(url));
+
+      if (urlsRemoved) {
+        await editarInforme({
+          id,
+          data: { evidencias_urls: remainingUrls } as any,
+        });
+      }
+
+      const visitPending = imagenesVisita
+        .filter((img) => img.imagenFile)
+        .map((img) => img.imagenFile!);
+      if (visitPending.length > 0) {
+        await subirImagenesVisita(id, visitPending);
+      }
+
       markCleanAfterManualSave();
       clearLocal();
 
@@ -645,6 +703,10 @@ export default function EditarInformePage() {
     } else {
       setObservacionesCargadas([]);
     }
+
+    const urls = informe.evidencias_urls || [];
+    setImagenesVisita(imagenesFromUrls(urls));
+    setImagenesVisitaOriginales(urls);
 
     if (editorRef.current) {
       editorRef.current.innerHTML = sanitizeRichHtml(
@@ -986,6 +1048,13 @@ export default function EditarInformePage() {
               />
             </div>
           </div>
+
+          {/* Imágenes generales de la visita */}
+          <ImagenesVisitaSection
+            imagenes={imagenesVisita}
+            onChange={setImagenesVisita}
+            disabled={loading}
+          />
 
           {/* Observaciones y desvíos estructurados */}
           <div className="space-y-4">

@@ -21,8 +21,12 @@ export default function LoginAdminPage() {
     setSubmitting(true);
     try {
       await loginAdmin(email, password);
-    } catch (err: any) {
-      setError(err.message || "Error al iniciar sesión");
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Error al iniciar sesión",
+      );
       setSubmitting(false);
     }
   };

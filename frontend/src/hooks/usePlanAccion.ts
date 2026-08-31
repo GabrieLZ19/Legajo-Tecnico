@@ -63,12 +63,43 @@ export const usePlanAccion = (
   });
 
   const actualizarMutation = useMutation({
-    mutationFn: async ({ id, estado: nuevoEstado }: { id: string; estado: EstadoAccion }) => {
-      const { data } = await api.patch(`/plan-accion/${id}`, { estado: nuevoEstado });
+    mutationFn: async ({
+      id,
+      estado: nuevoEstado,
+      visible_ente_regulador,
+    }: {
+      id: string;
+      estado?: EstadoAccion;
+      visible_ente_regulador?: boolean;
+    }) => {
+      const { data } = await api.patch(`/plan-accion/${id}`, {
+        ...(nuevoEstado !== undefined ? { estado: nuevoEstado } : {}),
+        ...(visible_ente_regulador !== undefined
+          ? { visible_ente_regulador }
+          : {}),
+      });
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['plan-accion', empresaId] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard', empresaId] });
+    },
+  });
+
+  const crearMutation = useMutation({
+    mutationFn: async (payload: {
+      empresa_id: string;
+      descripcion: string;
+      responsable?: string;
+      sector?: string;
+      visible_ente_regulador?: boolean;
+    }) => {
+      const { data } = await api.post('/plan-accion', payload);
+      return data as AccionMejora;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['plan-accion', empresaId] });
+      queryClient.invalidateQueries({ queryKey: ['plan-accion-responsables', empresaId] });
       queryClient.invalidateQueries({ queryKey: ['dashboard', empresaId] });
     },
   });
@@ -81,7 +112,10 @@ export const usePlanAccion = (
     offset: query.data?.offset ?? offset,
     resumen: query.data?.resumen,
     actualizarEstado: actualizarMutation.mutateAsync,
+    actualizarAccion: actualizarMutation.mutateAsync,
+    crearAccionManual: crearMutation.mutateAsync,
     isUpdating: actualizarMutation.isPending,
+    isCreating: crearMutation.isPending,
   };
 };
 

@@ -16,6 +16,9 @@ import {
 } from "lucide-react";
 import { canWriteAppModule } from "@/lib/moduleAccess";
 import { useAlert } from "@/context/AlertContext";
+import { VisibleEnteToggle } from "@/components/VisibleEnteToggle";
+import { actualizarVisibilidadInforme } from "@/lib/visibilidadEnte";
+import { useQueryClient } from "@tanstack/react-query";
 
 function toInputDate(d: Date) {
   const y = d.getFullYear();
@@ -27,6 +30,7 @@ function toInputDate(d: Date) {
 export default function InformesPage() {
   const { user, empresa } = useAuth();
   const { showAlert } = useAlert();
+  const queryClient = useQueryClient();
   const PAGE_SIZE = 10;
   const [page, setPage] = useState(0);
   // Filtros client-side: ampliar página para no “perder” resultados
@@ -55,7 +59,23 @@ export default function InformesPage() {
   });
 
   const canCreate = canWriteAppModule(user, "informes");
+  const canEdit = canCreate;
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const handleVisibilidadChange = async (id: string, visible: boolean) => {
+    try {
+      await actualizarVisibilidadInforme(id, visible);
+      await queryClient.invalidateQueries({ queryKey: ["informes"] });
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      showAlert(
+        "error",
+        "Error",
+        axiosErr.response?.data?.error ||
+          "No se pudo actualizar la visibilidad ante el ente regulador.",
+      );
+    }
+  };
 
   const clearFilters = () => {
     setSearchTerm("");
@@ -448,6 +468,12 @@ export default function InformesPage() {
                     >
                       Estado
                     </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-36"
+                    >
+                      Ente
+                    </th>
                     <th scope="col" className="relative px-6 py-4 w-40">
                       <span className="sr-only">Acciones</span>
                     </th>
@@ -491,6 +517,13 @@ export default function InformesPage() {
                             </span>
                           );
                         })()}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4.5">
+                        <VisibleEnteToggle
+                          checked={Boolean(inf.visible_ente_regulador)}
+                          disabled={!canEdit}
+                          onChange={(v) => void handleVisibilidadChange(inf.id, v)}
+                        />
                       </td>
                       <td className="whitespace-nowrap px-6 py-4.5 text-right text-sm font-bold">
                         <div className="inline-flex items-center gap-3 justify-end">
@@ -553,11 +586,18 @@ export default function InformesPage() {
                     })()}
                   </div>
 
-                  <div className="flex items-center justify-between pt-3.5 border-t border-slate-100 gap-2">
-                    <span className="text-xs font-bold text-slate-400">
-                      {formatFullDate(inf.fecha_hora_visita)} ·{" "}
-                      {formatTableTime(inf.fecha_hora_visita)}
-                    </span>
+                  <div className="flex items-center justify-between pt-3.5 border-t border-slate-100 gap-2 flex-wrap">
+                    <div className="flex flex-col gap-2">
+                      <span className="text-xs font-bold text-slate-400">
+                        {formatFullDate(inf.fecha_hora_visita)} ·{" "}
+                        {formatTableTime(inf.fecha_hora_visita)}
+                      </span>
+                      <VisibleEnteToggle
+                        checked={Boolean(inf.visible_ente_regulador)}
+                        disabled={!canEdit}
+                        onChange={(v) => void handleVisibilidadChange(inf.id, v)}
+                      />
+                    </div>
                     <div className="flex items-center gap-2">
                       {canCreate && (
                         <button

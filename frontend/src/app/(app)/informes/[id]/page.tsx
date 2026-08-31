@@ -49,6 +49,7 @@ export default function InformeDetallePage() {
   const { eliminarInforme, isDeleting } = useInformes(empresa?.id);
 
   const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [uploadingVisitImages, setUploadingVisitImages] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
@@ -161,6 +162,25 @@ export default function InformeDetallePage() {
       );
     } finally {
       setUploadingId(null);
+    }
+  };
+
+  const handleVisitImageChange = async (file: File) => {
+    setUploadingVisitImages(true);
+    const formData = new FormData();
+    formData.append("evidencia", file);
+
+    try {
+      await subirEvidenciaInforme(id, formData);
+      queryClient.invalidateQueries({ queryKey: ["informe", id] });
+    } catch (err: any) {
+      showAlert(
+        "error",
+        "Error de subida",
+        err.response?.data?.error || "Error al subir la imagen de la visita",
+      );
+    } finally {
+      setUploadingVisitImages(false);
     }
   };
 
@@ -364,11 +384,34 @@ export default function InformeDetallePage() {
           </div>
 
           {/* Evidencia Fotográfica (Múltiple) */}
-          {informe.evidencias_urls && informe.evidencias_urls.length > 0 && (
+          {(informe.evidencias_urls?.length ||
+            canWriteAppModule(user, "informes")) && (
             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-2xs space-y-4">
-              <h2 className="text-xs font-black text-slate-400 uppercase tracking-wider">
-                Evidencia fotográfica
-              </h2>
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-xs font-black text-slate-400 uppercase tracking-wider">
+                  Evidencia fotográfica
+                </h2>
+                {canWriteAppModule(user, "informes") && !informeCerrado && (
+                  <PhotoSourcePicker
+                    disabled={uploadingVisitImages}
+                    onSelect={handleVisitImageChange}
+                    triggerClassName="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg transition-colors border border-slate-200 disabled:opacity-50"
+                  >
+                    {uploadingVisitImages ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <span>Subiendo...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Camera className="h-3.5 w-3.5" />
+                        <span>Insertar imagen</span>
+                      </>
+                    )}
+                  </PhotoSourcePicker>
+                )}
+              </div>
+              {informe.evidencias_urls && informe.evidencias_urls.length > 0 ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                 {informe.evidencias_urls.map((url, idx) => {
                   const isRealUrl =
@@ -401,6 +444,11 @@ export default function InformeDetallePage() {
                   );
                 })}
               </div>
+              ) : (
+                <p className="text-xs font-semibold text-slate-400 text-center py-4">
+                  No hay imágenes cargadas para esta visita.
+                </p>
+              )}
             </div>
           )}
 
