@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { EppEntrega, EppTipo, Empleado, EppProveedor, EppLicitacion } from "@/types";
 import Link from "next/link";
@@ -121,6 +121,17 @@ export default function EppPage() {
     }
   };
 
+  const entregasOrdenadas = useMemo(
+    () =>
+      [...entregas].sort((a, b) => {
+        const ta = new Date(a.fecha_entrega || 0).getTime();
+        const tb = new Date(b.fecha_entrega || 0).getTime();
+        if (tb !== ta) return tb - ta;
+        return b.id.localeCompare(a.id);
+      }),
+    [entregas],
+  );
+
   const tabClass = (value: Tab) =>
     `shrink-0 min-h-11 px-1 pb-3 pt-1 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
       tab === value
@@ -140,15 +151,24 @@ export default function EppPage() {
           </p>
         </div>
 
-        {canCreate && tab === "entregas" && (
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           <Link
-            href="/epp/nueva-entrega"
-            className="inline-flex items-center justify-center gap-2 w-full sm:w-auto min-h-12 px-5 py-3 bg-brand-primary hover:bg-brand-primary/95 text-white font-bold rounded-xl text-sm transition-all shadow-md shadow-blue-900/10 hover:shadow-lg cursor-pointer"
+            href="/epp/base-datos"
+            className="inline-flex items-center justify-center gap-2 w-full sm:w-auto min-h-12 px-5 py-3 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-sm transition-all cursor-pointer"
           >
-            <Plus className="h-5 w-5" />
-            Registrar Entrega
+            <Download className="h-5 w-5" />
+            Base histórica
           </Link>
-        )}
+          {canCreate && tab === "entregas" && (
+            <Link
+              href="/epp/nueva-entrega"
+              className="inline-flex items-center justify-center gap-2 w-full sm:w-auto min-h-12 px-5 py-3 bg-brand-primary hover:bg-brand-primary/95 text-white font-bold rounded-xl text-sm transition-all shadow-md shadow-blue-900/10 hover:shadow-lg cursor-pointer"
+            >
+              <Plus className="h-5 w-5" />
+              Registrar Entrega
+            </Link>
+          )}
+        </div>
       </div>
 
       <div className="flex border-b border-slate-200 gap-4 sm:gap-6 overflow-x-auto">
@@ -195,7 +215,7 @@ export default function EppPage() {
             </div>
           ) : (
             <ul className="divide-y divide-slate-50">
-              {entregas.map((e) => (
+              {entregasOrdenadas.map((e) => (
                 <li
                   key={e.id}
                   className="py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"

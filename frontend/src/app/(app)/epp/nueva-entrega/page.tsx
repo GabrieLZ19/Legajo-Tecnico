@@ -1,21 +1,20 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
-import { EppTipo } from "@/types";
+import { EppTipo, Empleado } from "@/types";
 import Link from "next/link";
 import SignatureCanvas from "react-signature-canvas";
 import { Html5Qrcode } from "html5-qrcode";
 import {
   HardHat,
   ArrowLeft,
-  Plus,
-  Trash2,
   Save,
   User,
   Hash,
   Calendar,
+  Search,
 } from "lucide-react";
 import { useEpp } from "@/hooks/useEpp";
 import { useAlert } from "@/context/AlertContext";
@@ -32,9 +31,12 @@ interface ItemEntrega {
 export default function NuevaEntregaEppPage() {
   const router = useRouter();
   const { empresa } = useAuth();
-  const { getTiposEpp, crearTipoEpp, crearEntregaEpp, buscarEmpleadoPorQr } = useEpp();
+  const { getTiposEpp, crearTipoEpp, crearEntregaEpp, buscarEmpleadoPorQr, getEmpleados } =
+    useEpp();
   const { showAlert } = useAlert();
 
+  const [empleados, setEmpleados] = useState<Empleado[]>([]);
+  const [busquedaPadron, setBusquedaPadron] = useState("");
   const [nombreEmpleado, setNombreEmpleado] = useState("");
   const [dniEmpleado, setDniEmpleado] = useState("");
   const [empleadoId, setEmpleadoId] = useState<string | null>(null);
@@ -55,21 +57,29 @@ export default function NuevaEntregaEppPage() {
   const [nuevoEppDescripcion, setNuevoEppDescripcion] = useState("");
   const [nuevoEppFoto, setNuevoEppFoto] = useState<File | null>(null);
   const [guardandoNuevoEpp, setGuardandoNuevoEpp] = useState(false);
-  const [creandoEppParaIndex, setCreandoEppParaIndex] = useState<number | null>(
-    null,
-  );
+  const [creandoEppParaIndex, setCreandoEppParaIndex] = useState<number | null>(null);
 
-  // Estados para lector QR
-  const [showQrScanner, setShowQrScanner] = useState(false);
-  const [escaneadoPorQr, setEscaneadoPorQr] = useState(false);
-  const [qrScanningError, setQrScanningError] = useState<string | null>(null);
-  const qrInstanceRef = useRef<any>(null);
-  const sigRef = useRef<SignatureCanvas>(null);
-  const sigEmpleadorRef = useRef<SignatureCanvas>(null);
+  const empleadosFiltrados = useMemo(() => {
+    const q = busquedaPadron.trim().toLowerCase();
+    const activos = empleados.filter((e) => e.activo);
+    if (!q) return activos.slice(0, 12);
+    return activos
+      .filter(
+        (e) =>
+          e.nombre.toLowerCase().includes(q) ||
+          e.documento.includes(q.replace(/\D/g, "")),
+      )
+      .slice(0, 12);
+  }, [empleados, busquedaPadron]);
 
   useEffect(() => {
     fetchTipos();
-  }, []);
+    if (empresa?.id) {
+      void getEmpleados(empresa.id).then((data) => {
+        setEmpleados(data.empleados || []);
+      });
+    }
+  }, [empresa?.id]);
 
   const fetchTipos = async () => {
     try {
@@ -81,22 +91,36 @@ export default function NuevaEntregaEppPage() {
   };
 
   const agregarItem = () => {
-    setItems([
-      ...items,
-      {
-        epp_tipo_id: "",
-        cantidad: 1,
-        marca: "",
-        modelo: "",
-        certificacion: "",
-      },
-    ]);
+    // Un solo ítem por entrega (Res. SRT 299/11)
   };
 
-  const eliminarItem = (idx: number) => {
-    if (items.length <= 1) return;
-    setItems(items.filter((_, i) => i !== idx));
+  const eliminarItem = (_idx: number) => {
+    // Un solo ítem por entrega
   };
+
+  const seleccionarEmpleado = (empleado: Empleado) => {
+    setEmpleadoId(empleado.id);
+    setNombreEmpleado(empleado.nombre);
+    setDniEmpleado(empleado.documento);
+    setBusquedaPadron(empleado.nombre);
+    setEscaneadoPorQr(false);
+  };
+
+  const limpiarEmpleado = () => {
+    setEmpleadoId(null);
+    setNombreEmpleado("");
+    setDniEmpleado("");
+    setBusquedaPadron("");
+    setEscaneadoPorQr(false);
+  };
+
+  // Estados para lector QR
+  const [showQrScanner, setShowQrScanner] = useState(false);
+  const [escaneadoPorQr, setEscaneadoPorQr] = useState(false);
+  const [qrScanningError, setQrScanningError] = useState<string | null>(null);
+  const qrInstanceRef = useRef<Html5Qrcode | null>(null);
+  const sigRef = useRef<SignatureCanvas>(null);
+  const sigEmpleadorRef = useRef<SignatureCanvas>(null);
 
   const actualizarItem = (
     idx: number,
@@ -201,30 +225,14 @@ export default function NuevaEntregaEppPage() {
         ? (JSON.parse(decodedText).token || JSON.parse(decodedText).qr_token || decodedText)
         : decodedText;
       const { empleado } = await buscarEmpleadoPorQr(lookupToken);
-      setNombreEmpleado(empleado.nombre);
-      setDniEmpleado(empleado.documento);
-      setEmpleadoId(empleado.id);
+      seleccionarEmpleado(empleado as Empleado);
       setEscaneadoPorQr(true);
       setShowQrScanner(false);
       await stopScanner();
     } catch {
-      try {
-        if (decodedText.startsWith("{")) {
-          const data = JSON.parse(decodedText);
-          if (data.nombre) setNombreEmpleado(data.nombre);
-          if (data.dni) setDniEmpleado(data.dni);
-        } else if (decodedText.includes(",")) {
-          const [nombre, dni] = decodedText.split(",");
-          if (nombre) setNombreEmpleado(nombre.trim());
-          if (dni) setDniEmpleado(dni.trim());
-        }
-        setEmpleadoId(null);
-        setEscaneadoPorQr(true);
-        setShowQrScanner(false);
-        await stopScanner();
-      } catch {
-        setQrScanningError("QR no reconocido. Completá los datos a mano.");
-      }
+      setQrScanningError(
+        "QR no reconocido. Seleccioná al trabajador del padrón o escaneá su credencial emitida en Personal / QR.",
+      );
     }
   };
 
@@ -232,18 +240,13 @@ export default function NuevaEntregaEppPage() {
     e.preventDefault();
     setError(null);
 
+    if (!empleadoId) {
+      setError("Seleccioná un trabajador del padrón o escaneá su QR.");
+      return;
+    }
+
     if (!nombreEmpleado.trim() || !dniEmpleado.trim()) {
-      setError("Nombre y DNI del empleado son obligatorios.");
-      return;
-    }
-
-    if (nombreEmpleado.trim().length < 3) {
-      setError("El nombre del empleado debe tener al menos 3 caracteres.");
-      return;
-    }
-
-    if (dniEmpleado.length < 7 || dniEmpleado.length > 8) {
-      setError("El DNI debe tener 7 u 8 números.");
+      setError("El trabajador seleccionado no tiene datos válidos.");
       return;
     }
 
@@ -358,39 +361,84 @@ export default function NuevaEntregaEppPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
+            <div className="space-y-2 sm:col-span-2">
               <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                <User className="h-3 w-3" /> Nombre y Apellido *
+                <Search className="h-3 w-3" /> Buscar en el padrón *
               </label>
               <input
                 type="text"
-                value={nombreEmpleado}
-                onChange={(e) =>
-                  setNombreEmpleado(
-                    e.target.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/g, ""),
-                  )
-                }
-                placeholder="Juan Pérez"
+                value={busquedaPadron}
+                onChange={(e) => {
+                  setBusquedaPadron(e.target.value);
+                  if (empleadoId) limpiarEmpleado();
+                }}
+                placeholder="Nombre o DNI del trabajador..."
                 className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 transition-all"
               />
+              {busquedaPadron.trim() && !empleadoId && empleadosFiltrados.length > 0 && (
+                <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
+                  {empleadosFiltrados.map((emp) => (
+                    <button
+                      key={emp.id}
+                      type="button"
+                      onClick={() => seleccionarEmpleado(emp)}
+                      className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-slate-50 last:border-0 cursor-pointer"
+                    >
+                      <span className="font-semibold text-slate-800">{emp.nombre}</span>
+                      <span className="text-slate-500 text-sm ml-2">DNI {emp.documento}</span>
+                      {emp.sector && (
+                        <span className="text-slate-400 text-xs ml-2">· {emp.sector}</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {busquedaPadron.trim() && !empleadoId && empleadosFiltrados.length === 0 && (
+                <p className="text-xs text-slate-500">
+                  No hay trabajadores que coincidan. Agregalos en{" "}
+                  <Link href="/epp" className="font-bold text-blue-600 underline">
+                    Personal / QR
+                  </Link>
+                  .
+                </p>
+              )}
             </div>
-            <div className="space-y-2">
-              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                <Hash className="h-3 w-3" /> DNI *
-              </label>
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={8}
-                value={dniEmpleado}
-                onChange={(e) =>
-                  setDniEmpleado(e.target.value.replace(/\D/g, "").slice(0, 8))
-                }
-                placeholder="12345678"
-                className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 transition-all"
-              />
-            </div>
+
+            {empleadoId && (
+              <>
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                    <User className="h-3 w-3" /> Nombre y Apellido
+                  </label>
+                  <input
+                    type="text"
+                    value={nombreEmpleado}
+                    readOnly
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-medium bg-slate-50 text-slate-700"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                    <Hash className="h-3 w-3" /> DNI
+                  </label>
+                  <input
+                    type="text"
+                    value={dniEmpleado}
+                    readOnly
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-medium bg-slate-50 text-slate-700"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <button
+                    type="button"
+                    onClick={limpiarEmpleado}
+                    className="text-xs font-bold text-slate-500 hover:text-slate-700 cursor-pointer"
+                  >
+                    Cambiar trabajador
+                  </button>
+                </div>
+              </>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -432,10 +480,10 @@ export default function NuevaEntregaEppPage() {
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
               <HardHat className="h-4 w-4 text-emerald-500" />
-              Elementos Entregados
+              Elemento Entregado
             </h2>
             <span className="text-[11px] text-slate-400 font-semibold">
-              {items.length} item{items.length !== 1 ? "s" : ""}
+              1 por registro
             </span>
           </div>
 
@@ -445,18 +493,7 @@ export default function NuevaEntregaEppPage() {
               className="bg-slate-50 rounded-xl p-5 space-y-3 border border-slate-100"
             >
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-600">
-                  Item {idx + 1}
-                </span>
-                {items.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => eliminarItem(idx)}
-                    className="text-red-400 hover:text-red-600 transition-colors cursor-pointer shrink-0"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                )}
+                <span className="text-xs font-bold text-slate-600">EPP</span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -562,14 +599,6 @@ export default function NuevaEntregaEppPage() {
             </div>
           ))}
 
-          <button
-            type="button"
-            onClick={agregarItem}
-            className="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-sm font-bold text-slate-500 hover:border-emerald-400 hover:text-emerald-600 transition-all flex items-center justify-center gap-2 cursor-pointer"
-          >
-            <Plus className="h-4 w-4" />
-            Agregar otro EPP
-          </button>
         </div>
 
         {/* Firma Digital */}
@@ -747,7 +776,7 @@ export default function NuevaEntregaEppPage() {
             </div>
 
             <p className="text-[10px] text-slate-400 text-center">
-              El QR debe ser el emitido desde Personal / QR. Si no reconoce el código, completá nombre y DNI a mano.
+              El QR debe ser el emitido desde Personal / QR. Si no lo reconoce, buscá al trabajador en el padrón.
             </p>
           </div>
         </div>

@@ -132,6 +132,18 @@ export function useCapacitaciones() {
     }
   };
 
+  const consultarIntentoCapacitacion = async (id: string, dni: string) => {
+    const { data } = await api.get(`/capacitaciones/${id}/intento`, {
+      params: { dni },
+    });
+    return data as {
+      registrado: boolean;
+      puntaje?: number;
+      aprobado?: boolean;
+      nombre_empleado?: string;
+    };
+  };
+
   const getCapacitacionQr = async (id: string) => {
     setLoading(true);
     setError(null);
@@ -361,6 +373,7 @@ export function useCapacitaciones() {
     descargarPlantillaRegistroManual,
     actualizarCapacitacion,
     evaluarCapacitacion,
+    consultarIntentoCapacitacion,
     actualizarRegistroCapacitacion,
   };
 }

@@ -80,6 +80,7 @@ export default function AdminEmpresasPage() {
   const [actividad, setActividad] = useState("");
   const [domicilio, setDomicilio] = useState("");
   const [localidad, setLocalidad] = useState("");
+  const [provincia, setProvincia] = useState("");
   const [codigoPostal, setCodigoPostal] = useState("");
   const [telefono, setTelefono] = useState("");
   const [contacto, setContacto] = useState("");
@@ -126,6 +127,7 @@ export default function AdminEmpresasPage() {
     setActividad("");
     setDomicilio("");
     setLocalidad("");
+    setProvincia("");
     setCodigoPostal("");
     setTelefono("");
     setContacto("");
@@ -235,6 +237,7 @@ export default function AdminEmpresasPage() {
     setActividad(emp.actividad || "");
     setDomicilio(emp.domicilio || "");
     setLocalidad(emp.localidad || "");
+    setProvincia(emp.provincia || "");
     setCodigoPostal(emp.codigo_postal || "");
     setTelefono(emp.telefono || "");
     setContacto(emp.contacto || "");
@@ -255,6 +258,7 @@ export default function AdminEmpresasPage() {
       actividad,
       domicilio,
       localidad,
+      provincia,
       codigo_postal: codigoPostal,
       telefono,
       contacto,
@@ -312,6 +316,7 @@ export default function AdminEmpresasPage() {
       setActividad(data.actividad || "");
       setDomicilio(data.domicilio || "");
       setLocalidad(data.localidad || "");
+      setProvincia(data.provincia || "");
       setCodigoPostal(data.codigo_postal || "");
       setTelefono(data.telefono || "");
       setContacto(data.contacto || "");
@@ -1237,16 +1242,29 @@ export default function AdminEmpresasPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
-                    Localidad / Provincia
+                    Localidad
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. San Rafael, Mendoza"
+                    placeholder="e.g. San Rafael"
                     value={localidad}
                     onChange={(e) => setLocalidad(e.target.value)}
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-hidden focus:border-blue-600 transition-colors"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                    Provincia
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Mendoza"
+                    value={provincia}
+                    onChange={(e) => setProvincia(e.target.value)}
                     className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-hidden focus:border-blue-600 transition-colors"
                   />
                 </div>

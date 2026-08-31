@@ -40,6 +40,57 @@ interface ItemRevision {
   es_correcta: boolean;
 }
 
+const STORAGE_PREFIX = "evaluacion_state_";
+
+function loadPersistedState(capacitacionId: string) {
+  if (typeof window === "undefined") return null;
+  try {
+    const saved = localStorage.getItem(`${STORAGE_PREFIX}${capacitacionId}`);
+    if (!saved) return null;
+    return JSON.parse(saved) as {
+      nombre?: string;
+      dni?: string;
+      sector?: string;
+      respuestas?: Record<string, number | number[]>;
+      currentPreguntaIndex?: number;
+      step?: string;
+    };
+  } catch {
+    return null;
+  }
+}
+
+function clearPersistedState(capacitacionId: string) {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(`${STORAGE_PREFIX}${capacitacionId}`);
+}
+
+function persistState(
+  capacitacionId: string,
+  state: {
+    nombre: string;
+    dni: string;
+    sector: string;
+    respuestas: Record<string, number | number[]>;
+    currentPreguntaIndex: number;
+    step: "datos" | "test" | "firma" | "resultado";
+  },
+) {
+  if (typeof window === "undefined") return;
+  if (state.step !== "datos" && state.step !== "test") return;
+  localStorage.setItem(`${STORAGE_PREFIX}${capacitacionId}`, JSON.stringify(state));
+}
+
+function respuestasCompletas(
+  preguntas: Pregunta[],
+  respuestas: Record<string, number | number[]>,
+) {
+  return preguntas.every((p) => {
+    const ans = respuestas[p.id];
+    return ans !== undefined && (!Array.isArray(ans) || ans.length > 0);
+  });
+}
+
 interface CapData {
   id: string;
   titulo: string;
@@ -55,6 +106,7 @@ export default function EvaluacionPublicaPage() {
   const {
     getCapacitacionPublica,
     evaluarCapacitacion,
+    consultarIntentoCapacitacion,
     loading: apiLoading,
   } = useCapacitaciones();
 
@@ -69,6 +121,7 @@ export default function EvaluacionPublicaPage() {
     Record<string, number | number[]>
   >({});
   const [enviando, setEnviando] = useState(false);
+  const [validandoDni, setValidandoDni] = useState(false);
   const [resultado, setResultado] = useState<{
     puntaje: number;
     aprobado: boolean;
@@ -82,35 +135,55 @@ export default function EvaluacionPublicaPage() {
 
   useEffect(() => {
     if (!id) return;
-    const saved = localStorage.getItem(`evaluacion_state_${id}`);
-    if (saved) {
-      try {
-        const state = JSON.parse(saved);
-        if (state.nombre) setNombre(state.nombre);
-        if (state.dni) setDni(state.dni);
-        if (state.sector) setSector(state.sector);
-        if (state.respuestas) setRespuestas(state.respuestas);
-        if (state.currentPreguntaIndex !== undefined)
-          setCurrentPreguntaIndex(state.currentPreguntaIndex);
-        if (state.step) setStep(state.step);
-      } catch (err) {
-        console.error("Error al cargar estado:", err);
+    const state = loadPersistedState(id);
+    if (!state) return;
+
+    if (state.nombre) setNombre(state.nombre);
+    if (state.dni) setDni(state.dni);
+    if (state.sector) setSector(state.sector);
+    if (state.respuestas) setRespuestas(state.respuestas);
+    if (state.currentPreguntaIndex !== undefined) {
+      setCurrentPreguntaIndex(state.currentPreguntaIndex);
+    }
+
+    // Nunca restaurar firma/resultado: evita envíos con respuestas vacías
+    if (state.step === "test") {
+      setStep("test");
+    } else {
+      setStep("datos");
+      if (state.step === "firma" || state.step === "resultado") {
+        clearPersistedState(id);
       }
     }
   }, [id]);
 
   useEffect(() => {
     if (!id || step === "resultado") return;
-    const state = {
+    persistState(id, {
       nombre,
       dni,
       sector,
       respuestas,
       currentPreguntaIndex,
       step,
-    };
-    localStorage.setItem(`evaluacion_state_${id}`, JSON.stringify(state));
+    });
   }, [id, nombre, dni, sector, respuestas, currentPreguntaIndex, step]);
+
+  useEffect(() => {
+    if (!cap || step !== "test") return;
+    const preguntas = cap.capacitacion_preguntas || [];
+    const requiereTest =
+      cap.con_evaluacion !== false && preguntas.length > 0;
+    if (!requiereTest) return;
+
+    if (!respuestasCompletas(preguntas, respuestas)) {
+      const firstEmpty = preguntas.findIndex((p) => {
+        const ans = respuestas[p.id];
+        return ans === undefined || (Array.isArray(ans) && ans.length === 0);
+      });
+      if (firstEmpty >= 0) setCurrentPreguntaIndex(firstEmpty);
+    }
+  }, [cap, step, respuestas]);
 
   useEffect(() => {
     if (id) {
@@ -157,12 +230,44 @@ export default function EvaluacionPublicaPage() {
     });
   };
 
-  const handleSiguiente = () => {
+  const handleSiguiente = async () => {
     if (step === "datos") {
       if (!nombre.trim() || !dni.trim()) {
         setError("Completá tu nombre y DNI para continuar.");
         return;
       }
+      if (!/^\d{7,8}$/.test(dni.replace(/\D/g, ""))) {
+        setError("El DNI debe tener 7 u 8 dígitos.");
+        return;
+      }
+
+      setValidandoDni(true);
+      try {
+        const intento = await consultarIntentoCapacitacion(
+          id,
+          dni.replace(/\D/g, ""),
+        );
+        if (intento.registrado && intento.aprobado) {
+          setResultado({
+            puntaje: intento.puntaje ?? 100,
+            aprobado: true,
+          });
+          setStep("resultado");
+          clearPersistedState(id);
+          setError(null);
+          return;
+        }
+        if (intento.registrado && !intento.aprobado) {
+          setRespuestas({});
+          setCurrentPreguntaIndex(0);
+          clearPersistedState(id);
+        }
+      } catch {
+        // Si falla la consulta, permitir continuar igual
+      } finally {
+        setValidandoDni(false);
+      }
+
       setError(null);
 
       if (
@@ -196,6 +301,15 @@ export default function EvaluacionPublicaPage() {
       return;
     }
 
+    const preguntas = cap?.capacitacion_preguntas || [];
+    const requiereTest =
+      cap?.con_evaluacion !== false && preguntas.length > 0;
+    if (requiereTest && !respuestasCompletas(preguntas, respuestas)) {
+      setError("Completá todas las preguntas antes de firmar.");
+      setStep("test");
+      return;
+    }
+
     setError(null);
     setEnviando(true);
     try {
@@ -220,7 +334,7 @@ export default function EvaluacionPublicaPage() {
         revision: data.revision,
       });
       setStep("resultado");
-      localStorage.removeItem(`evaluacion_state_${id}`);
+      clearPersistedState(id);
     } catch (err: unknown) {
       const axiosErr = err as {
         response?: { status?: number; data?: { error?: string } };
@@ -230,6 +344,8 @@ export default function EvaluacionPublicaPage() {
       setError(
         status === 429
           ? "Hay muchas personas registrándose al mismo tiempo. Esperá 30 segundos y tocá «Confirmar Firma» de nuevo sin recargar la página."
+          : status === 409
+            ? "Este DNI ya aprobó la evaluación. No podés volver a rendirla."
           : axiosErr.response?.data?.error ||
               axiosErr.message ||
               "Error al enviar la evaluación.",
@@ -237,6 +353,16 @@ export default function EvaluacionPublicaPage() {
     } finally {
       setEnviando(false);
     }
+  };
+
+  const reiniciarEvaluacion = () => {
+    clearPersistedState(id);
+    setResultado(null);
+    setRespuestas({});
+    setCurrentPreguntaIndex(0);
+    setStep("datos");
+    setError(null);
+    sigRef.current?.clear();
   };
 
   const totalPreguntas = cap?.capacitacion_preguntas?.length || 0;
@@ -356,10 +482,11 @@ export default function EvaluacionPublicaPage() {
             </div>
 
             <button
-              onClick={handleSiguiente}
-              className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition-all cursor-pointer shadow-md shadow-blue-500/10"
+              onClick={() => void handleSiguiente()}
+              disabled={validandoDni}
+              className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition-all cursor-pointer shadow-md shadow-blue-500/10 disabled:opacity-50"
             >
-              Continuar
+              {validandoDni ? "Verificando..." : "Continuar"}
             </button>
           </div>
         )}
@@ -617,6 +744,13 @@ export default function EvaluacionPublicaPage() {
                     Ud deberá volver a tomar el curso y rendir nuevamente el
                     examen
                   </p>
+                  <button
+                    type="button"
+                    onClick={reiniciarEvaluacion}
+                    className="mt-2 w-full max-w-xs mx-auto py-3 bg-white border border-rose-200 hover:bg-rose-50 text-rose-700 font-bold rounded-xl text-sm cursor-pointer"
+                  >
+                    Intentar de nuevo
+                  </button>
                 </div>
               )}
             </div>

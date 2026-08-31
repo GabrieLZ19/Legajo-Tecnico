@@ -6,6 +6,7 @@ export type EmpresaDetalle = Empresa & {
   domicilio?: string | null;
   localidad?: string | null;
   codigo_postal?: string | null;
+  provincia?: string | null;
   telefono?: string | null;
   contacto?: string | null;
   consultoras?: {

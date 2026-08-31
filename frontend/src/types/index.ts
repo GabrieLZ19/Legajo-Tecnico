@@ -17,6 +17,10 @@ export interface Empresa {
   actividad?: string;
   logo_url?: string;
   porcentaje_cumplimiento?: number;
+  domicilio?: string;
+  localidad?: string;
+  codigo_postal?: string;
+  provincia?: string;
   estado?: EstadoEmpresa;
   created_at: string;
 }
@@ -358,6 +362,7 @@ export interface EppEntrega {
   empresa_id: string;
   preventor_id: string;
   epp_tipo_id: string;
+  empleado_id?: string | null;
   nombre_empleado: string;
   dni_empleado: string;
   cantidad: number;
@@ -371,5 +376,28 @@ export interface EppEntrega {
   pdf_url?: string;
   created_at: string;
   epp_tipos?: EppTipo | null;
+}
+
+export interface EppHistoricoRow {
+  id: string;
+  empleado_id: string | null;
+  trabajador: string;
+  dni: string;
+  producto: string;
+  cantidad: number;
+  marca: string | null;
+  modelo: string | null;
+  certificacion: string | null;
+  fecha: string;
+  pdf_disponible: boolean;
+}
+
+export interface EppHistoricoFiltros {
+  trabajador?: string;
+  producto?: string;
+  fecha_desde?: string;
+  fecha_hasta?: string;
+  limit?: number;
+  offset?: number;
 }
 

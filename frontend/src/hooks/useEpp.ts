@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { api } from "@/lib/api";
-import type { EppProveedor } from "@/types";
+import type { EppProveedor, EppHistoricoFiltros, EppHistoricoRow } from "@/types";
 
 export function useEpp() {
   const [loading, setLoading] = useState(false);
@@ -178,6 +178,49 @@ export function useEpp() {
     [run],
   );
 
+  const getHistoricoEpp = useCallback(
+    (empresaId: string, filtros: EppHistoricoFiltros = {}) =>
+      run(async () => {
+        const { data } = await api.get("/epp/historico", {
+          params: { empresa_id: empresaId, ...filtros },
+        });
+        return data as {
+          registros: EppHistoricoRow[];
+          total: number;
+          limit: number;
+          offset: number;
+        };
+      }, "Error al obtener base histórica de EPP"),
+    [run],
+  );
+
+  const exportarHistoricoEpp = useCallback(
+    (empresaId: string, filtros: Omit<EppHistoricoFiltros, "limit" | "offset"> = {}) =>
+      run(async () => {
+        const params = new URLSearchParams({ empresa_id: empresaId });
+        if (filtros.trabajador) params.set("trabajador", filtros.trabajador);
+        if (filtros.producto) params.set("producto", filtros.producto);
+        if (filtros.fecha_desde) params.set("fecha_desde", filtros.fecha_desde);
+        if (filtros.fecha_hasta) params.set("fecha_hasta", filtros.fecha_hasta);
+        const res = await api.get(`/epp/historico/exportar?${params.toString()}`, {
+          responseType: "blob",
+        });
+        return res.data as Blob;
+      }, "Error al exportar base histórica de EPP"),
+    [run],
+  );
+
+  const descargarPlanillaHistoricaEmpleado = useCallback(
+    (empleadoId: string) =>
+      run(async () => {
+        const res = await api.get(`/epp/empleados/${empleadoId}/planilla-historica`, {
+          responseType: "blob",
+        });
+        return res.data as Blob;
+      }, "Error al descargar planilla histórica"),
+    [run],
+  );
+
   return {
     loading,
     error,
@@ -196,5 +239,8 @@ export function useEpp() {
     crearProveedor,
     getLicitaciones,
     crearLicitacion,
+    getHistoricoEpp,
+    exportarHistoricoEpp,
+    descargarPlanillaHistoricaEmpleado,
   };
 }
