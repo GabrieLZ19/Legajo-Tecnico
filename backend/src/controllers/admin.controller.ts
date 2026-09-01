@@ -5,6 +5,7 @@ import { enteService } from "../services/ente.service";
 import type { TipoDocumentoArchivo } from "../services/archivo.service";
 import { assertEmpresaAccess, assertPerfilDeConsultora, requireConsultoraId } from "../middlewares/empresaAccess";
 import { HttpError } from "../utils/httpError";
+import { clampInt, sanitizeSearchTerm } from "../utils/searchSanitize";
 
 export const adminController = {
   async listarUsuarios(req: Request, res: Response, next: NextFunction) {
@@ -98,6 +99,21 @@ export const adminController = {
       const empresaData = req.body;
 
       const data = await adminService.crearEmpresa(usuarioCreadorId, consultoraIdToken, empresaData);
+      res.status(201).json(data);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async crearEmpresasSucursales(req: Request, res: Response, next: NextFunction) {
+    try {
+      const usuarioCreadorId = req.user!.id;
+      const consultoraIdToken = requireConsultoraId(req.user!);
+      const data = await adminService.crearEmpresasSucursales(
+        usuarioCreadorId,
+        consultoraIdToken,
+        req.body,
+      );
       res.status(201).json(data);
     } catch (error) {
       next(error);
@@ -233,7 +249,10 @@ export const adminController = {
   async listarLogs(req: Request, res: Response, next: NextFunction) {
     try {
       const consultoraId = requireConsultoraId(req.user!);
-      const logs = await adminService.listarLogs(consultoraId);
+      const limit = clampInt(req.query.limit, 25, 1, 100);
+      const offset = clampInt(req.query.offset, 0, 0, 500_000);
+      const q = sanitizeSearchTerm(req.query.q);
+      const logs = await adminService.listarLogs(consultoraId, { limit, offset, q });
       res.json(logs);
     } catch (error) {
       next(error);

@@ -3,6 +3,15 @@ import { logService } from "./log.service";
 import { notificacionService } from "./notificacion.service";
 import { storageService } from "./storage.service";
 import { HttpError } from "../utils/httpError";
+import {
+  buildCuitSucursal,
+  cuitAuthSlug,
+  digitsOnly,
+  duenoAuthEmail,
+  normalizeCuit,
+  sanitizeSucursalCodigo,
+  validateCuit,
+} from "../utils/cuit";
 import { RolUsuario, EstadoEmpresa } from "../types/database";
 
 const ROLES_CREABLES: RolUsuario[] = ["dueno", "preventor", "ente_regulador"];
@@ -59,8 +68,7 @@ export const adminService = {
         .single();
       
       if (emp?.cuit) {
-        const cleanCuit = emp.cuit.replace(/\D/g, "");
-        finalEmail = `${username}@${cleanCuit}.legajo.local`;
+        finalEmail = duenoAuthEmail(username, emp.cuit);
       }
     }
 
@@ -217,9 +225,12 @@ export const adminService = {
       provincia?: string;
       telefono?: string;
       contacto?: string;
+      multiples_sucursales?: boolean;
     }
   ) {
-    const { cuit, razon_social, actividad, domicilio, localidad, codigo_postal, provincia, telefono, contacto } = empresaData;
+    const { razon_social, actividad, domicilio, localidad, codigo_postal, provincia, telefono, contacto, multiples_sucursales } = empresaData;
+    validateCuit(empresaData.cuit, multiples_sucursales);
+    const cuit = normalizeCuit(empresaData.cuit, multiples_sucursales);
     if (!consultoraIdToken) {
       throw new HttpError(403, "El usuario no tiene consultora asignada");
     }
@@ -257,6 +268,152 @@ export const adminService = {
     return data;
   },
 
+  async crearEmpresasSucursales(
+    usuarioCreadorId: string,
+    consultoraIdToken: string | undefined,
+    payload: {
+      cuit_base: string;
+      razon_social: string;
+      actividad?: string;
+      domicilio?: string;
+      localidad?: string;
+      codigo_postal?: string;
+      provincia?: string;
+      telefono?: string;
+      contacto?: string;
+      sucursales: Array<{
+        codigo: string;
+        domicilio?: string;
+        localidad?: string;
+        codigo_postal?: string;
+        provincia?: string;
+        telefono?: string;
+        contacto?: string;
+      }>;
+    },
+  ) {
+    if (!consultoraIdToken) {
+      throw new HttpError(403, "El usuario no tiene consultora asignada");
+    }
+
+    const baseCuit = digitsOnly(payload.cuit_base);
+    if (baseCuit.length !== 11) {
+      throw new HttpError(400, "CUIT fiscal debe tener 11 dígitos");
+    }
+
+    if (!payload.sucursales?.length) {
+      throw new HttpError(400, "Agregá al menos una sucursal");
+    }
+
+    const {
+      razon_social,
+      actividad,
+      domicilio,
+      localidad,
+      codigo_postal,
+      provincia,
+      telefono,
+      contacto,
+    } = payload;
+
+    const codigosUsados = new Set<string>();
+    const empresasPayload: Array<{
+      cuit: string;
+      razon_social: string;
+      actividad?: string;
+      domicilio?: string;
+      localidad?: string;
+      codigo_postal?: string;
+      provincia?: string;
+      telefono?: string;
+      contacto?: string;
+    }> = [];
+
+    for (const sucursal of payload.sucursales) {
+      const codigo = sanitizeSucursalCodigo(sucursal.codigo);
+      if (!codigo) {
+        throw new HttpError(400, "Cada sucursal debe tener un código");
+      }
+      if (codigosUsados.has(codigo)) {
+        throw new HttpError(400, `Código de sucursal duplicado: ${codigo}`);
+      }
+      codigosUsados.add(codigo);
+
+      const cuit = buildCuitSucursal(baseCuit, codigo);
+      validateCuit(cuit, true);
+
+      empresasPayload.push({
+        cuit,
+        razon_social,
+        actividad,
+        domicilio: sucursal.domicilio?.trim() || domicilio,
+        localidad: sucursal.localidad?.trim() || localidad,
+        codigo_postal: sucursal.codigo_postal?.trim() || codigo_postal,
+        provincia: sucursal.provincia?.trim() || provincia,
+        telefono: sucursal.telefono?.trim() || telefono,
+        contacto: sucursal.contacto?.trim() || contacto,
+      });
+    }
+
+    const fullCuits = empresasPayload.map((empresa) => empresa.cuit);
+    const { data: existentes, error: existentesError } = await supabaseAdmin
+      .from("empresas")
+      .select("cuit")
+      .in("cuit", fullCuits);
+
+    if (existentesError) throw existentesError;
+    if (existentes?.length) {
+      throw new HttpError(
+        409,
+        `Ya existe una empresa con identificador ${existentes[0].cuit}`,
+      );
+    }
+
+    const consultora_id = consultoraIdToken;
+    const creadas: Record<string, unknown>[] = [];
+
+    try {
+      for (const empresa of empresasPayload) {
+        const { data, error } = await supabaseAdmin
+          .from("empresas")
+          .insert({
+            consultora_id,
+            ...empresa,
+            porcentaje_cumplimiento: 100,
+          })
+          .select("*, consultoras(*)")
+          .single();
+
+        if (error) throw error;
+
+        await logService.registrar({
+          usuario_id: usuarioCreadorId,
+          accion: "CREAR_EMPRESA",
+          entidad: "empresas",
+          entidad_id: data.id,
+          detalles: {
+            razon_social: empresa.razon_social,
+            cuit: empresa.cuit,
+            lote_sucursales: true,
+          },
+          consultora_id,
+        });
+
+        creadas.push(data);
+      }
+    } catch (error) {
+      for (const empresa of creadas) {
+        await supabaseAdmin.from("empresas").delete().eq("id", empresa.id);
+      }
+      throw error;
+    }
+
+    return {
+      empresas: creadas,
+      count: creadas.length,
+    };
+  },
+
   async editarEmpresa(
     usuarioEditorId: string,
     consultoraId: string,
@@ -271,9 +428,12 @@ export const adminService = {
       provincia?: string;
       telefono?: string;
       contacto?: string;
+      multiples_sucursales?: boolean;
     }
   ) {
-    const { cuit, razon_social, actividad, domicilio, localidad, codigo_postal, provincia, telefono, contacto } = empresaData;
+    const { razon_social, actividad, domicilio, localidad, codigo_postal, provincia, telefono, contacto, multiples_sucursales } = empresaData;
+    validateCuit(empresaData.cuit, multiples_sucursales);
+    const cuit = normalizeCuit(empresaData.cuit, multiples_sucursales);
 
     // Obtener CUIT anterior antes de actualizar
     const { data: oldEmpresa } = await supabaseAdmin
@@ -304,18 +464,18 @@ export const adminService = {
 
     // Actualizar emails en Supabase Auth de todos los perfiles asociados al cambiar el CUIT (dueño, preventor, etc)
     try {
-      const cleanNewCuit = cuit.replace(/\D/g, "");
-      const cleanOldCuit = oldEmpresa?.cuit?.replace(/\D/g, "");
+      const newSlug = cuitAuthSlug(cuit);
+      const oldSlug = oldEmpresa?.cuit ? cuitAuthSlug(oldEmpresa.cuit) : null;
 
-      if (cleanOldCuit && cleanOldCuit !== cleanNewCuit) {
+      if (oldSlug && oldSlug !== newSlug) {
         const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers({
           perPage: 1000,
         });
         if (authUsers?.users) {
           for (const user of authUsers.users) {
-            if (user.email && user.email.endsWith(`@${cleanOldCuit}.legajo.local`)) {
+            if (user.email && user.email.endsWith(`@${oldSlug}.legajo.local`)) {
               const username = user.email.split("@")[0];
-              const newEmail = `${username}@${cleanNewCuit}.legajo.local`;
+              const newEmail = `${username}@${newSlug}.legajo.local`;
               await supabaseAdmin.auth.admin.updateUserById(user.id, {
                 email: newEmail,
               });
@@ -728,8 +888,11 @@ export const adminService = {
     return data;
   },
 
-  async listarLogs(consultoraId: string) {
-    return await logService.listarPorConsultora(consultoraId);
+  async listarLogs(
+    consultoraId: string,
+    opts?: { limit?: number; offset?: number; q?: string },
+  ) {
+    return await logService.listarPorConsultora(consultoraId, opts);
   },
 
   async enviarNotificacion(

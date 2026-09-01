@@ -2,17 +2,71 @@ import { Request, Response, NextFunction } from 'express';
 import { supabaseAdmin, createPasswordAuthClient } from '../config/supabase';
 import { userPerteneceAEmpresa, requireConsultoraId } from '../middlewares/empresaAccess';
 import { clearAuthCookie, setAuthCookie } from '../utils/authCookie';
+import { cuitLookupValues, digitsOnly, getSucursalLabel, isCuitSucursalFormat } from '../utils/cuit';
 
-function digitsOnly(value: unknown): string {
-  return String(value ?? "").replace(/\D/g, "");
-}
+type EmpresaLoginRow = {
+  id: string;
+  razon_social: string;
+  cuit: string;
+  logo_url: string | null;
+  consultora_id: string;
+  estado: string | null;
+};
 
-function cuitLookupValues(cleanCuit: string): string[] {
-  const formatted =
-    cleanCuit.length === 11
-      ? `${cleanCuit.slice(0, 2)}-${cleanCuit.slice(2, 10)}-${cleanCuit.slice(10)}`
-      : cleanCuit;
-  return Array.from(new Set([cleanCuit, formatted]));
+const EMPRESA_LOGIN_SELECT =
+  "id, razon_social, cuit, logo_url, consultora_id, estado";
+
+async function resolveEmpresaForLogin(cuitInput: string): Promise<
+  | { kind: "single"; empresa: EmpresaLoginRow }
+  | { kind: "none" }
+  | { kind: "multiple"; sucursales: EmpresaLoginRow[] }
+> {
+  const trimmed = String(cuitInput ?? "").trim();
+  if (!trimmed) return { kind: "none" };
+
+  if (isCuitSucursalFormat(trimmed)) {
+    const normalized = trimmed.replace(/\s+/g, " ");
+    const { data, error } = await supabaseAdmin
+      .from("empresas")
+      .select(EMPRESA_LOGIN_SELECT)
+      .eq("cuit", normalized)
+      .limit(1);
+
+    if (error) throw error;
+    if (data?.[0]) return { kind: "single", empresa: data[0] as EmpresaLoginRow };
+    return { kind: "none" };
+  }
+
+  const lookupValues = cuitLookupValues(trimmed);
+  const baseCuit = digitsOnly(trimmed);
+
+  const { data: exactRows, error: exactError } = await supabaseAdmin
+    .from("empresas")
+    .select(EMPRESA_LOGIN_SELECT)
+    .in("cuit", lookupValues);
+
+  if (exactError) throw exactError;
+
+  let branchRows: EmpresaLoginRow[] = [];
+  if (baseCuit.length === 11) {
+    const { data, error } = await supabaseAdmin
+      .from("empresas")
+      .select(EMPRESA_LOGIN_SELECT)
+      .ilike("cuit", `${baseCuit} %`);
+
+    if (error) throw error;
+    branchRows = (data ?? []) as EmpresaLoginRow[];
+  }
+
+  const byId = new Map<string, EmpresaLoginRow>();
+  for (const row of [...(exactRows ?? []), ...branchRows]) {
+    byId.set(row.id, row as EmpresaLoginRow);
+  }
+
+  const matches = Array.from(byId.values());
+  if (matches.length === 0) return { kind: "none" };
+  if (matches.length === 1) return { kind: "single", empresa: matches[0] };
+  return { kind: "multiple", sucursales: matches };
 }
 
 /**
@@ -65,25 +119,36 @@ export const authController = {
     try {
       const { cuit, username, password } = req.body;
       const LOGIN_ERROR = "Credenciales inválidas o sesión no iniciada";
-      const cleanCuit = digitsOnly(cuit);
+      const cuitInput = String(cuit ?? "").trim();
       const usernameNorm = String(username ?? "").trim();
 
-      if (!cleanCuit || !usernameNorm) {
+      if (!cuitInput || !usernameNorm) {
         return res.status(401).json({ error: LOGIN_ERROR });
       }
 
-      const { data: empresas, error: empresaError } = await supabaseAdmin
-        .from("empresas")
-        .select("id, razon_social, cuit, logo_url, consultora_id, estado")
-        .in("cuit", cuitLookupValues(cleanCuit))
-        .limit(1);
-
-      if (empresaError) throw empresaError;
-      const empresa = empresas?.[0];
-
-      if (!empresa) {
+      const resolution = await resolveEmpresaForLogin(cuitInput);
+      if (resolution.kind === "none") {
         return res.status(401).json({ error: LOGIN_ERROR });
       }
+
+      if (resolution.kind === "multiple") {
+        return res.status(409).json({
+          error:
+            "Esta empresa tiene varias sucursales. Elegí cuál querés ingresar.",
+          code: "MULTIPLE_SUCURSALES",
+          sucursales: resolution.sucursales.map((empresa) => ({
+            id: empresa.id,
+            razon_social: empresa.razon_social,
+            cuit: empresa.cuit,
+            label:
+              getSucursalLabel(empresa.cuit) ||
+              empresa.razon_social ||
+              empresa.cuit,
+          })),
+        });
+      }
+
+      const empresa = resolution.empresa;
 
       if (empresa.estado === "pausada") {
         return res.status(403).json({

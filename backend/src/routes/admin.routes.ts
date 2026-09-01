@@ -22,6 +22,7 @@ router.patch('/usuarios/:id/password', adminController.resetPasswordUsuario);
 
 router.get('/empresas', adminController.listarEmpresas);
 router.post('/empresas', adminController.crearEmpresa);
+router.post('/empresas/sucursales', adminController.crearEmpresasSucursales);
 router.put('/empresas/:id', adminController.editarEmpresa);
 router.patch('/empresas/:id/estado', adminController.cambiarEstadoEmpresa);
 

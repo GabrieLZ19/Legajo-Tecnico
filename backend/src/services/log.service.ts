@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../config/supabase';
+import { sanitizeSearchTerm } from '../utils/searchSanitize';
 
 export const logService = {
   async registrar({
@@ -36,15 +37,46 @@ export const logService = {
     }
   },
 
-  async listarPorConsultora(consultoraId: string, limit = 100) {
-    const { data, error } = await supabaseAdmin
+  async listarPorConsultora(
+    consultoraId: string,
+    opts?: { limit?: number; offset?: number; q?: string },
+  ) {
+    const limit = opts?.limit ?? 25;
+    const offset = opts?.offset ?? 0;
+    const q = sanitizeSearchTerm(opts?.q);
+
+    let query = supabaseAdmin
       .from('logs_actividad')
-      .select('*, perfiles(nombre_completo, username)')
+      .select('*, perfiles(nombre_completo, username)', { count: 'exact' })
       .eq('consultora_id', consultoraId)
-      .order('created_at', { ascending: false })
-      .limit(limit);
+      .order('created_at', { ascending: false });
+
+    if (q) {
+      const { data: perfiles, error: perfilesError } = await supabaseAdmin
+        .from('perfiles')
+        .select('id')
+        .eq('consultora_id', consultoraId)
+        .or(`nombre_completo.ilike.%${q}%,username.ilike.%${q}%`);
+
+      if (perfilesError) throw perfilesError;
+
+      const usuarioIds = (perfiles ?? []).map((perfil) => perfil.id);
+      const orFilters = [`accion.ilike.%${q}%`, `entidad.ilike.%${q}%`];
+      if (usuarioIds.length > 0) {
+        orFilters.push(`usuario_id.in.(${usuarioIds.join(',')})`);
+      }
+      query = query.or(orFilters.join(','));
+    }
+
+    const { data, error, count } = await query.range(offset, offset + limit - 1);
 
     if (error) throw error;
-    return data;
+
+    return {
+      items: data ?? [],
+      total: count ?? 0,
+      limit,
+      offset,
+    };
   }
 };
