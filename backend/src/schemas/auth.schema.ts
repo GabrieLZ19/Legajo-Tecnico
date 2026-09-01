@@ -5,6 +5,7 @@ export const loginSchema = z.object({
     cuit: z.string().min(1, 'CUIT es requerido'),
     username: z.string().min(1, 'Usuario es requerido'),
     password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres'),
+    empresa_id: z.string().uuid().optional(),
   }),
 });
 

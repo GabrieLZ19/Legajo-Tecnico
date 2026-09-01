@@ -2,7 +2,13 @@ import { Request, Response, NextFunction } from 'express';
 import { supabaseAdmin, createPasswordAuthClient } from '../config/supabase';
 import { userPerteneceAEmpresa, requireConsultoraId } from '../middlewares/empresaAccess';
 import { clearAuthCookie, setAuthCookie } from '../utils/authCookie';
-import { cuitLookupValues, digitsOnly, getSucursalLabel, isCuitSucursalFormat } from '../utils/cuit';
+import {
+  cuitLookupValues,
+  digitsOnly,
+  getBaseCuit,
+  isCuitSucursalFormat,
+  loginEmpresaOptionLabel,
+} from '../utils/cuit';
 
 type EmpresaLoginRow = {
   id: string;
@@ -66,7 +72,46 @@ async function resolveEmpresaForLogin(cuitInput: string): Promise<
   const matches = Array.from(byId.values());
   if (matches.length === 0) return { kind: "none" };
   if (matches.length === 1) return { kind: "single", empresa: matches[0] };
-  return { kind: "multiple", sucursales: matches };
+  return { kind: "multiple", sucursales: sortEmpresasForLoginPicker(matches) };
+}
+
+function sortEmpresasForLoginPicker(empresas: EmpresaLoginRow[]): EmpresaLoginRow[] {
+  return [...empresas].sort((a, b) => {
+    const aPrincipal = !isCuitSucursalFormat(a.cuit);
+    const bPrincipal = !isCuitSucursalFormat(b.cuit);
+    if (aPrincipal !== bPrincipal) return aPrincipal ? -1 : 1;
+    return a.cuit.localeCompare(b.cuit);
+  });
+}
+
+async function resolveEmpresaById(
+  empresaId: string,
+  cuitInput: string,
+): Promise<EmpresaLoginRow | null> {
+  const { data, error } = await supabaseAdmin
+    .from("empresas")
+    .select(EMPRESA_LOGIN_SELECT)
+    .eq("id", empresaId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  const empresa = data as EmpresaLoginRow;
+  const trimmed = cuitInput.trim();
+
+  if (isCuitSucursalFormat(trimmed)) {
+    if (empresa.cuit.replace(/\s+/g, " ") !== trimmed.replace(/\s+/g, " ")) {
+      return null;
+    }
+    return empresa;
+  }
+
+  const baseInput = digitsOnly(trimmed);
+  if (baseInput.length !== 11) return null;
+  if (getBaseCuit(empresa.cuit) !== baseInput) return null;
+
+  return empresa;
 }
 
 /**
@@ -117,38 +162,48 @@ async function findPerfilLoginEmpresa(
 export const authController = {
   async login(req: Request, res: Response, next: NextFunction) {
     try {
-      const { cuit, username, password } = req.body;
+      const { cuit, username, password, empresa_id } = req.body;
       const LOGIN_ERROR = "Credenciales inválidas o sesión no iniciada";
       const cuitInput = String(cuit ?? "").trim();
       const usernameNorm = String(username ?? "").trim();
+      const empresaIdInput =
+        typeof empresa_id === "string" && empresa_id.trim()
+          ? empresa_id.trim()
+          : null;
 
       if (!cuitInput || !usernameNorm) {
         return res.status(401).json({ error: LOGIN_ERROR });
       }
 
-      const resolution = await resolveEmpresaForLogin(cuitInput);
-      if (resolution.kind === "none") {
-        return res.status(401).json({ error: LOGIN_ERROR });
-      }
+      let empresa: EmpresaLoginRow | null = null;
 
-      if (resolution.kind === "multiple") {
-        return res.status(409).json({
-          error:
-            "Esta empresa tiene varias sucursales. Elegí cuál querés ingresar.",
-          code: "MULTIPLE_SUCURSALES",
-          sucursales: resolution.sucursales.map((empresa) => ({
-            id: empresa.id,
-            razon_social: empresa.razon_social,
-            cuit: empresa.cuit,
-            label:
-              getSucursalLabel(empresa.cuit) ||
-              empresa.razon_social ||
-              empresa.cuit,
-          })),
-        });
-      }
+      if (empresaIdInput) {
+        empresa = await resolveEmpresaById(empresaIdInput, cuitInput);
+        if (!empresa) {
+          return res.status(401).json({ error: LOGIN_ERROR });
+        }
+      } else {
+        const resolution = await resolveEmpresaForLogin(cuitInput);
+        if (resolution.kind === "none") {
+          return res.status(401).json({ error: LOGIN_ERROR });
+        }
 
-      const empresa = resolution.empresa;
+        if (resolution.kind === "multiple") {
+          return res.status(409).json({
+            error:
+              "Este CUIT tiene legajo principal y sucursales. Elegí cuál querés ingresar.",
+            code: "MULTIPLE_SUCURSALES",
+            sucursales: resolution.sucursales.map((row) => ({
+              id: row.id,
+              razon_social: row.razon_social,
+              cuit: row.cuit,
+              label: loginEmpresaOptionLabel(row.razon_social, row.cuit),
+            })),
+          });
+        }
+
+        empresa = resolution.empresa;
+      }
 
       if (empresa.estado === "pausada") {
         return res.status(403).json({

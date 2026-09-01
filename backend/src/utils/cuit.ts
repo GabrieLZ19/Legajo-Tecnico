@@ -59,6 +59,14 @@ export function getSucursalLabel(cuit: string): string | null {
   return match?.[1] ?? null;
 }
 
+export function loginEmpresaOptionLabel(razonSocial: string, cuit: string): string {
+  if (isCuitSucursalFormat(cuit)) {
+    const sucursal = sanitizeSucursalCodigo(getSucursalLabel(cuit) || "");
+    return `${sucursal} · ${getBaseCuit(cuit)}`;
+  }
+  return `Principal · ${razonSocial}`;
+}
+
 /** Slug único para el dominio proxy de Auth (diferencia sucursales del mismo CUIT fiscal). */
 export function cuitAuthSlug(cuit: string): string {
   const trimmed = cuit.trim().replace(/\s+/g, " ");
