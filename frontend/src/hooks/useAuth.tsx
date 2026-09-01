@@ -16,7 +16,12 @@ interface AuthContextType {
   user: Perfil | null;
   empresa: Empresa | null;
   loading: boolean;
-  login: (cuit: string, username: string, pass: string) => Promise<void>;
+  login: (
+    cuit: string,
+    username: string,
+    pass: string,
+    empresaId?: string,
+  ) => Promise<void>;
   loginAdmin: (email: string, pass: string) => Promise<void>;
   logout: () => void;
   cambiarEmpresaContexto: (empresa: Empresa) => void;
@@ -158,7 +163,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     };
   }, []);
 
-  const login = async (cuit: string, username: string, pass: string) => {
+  const login = async (
+    cuit: string,
+    username: string,
+    pass: string,
+    empresaId?: string,
+  ) => {
     try {
       await warmupApi();
       const response = await postWithTransientRetry<{
@@ -168,6 +178,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         cuit,
         username,
         password: pass,
+        ...(empresaId ? { empresa_id: empresaId } : {}),
       });
       const { perfil, empresa: empData } = response.data;
       Cookies.remove("token");

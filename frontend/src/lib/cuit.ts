@@ -125,15 +125,16 @@ export type LoginSucursalOption = {
   label: string;
 };
 
-export function loginSucursalLabel(
-  razonSocial: string,
-  cuit: string,
-): string {
-  const sucursal = getSucursalLabel(cuit);
-  if (sucursal) {
-    return `${sucursal} · ${razonSocial}`;
+export function loginEmpresaOptionLabel(razonSocial: string, cuit: string): string {
+  if (isCuitSucursalFormat(cuit)) {
+    const sucursal = normalizeSucursalCodigoInput(getSucursalLabel(cuit) || "");
+    return `${sucursal} · ${formatCuitDisplay(getBaseCuit(cuit))}`;
   }
-  return razonSocial;
+  return `Principal · ${razonSocial}`;
+}
+
+export function isEmpresaPrincipalCuit(cuit: string): boolean {
+  return sanitizeCuitNumericoInput(cuit).length === 11 && !isCuitSucursalFormat(cuit);
 }
 
 export function buildCuitSucursal(baseCuit: string, codigo: string): string {
