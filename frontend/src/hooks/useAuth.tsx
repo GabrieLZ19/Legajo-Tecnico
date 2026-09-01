@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useLayoutEffect } from "react";
 import Cookies from "js-cookie";
+import axios from "axios";
 import { api } from "@/lib/api";
 import {
   loginErrorMessage,
@@ -178,6 +179,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       const dest = next && next.startsWith("/") ? next : "/dashboard";
       postLoginRedirect(dest);
     } catch (error: unknown) {
+      if (axios.isAxiosError(error) && error.response?.status === 409) {
+        throw error;
+      }
       throw new Error(loginErrorMessage(error, "Error al iniciar sesión"));
     }
   };

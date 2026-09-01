@@ -71,6 +71,35 @@ export function useAdminEmpresas() {
     },
   });
 
+  const crearEmpresasSucursalesMutation = useMutation({
+    mutationFn: async (payload: {
+      cuit_base: string;
+      razon_social: string;
+      actividad?: string;
+      domicilio?: string;
+      localidad?: string;
+      codigo_postal?: string;
+      provincia?: string;
+      telefono?: string;
+      contacto?: string;
+      sucursales: Array<{
+        codigo: string;
+        domicilio?: string;
+        localidad?: string;
+        codigo_postal?: string;
+        provincia?: string;
+        telefono?: string;
+        contacto?: string;
+      }>;
+    }) => {
+      const response = await api.post("/admin/empresas/sucursales", payload);
+      return response.data as { empresas: EmpresaDetalle[]; count: number };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["adminEmpresas"] });
+    },
+  });
+
   // Mutation: edit company
   const editarEmpresaMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
@@ -224,6 +253,7 @@ export function useAdminEmpresas() {
       preventoresQuery.refetch();
     },
     crearEmpresa: crearEmpresaMutation.mutateAsync,
+    crearEmpresasSucursales: crearEmpresasSucursalesMutation.mutateAsync,
     editarEmpresa: editarEmpresaMutation.mutateAsync,
     cambiarEstadoEmpresa: cambiarEstadoEmpresaMutation.mutateAsync,
     crearDuenoEmpresa: crearDuenoEmpresaMutation.mutateAsync,
@@ -232,7 +262,10 @@ export function useAdminEmpresas() {
     asignarPreventor: asignarPreventorMutation.mutateAsync,
     desasignarPreventor: desasignarPreventorMutation.mutateAsync,
     buscarCuit: buscarCuitMutation.mutateAsync,
-    isSaving: crearEmpresaMutation.isPending || editarEmpresaMutation.isPending,
+    isSaving:
+      crearEmpresaMutation.isPending ||
+      crearEmpresasSucursalesMutation.isPending ||
+      editarEmpresaMutation.isPending,
     isChangingEstado: cambiarEstadoEmpresaMutation.isPending,
     isSavingDueno: crearDuenoEmpresaMutation.isPending,
     isUploading:

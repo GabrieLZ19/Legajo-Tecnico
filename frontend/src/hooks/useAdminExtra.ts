@@ -38,23 +38,49 @@ export function useAdminMetricas() {
   };
 }
 
+export type AuditoriaLogEntry = {
+  id: string;
+  usuario_id: string;
+  accion: string;
+  entidad: string;
+  entidad_id: string;
+  detalles: Record<string, unknown> | null;
+  created_at: string;
+  perfiles: {
+    nombre_completo: string;
+    username: string;
+  } | null;
+};
+
+export type AuditoriaResponse = {
+  items: AuditoriaLogEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
 export function useAuditoria() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const getAuditoria = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const { data } = await api.get("/admin/auditoria");
-      return data;
-    } catch (err: any) {
-      setError(err.response?.data?.error || "Error al obtener registros de auditoría");
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const getAuditoria = useCallback(
+    async (params?: { limit?: number; offset?: number; q?: string }) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const { data } = await api.get<AuditoriaResponse>("/admin/auditoria", {
+          params,
+        });
+        return data;
+      } catch (err: any) {
+        setError(err.response?.data?.error || "Error al obtener registros de auditoría");
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
 
   return {
     loading,

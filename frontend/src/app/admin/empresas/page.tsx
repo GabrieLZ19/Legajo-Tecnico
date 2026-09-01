@@ -1,10 +1,28 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useAdminEmpresas } from "@/hooks/useAdminEmpresas";
 import type { EmpresaDetalle, PreventorActivo } from "@/hooks/useAdminEmpresas";
 import { useAlert } from "@/context/AlertContext";
 import { getClipboardImageFile } from "@/lib/signature";
+import {
+  formatCuitDisplay,
+  formatLegajoIdentificador,
+  buildCuitSucursal,
+  createEmptySucursalDraft,
+  getBaseCuit,
+  getSucursalLabel,
+  groupEmpresasByBaseCuit,
+  isCuitSucursalFormat,
+  normalizeCuitForSave,
+  sanitizeCuitNumericoInput,
+  sanitizeSucursalCodigoInput,
+  formatSucursalCodigoInput,
+  normalizeSucursalCodigoInput,
+  validateCuitForSave,
+  validateSucursalCodigo,
+  type SucursalDraft,
+} from "@/lib/cuit";
 import {
   Building2,
   Plus,
@@ -23,6 +41,9 @@ import {
   Eye,
   EyeOff,
   Copy,
+  ChevronDown,
+  ChevronRight,
+  GitBranch,
 } from "lucide-react";
 import type { EstadoEmpresa } from "@/types";
 
@@ -35,6 +56,7 @@ export default function AdminEmpresasPage() {
     preventores,
     isLoading,
     crearEmpresa,
+    crearEmpresasSucursales,
     editarEmpresa,
     cambiarEstadoEmpresa,
     crearDuenoEmpresa,
@@ -51,6 +73,10 @@ export default function AdminEmpresasPage() {
 
   // Search filter
   const [searchTerm, setSearchTerm] = useState("");
+  const [agruparPorCuit, setAgruparPorCuit] = useState(true);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   // Selected company for the detail column (right)
   const [selectedEmpresaId, setSelectedEmpresaId] = useState<string | null>(
@@ -84,6 +110,13 @@ export default function AdminEmpresasPage() {
   const [codigoPostal, setCodigoPostal] = useState("");
   const [telefono, setTelefono] = useState("");
   const [contacto, setContacto] = useState("");
+  const [empresaMultiplesSucursales, setEmpresaMultiplesSucursales] =
+    useState(false);
+  const [sucursalesDraft, setSucursalesDraft] = useState<SucursalDraft[]>([
+    createEmptySucursalDraft(),
+  ]);
+  const [sucursalesPanelOpen, setSucursalesPanelOpen] = useState(true);
+  const [sucursalCodigo, setSucursalCodigo] = useState("");
 
   // Upload file refs
   const fileEmpresaRef = useRef<HTMLInputElement>(null);
@@ -102,6 +135,47 @@ export default function AdminEmpresasPage() {
     filteredEmpresas[0] ||
     null;
 
+  const groupedEmpresas = useMemo(
+    () => groupEmpresasByBaseCuit(filteredEmpresas),
+    [filteredEmpresas],
+  );
+
+  const multiSucursalGroupsCount = groupedEmpresas.filter(
+    (group) => group.isMultiSucursal,
+  ).length;
+
+  const empresasGrupoModal = useMemo(() => {
+    const baseCuit = sanitizeCuitNumericoInput(cuit).slice(0, 11);
+    if (baseCuit.length !== 11) return [];
+    return empresas.filter(
+      (empresa) => getBaseCuit(empresa.cuit || "") === baseCuit,
+    );
+  }, [empresas, cuit]);
+
+  const empresasGrupoSeleccionada = useMemo(() => {
+    if (!selectedEmpresa) return [];
+    const baseCuit = getBaseCuit(selectedEmpresa.cuit || "");
+    if (baseCuit.length !== 11) return [selectedEmpresa];
+    return empresas
+      .filter((empresa) => getBaseCuit(empresa.cuit || "") === baseCuit)
+      .sort((a, b) => (a.cuit || "").localeCompare(b.cuit || ""));
+  }, [empresas, selectedEmpresa]);
+
+  const sucursalesDraftConCodigo = useMemo(
+    () =>
+      sucursalesDraft.filter((sucursal) =>
+        Boolean(sanitizeSucursalCodigoInput(sucursal.codigo)),
+      ),
+    [sucursalesDraft],
+  );
+
+  const mostrarPanelSucursales =
+    (!editingEmpresa && empresaMultiplesSucursales) || Boolean(editingEmpresa);
+
+  const modalAnchoExtendido =
+    mostrarPanelSucursales &&
+    (sucursalesPanelOpen || sucursalesDraftConCodigo.length > 0);
+
   // Helper: get initials for user initials badge
   const getInitials = (name: string) => {
     if (!name) return "??";
@@ -111,12 +185,88 @@ export default function AdminEmpresasPage() {
   };
 
   // Helper: CUIT formatting for visualization
-  const formatCuit = (val: string) => {
-    const raw = val.replace(/\D/g, "");
-    if (raw.length === 11) {
-      return `${raw.substring(0, 2)}-${raw.substring(2, 10)}-${raw.substring(10)}`;
-    }
-    return val;
+  const formatCuit = formatCuitDisplay;
+
+  const toggleGroup = (baseCuit: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(baseCuit)) next.delete(baseCuit);
+      else next.add(baseCuit);
+      return next;
+    });
+  };
+
+  const renderEmpresaRow = (
+    emp: EmpresaDetalle,
+    options?: { nested?: boolean },
+  ) => {
+    const compliance = Math.round(Number(emp.porcentaje_cumplimiento || 100));
+    const isSelected = selectedEmpresa?.id === emp.id;
+    const estado = (emp.estado || "activa") as EstadoEmpresa;
+    const sucursalLabel = getSucursalLabel(emp.cuit || "");
+
+    let badgeColor = "text-emerald-600";
+    if (compliance < 70) badgeColor = "text-rose-500";
+    else if (compliance < 80) badgeColor = "text-amber-500";
+
+    return (
+      <tr
+        key={emp.id}
+        onClick={() => setSelectedEmpresaId(emp.id)}
+        className={`cursor-pointer transition-all select-none ${
+          isSelected
+            ? "bg-blue-50/40 hover:bg-blue-50/50"
+            : "hover:bg-slate-50/30"
+        } ${estado === "eliminada" ? "opacity-60" : ""}`}
+      >
+        <td
+          className={`px-6 py-4 flex items-center gap-3 ${options?.nested ? "pl-10" : ""}`}
+        >
+          {options?.nested ? (
+            <GitBranch className="h-3.5 w-3.5 text-slate-300 shrink-0" />
+          ) : null}
+          {emp.logo_url ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={emp.logo_url}
+              alt="Logo"
+              className="h-8 w-8 rounded-lg object-contain border border-slate-200 p-0.5 bg-white shrink-0"
+            />
+          ) : (
+            <div className="h-8 w-8 rounded-lg  border border-slate-200 flex items-center justify-center shrink-0">
+              <Building className="h-4 w-4 text-slate-900" />
+            </div>
+          )}
+          <div className="min-w-0">
+            <span className="block text-xs font-black text-slate-900 truncate">
+              {emp.razon_social}
+            </span>
+            <span className="block text-[10px] font-bold text-slate-400 truncate mt-0.5">
+              {sucursalLabel ? (
+                <>
+                  <span className="text-violet-600">{sucursalLabel}</span>
+                  {" · "}
+                </>
+              ) : null}
+              {emp.actividad || "General"}
+            </span>
+          </div>
+        </td>
+        <td className="px-6 py-4 text-slate-500 font-bold">
+          {formatCuit(emp.cuit)}
+        </td>
+        <td className="px-6 py-4 text-center">
+          <span
+            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${estadoEmpresaBadgeClass(estado)}`}
+          >
+            {estadoEmpresaLabel(estado)}
+          </span>
+        </td>
+        <td className={`px-6 py-4 text-center font-black text-sm ${badgeColor}`}>
+          {compliance}%
+        </td>
+      </tr>
+    );
   };
 
   // Open creation modal
@@ -131,6 +281,10 @@ export default function AdminEmpresasPage() {
     setCodigoPostal("");
     setTelefono("");
     setContacto("");
+    setEmpresaMultiplesSucursales(false);
+    setSucursalesDraft([createEmptySucursalDraft()]);
+    setSucursalesPanelOpen(true);
+    setSucursalCodigo("");
     setIsModalOpen(true);
   };
 
@@ -230,9 +384,16 @@ export default function AdminEmpresasPage() {
     }
   };
 
-  const openEditModal = (emp: EmpresaDetalle) => {
+  const openEditModal = (
+    emp: EmpresaDetalle,
+    options?: { agregarSucursales?: boolean },
+  ) => {
     setEditingEmpresa(emp);
-    setCuit(emp.cuit);
+    const esSucursal = isCuitSucursalFormat(emp.cuit);
+    setCuit(
+      esSucursal ? sanitizeCuitNumericoInput(emp.cuit).slice(0, 11) : emp.cuit,
+    );
+    setSucursalCodigo(getSucursalLabel(emp.cuit) || "");
     setRazonSocial(emp.razon_social);
     setActividad(emp.actividad || "");
     setDomicilio(emp.domicilio || "");
@@ -241,19 +402,191 @@ export default function AdminEmpresasPage() {
     setCodigoPostal(emp.codigo_postal || "");
     setTelefono(emp.telefono || "");
     setContacto(emp.contacto || "");
+    setEmpresaMultiplesSucursales(esSucursal);
+    setSucursalesDraft([createEmptySucursalDraft()]);
+    setSucursalesPanelOpen(options?.agregarSucursales ?? false);
     setIsModalOpen(true);
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingEmpresa(null);
+    setSucursalesDraft([createEmptySucursalDraft()]);
+    setSucursalCodigo("");
+  };
+
+  const updateSucursalDraft = (
+    id: string,
+    patch: Partial<Omit<SucursalDraft, "id">>,
+  ) => {
+    setSucursalesDraft((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+    );
+  };
+
+  const addSucursalDraft = () => {
+    setSucursalesDraft((prev) => [...prev, createEmptySucursalDraft()]);
+    setSucursalesPanelOpen(true);
+  };
+
+  const removeSucursalDraft = (id: string) => {
+    setSucursalesDraft((prev) => {
+      if (prev.length <= 1) return prev;
+      return prev.filter((item) => item.id !== id);
+    });
+  };
+
+  const validarPayloadSucursalesNuevas = (
+    baseCuit: string,
+    draft: SucursalDraft[],
+    options?: { editingEmpresaId?: string },
+  ) => {
+    const completas = draft.filter((sucursal) =>
+      Boolean(sanitizeSucursalCodigoInput(sucursal.codigo)),
+    );
+
+    if (completas.length === 0) {
+      return { ok: false as const, message: "Agregá al menos una sucursal." };
+    }
+
+    const codigosDraft = new Set<string>();
+    const cuitsOcupados = new Set(
+      empresasGrupoModal
+        .filter((empresa) => empresa.id !== options?.editingEmpresaId)
+        .map((empresa) => empresa.cuit || ""),
+    );
+
+    for (const sucursal of completas) {
+      const codigoError = validateSucursalCodigo(sucursal.codigo);
+      if (codigoError) {
+        return { ok: false as const, message: codigoError };
+      }
+
+      const codigo = sanitizeSucursalCodigoInput(sucursal.codigo);
+      if (codigosDraft.has(codigo)) {
+        return {
+          ok: false as const,
+          message: `El código ${codigo} está repetido en la lista.`,
+        };
+      }
+      codigosDraft.add(codigo);
+
+      const cuitCompleto = buildCuitSucursal(baseCuit, codigo);
+      if (cuitsOcupados.has(cuitCompleto)) {
+        return {
+          ok: false as const,
+          message: `Ya existe la sucursal ${codigo} en este CUIT fiscal.`,
+        };
+      }
+    }
+
+    return {
+      ok: true as const,
+      sucursales: completas.map((sucursal) => ({
+        codigo: sanitizeSucursalCodigoInput(sucursal.codigo),
+        domicilio: sucursal.domicilio,
+        localidad: sucursal.localidad,
+        provincia: sucursal.provincia,
+        codigo_postal: sucursal.codigo_postal,
+        telefono: sucursal.telefono,
+      })),
+    };
+  };
+
+  const guardarSucursalesNuevas = async (
+    baseCuit: string,
+    draft: SucursalDraft[],
+    options?: { editingEmpresaId?: string },
+  ) => {
+    const validacion = validarPayloadSucursalesNuevas(baseCuit, draft, options);
+    if (!validacion.ok) {
+      showAlert("error", "Sucursales incompletas", validacion.message);
+      return null;
+    }
+
+    if (!razonSocial.trim() || !actividad.trim()) {
+      showAlert(
+        "warning",
+        "Datos incompletos",
+        "Completá razón social y actividad comunes.",
+      );
+      return null;
+    }
+
+    try {
+      return await crearEmpresasSucursales({
+        cuit_base: baseCuit,
+        razon_social: razonSocial.trim(),
+        actividad,
+        domicilio,
+        localidad,
+        provincia,
+        codigo_postal: codigoPostal,
+        telefono,
+        contacto,
+        sucursales: validacion.sucursales,
+      });
+    } catch (error: unknown) {
+      showAlert(
+        "error",
+        "Error al guardar sucursales",
+        getErrorMessage(error, "No se pudieron crear las sucursales."),
+      );
+      return null;
+    }
   };
 
   // Submit create/edit company form
   const handleSaveEmpresa = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const esAltaLote =
+      !editingEmpresa && empresaMultiplesSucursales && sucursalesDraft.length > 0;
+
+    if (esAltaLote) {
+      const baseCuit = sanitizeCuitNumericoInput(cuit);
+      if (baseCuit.length !== 11) {
+        showAlert("error", "CUIT inválido", "El CUIT fiscal debe tener 11 dígitos.");
+        return;
+      }
+
+      const result = await guardarSucursalesNuevas(baseCuit, sucursalesDraft);
+      if (!result) return;
+
+      setSelectedEmpresaId(result.empresas[0]?.id ?? null);
+      showAlert(
+        "success",
+        "Sucursales registradas",
+        `Se crearon ${result.count} legajos con el CUIT fiscal ${formatCuit(baseCuit)}.`,
+      );
+      closeModal();
+      return;
+    }
+
+    const cuitFinal =
+      editingEmpresa && empresaMultiplesSucursales
+        ? buildCuitSucursal(cuit, sucursalCodigo)
+        : cuit;
+
+    const cuitError = validateCuitForSave(
+      cuitFinal,
+      editingEmpresa ? empresaMultiplesSucursales : false,
+    );
+    if (cuitError) {
+      showAlert("error", "CUIT inválido", cuitError);
+      return;
+    }
+
+    if (editingEmpresa && empresaMultiplesSucursales) {
+      const codigoError = validateSucursalCodigo(sucursalCodigo);
+      if (codigoError) {
+        showAlert("error", "Sucursal inválida", codigoError);
+        return;
+      }
+    }
+
     const payload = {
-      cuit,
+      cuit: normalizeCuitForSave(cuitFinal, empresaMultiplesSucursales),
       razon_social: razonSocial,
       actividad,
       domicilio,
@@ -262,20 +595,69 @@ export default function AdminEmpresasPage() {
       codigo_postal: codigoPostal,
       telefono,
       contacto,
+      multiples_sucursales: empresaMultiplesSucursales,
     };
 
     try {
       if (editingEmpresa) {
+        const baseCuit = sanitizeCuitNumericoInput(cuit).slice(0, 11);
+        const haySucursalesNuevas = sucursalesDraftConCodigo.length > 0;
+        let sucursalesValidadas:
+          | Extract<
+              ReturnType<typeof validarPayloadSucursalesNuevas>,
+              { ok: true }
+            >
+          | null = null;
+
+        if (haySucursalesNuevas) {
+          if (baseCuit.length !== 11) {
+            showAlert(
+              "error",
+              "CUIT inválido",
+              "El CUIT fiscal debe tener 11 dígitos para agregar sucursales.",
+            );
+            return;
+          }
+
+          const validacion = validarPayloadSucursalesNuevas(
+            baseCuit,
+            sucursalesDraft,
+            { editingEmpresaId: editingEmpresa.id },
+          );
+          if (!validacion.ok) {
+            showAlert("error", "Sucursales incompletas", validacion.message);
+            return;
+          }
+          sucursalesValidadas = validacion;
+        }
+
         const updated = await editarEmpresa({
           id: editingEmpresa.id,
           data: payload,
         });
-        setSelectedEmpresaId(updated.id);
-        showAlert(
-          "success",
-          "Empresa actualizada",
-          "La empresa se ha actualizado con éxito.",
-        );
+
+        let mensaje = "La empresa se ha actualizado con éxito.";
+
+        if (sucursalesValidadas) {
+          const result = await crearEmpresasSucursales({
+            cuit_base: baseCuit,
+            razon_social: razonSocial.trim(),
+            actividad,
+            domicilio,
+            localidad,
+            provincia,
+            codigo_postal: codigoPostal,
+            telefono,
+            contacto,
+            sucursales: sucursalesValidadas.sucursales,
+          });
+          mensaje = `Empresa actualizada y ${result.count} sucursal${result.count === 1 ? "" : "es"} agregada${result.count === 1 ? "" : "s"}.`;
+          setSelectedEmpresaId(result.empresas[0]?.id ?? updated.id);
+        } else {
+          setSelectedEmpresaId(updated.id);
+        }
+
+        showAlert("success", "Cambios guardados", mensaje);
       } else {
         const created = await crearEmpresa(payload);
         setSelectedEmpresaId(created.id);
@@ -547,7 +929,11 @@ export default function AdminEmpresasPage() {
       showAlert(
         "success",
         "Acceso creado",
-        `El dueño ya puede ingresar al portal con CUIT ${formatCuit(selectedEmpresa.cuit)}, usuario "${duenoUsername.trim()}" y la contraseña definida.`,
+        `El dueño ya puede ingresar al portal con ${
+          isCuitSucursalFormat(selectedEmpresa.cuit)
+            ? `identificador ${selectedEmpresa.cuit}`
+            : `CUIT ${formatCuit(selectedEmpresa.cuit)}`
+        }, usuario "${duenoUsername.trim()}" y la contraseña definida.`,
       );
       closeDuenoModal();
     } catch (error: unknown) {
@@ -564,11 +950,16 @@ export default function AdminEmpresasPage() {
     const dueno = duenosEmpresa[0];
     const text = [
       `Portal Legajo Técnico`,
-      `CUIT: ${formatCuit(selectedEmpresa.cuit)}`,
+      `CUIT / Identificador: ${selectedEmpresa.cuit}`,
       `Usuario: ${dueno?.username || "(definir)"}`,
       `Contraseña: (la que configuraste)`,
       `URL: /login`,
-    ].join("\n");
+      isCuitSucursalFormat(selectedEmpresa.cuit)
+        ? `Nota: ingresar el identificador completo con sucursal.`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
     try {
       await navigator.clipboard.writeText(text);
       showAlert(
@@ -612,6 +1003,21 @@ export default function AdminEmpresasPage() {
             />
           </div>
 
+          <label className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-3 text-[11px] font-bold text-slate-600 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={agruparPorCuit}
+              onChange={(e) => setAgruparPorCuit(e.target.checked)}
+              className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500/30 cursor-pointer"
+            />
+            Agrupar por CUIT fiscal
+            {multiSucursalGroupsCount > 0 ? (
+              <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-violet-700">
+                {multiSucursalGroupsCount}
+              </span>
+            ) : null}
+          </label>
+
           {/* Nueva Empresa Button */}
           <button
             onClick={openCreateModal}
@@ -640,7 +1046,9 @@ export default function AdminEmpresasPage() {
         <span className="mt-0.5">
           Alta recomendada en 3 pasos: 1) crear la empresa, 2) asignar
           preventor(es), 3) crear el acceso del dueño (usuario + contraseña) para
-          que entre al portal con el CUIT.
+          que entre al portal con el CUIT. Si hay varias sucursales con el mismo
+          CUIT fiscal, marcá la opción correspondiente al crear cada legajo y
+          compartí el identificador completo (ej. 30637182907 SUC-LOMAS).
         </span>
       </div>
 
@@ -667,67 +1075,44 @@ export default function AdminEmpresasPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
-                {filteredEmpresas.map((emp) => {
-                  const compliance = Math.round(
-                    Number(emp.porcentaje_cumplimiento || 100),
-                  );
-                  const isSelected = selectedEmpresa?.id === emp.id;
-                  const estado = (emp.estado || "activa") as EstadoEmpresa;
+                {agruparPorCuit
+                  ? groupedEmpresas.flatMap((group) => {
+                      if (!group.isMultiSucursal) {
+                        return group.empresas.map((emp) => renderEmpresaRow(emp));
+                      }
 
-                  let badgeColor = "text-emerald-600";
-                  if (compliance < 70) badgeColor = "text-rose-500";
-                  else if (compliance < 80) badgeColor = "text-amber-500";
-
-                  return (
-                    <tr
-                      key={emp.id}
-                      onClick={() => setSelectedEmpresaId(emp.id)}
-                      className={`cursor-pointer transition-all select-none ${
-                        isSelected
-                          ? "bg-blue-50/40 hover:bg-blue-50/50"
-                          : "hover:bg-slate-50/30"
-                      } ${estado === "eliminada" ? "opacity-60" : ""}`}
-                    >
-                      <td className="px-6 py-4 flex items-center gap-3">
-                        {emp.logo_url ? (
-                          /* eslint-disable-next-line @next/next/no-img-element */
-                          <img
-                            src={emp.logo_url}
-                            alt="Logo"
-                            className="h-8 w-8 rounded-lg object-contain border border-slate-200 p-0.5 bg-white shrink-0"
-                          />
-                        ) : (
-                          <div className="h-8 w-8 rounded-lg  border border-slate-200 flex items-center justify-center shrink-0">
-                            <Building className="h-4 w-4 text-slate-900" />
-                          </div>
-                        )}
-                        <div className="min-w-0">
-                          <span className="block text-xs font-black text-slate-900 truncate">
-                            {emp.razon_social}
-                          </span>
-                          <span className="block text-[10px] font-bold text-slate-400 truncate mt-0.5">
-                            {emp.actividad || "General"}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-slate-500 font-bold">
-                        {formatCuit(emp.cuit)}
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <span
-                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${estadoEmpresaBadgeClass(estado)}`}
+                      const collapsed = collapsedGroups.has(group.baseCuit);
+                      return [
+                        <tr
+                          key={`group-${group.baseCuit}`}
+                          onClick={() => toggleGroup(group.baseCuit)}
+                          className="bg-violet-50/40 hover:bg-violet-50/60 cursor-pointer select-none"
                         >
-                          {estadoEmpresaLabel(estado)}
-                        </span>
-                      </td>
-                      <td
-                        className={`px-6 py-4 text-center font-black text-sm ${badgeColor}`}
-                      >
-                        {compliance}%
-                      </td>
-                    </tr>
-                  );
-                })}
+                          <td colSpan={4} className="px-6 py-3">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              {collapsed ? (
+                                <ChevronRight className="h-4 w-4 text-violet-500 shrink-0" />
+                              ) : (
+                                <ChevronDown className="h-4 w-4 text-violet-500 shrink-0" />
+                              )}
+                              <GitBranch className="h-4 w-4 text-violet-600 shrink-0" />
+                              <span className="text-xs font-black text-slate-800 truncate">
+                                CUIT fiscal {formatCuit(group.baseCuit)}
+                              </span>
+                              <span className="inline-flex items-center rounded-full border border-violet-200 bg-white px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-violet-700 shrink-0">
+                                {group.empresas.length} sucursales
+                              </span>
+                            </div>
+                          </td>
+                        </tr>,
+                        ...(collapsed
+                          ? []
+                          : group.empresas.map((emp) =>
+                              renderEmpresaRow(emp, { nested: true }),
+                            )),
+                      ];
+                    })
+                  : filteredEmpresas.map((emp) => renderEmpresaRow(emp))}
 
                 {filteredEmpresas.length === 0 && (
                   <tr>
@@ -781,6 +1166,76 @@ export default function AdminEmpresasPage() {
                 <Edit2 className="h-3.5 w-3.5" />
               </button>
             </div>
+
+            {empresasGrupoSeleccionada.length > 1 ||
+            (selectedEmpresa && isCuitSucursalFormat(selectedEmpresa.cuit)) ? (
+              <div className="rounded-xl border border-violet-100 bg-violet-50/30 p-3.5 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-black text-violet-700 uppercase tracking-wider">
+                    Sucursales del CUIT{" "}
+                    {formatCuit(getBaseCuit(selectedEmpresa.cuit || ""))}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openEditModal(selectedEmpresa, { agregarSucursales: true })
+                    }
+                    className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-violet-700 hover:text-violet-900 cursor-pointer"
+                  >
+                    <Plus className="h-3 w-3" />
+                    Agregar
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {empresasGrupoSeleccionada.map((empresa) => {
+                    const sucursal = getSucursalLabel(empresa.cuit || "");
+                    const esActual = empresa.id === selectedEmpresa.id;
+                    return (
+                      <button
+                        key={empresa.id}
+                        type="button"
+                        onClick={() => setSelectedEmpresaId(empresa.id)}
+                        className={`flex w-full items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left cursor-pointer transition-colors ${
+                          esActual
+                            ? "border-violet-300 bg-white shadow-2xs"
+                            : "border-violet-100/80 bg-white/70 hover:bg-white"
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <span className="block text-[11px] font-black text-slate-800 truncate">
+                            {sucursal || "Principal"}
+                          </span>
+                          <span className="block text-[10px] font-mono text-slate-500 truncate">
+                            {formatLegajoIdentificador(empresa.cuit || "")}
+                          </span>
+                        </div>
+                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 shrink-0">
+                          {esActual ? "Actual" : "Ver"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-3.5">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[10px] font-semibold text-slate-500 leading-relaxed">
+                    ¿Esta empresa tiene más sucursales con el mismo CUIT?
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openEditModal(selectedEmpresa, { agregarSucursales: true })
+                    }
+                    className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-white px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-violet-700 hover:bg-violet-50 cursor-pointer shrink-0"
+                  >
+                    <GitBranch className="h-3 w-3" />
+                    Agregar sucursales
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Estado operativo CRM */}
             <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-3.5 space-y-3">
@@ -1039,16 +1494,26 @@ export default function AdminEmpresasPage() {
                           {dueno.nombre_completo || "Sin nombre"}
                         </span>
                         <span className="block text-[10px] font-bold text-slate-500 truncate">
-                          @{dueno.username} · login con CUIT{" "}
-                          {formatCuit(selectedEmpresa.cuit)}
+                          @{dueno.username} · login con{" "}
+                          {isCuitSucursalFormat(selectedEmpresa.cuit)
+                            ? selectedEmpresa.cuit
+                            : formatCuit(selectedEmpresa.cuit)}
                         </span>
                       </div>
                     </div>
                   ))}
                   <p className="text-[10px] text-slate-500 font-semibold leading-relaxed">
-                    El cliente entra en <strong>/login</strong> con CUIT +
-                    usuario + contraseña. Para cambiar la contraseña, usá{" "}
-                    <strong>Usuarios</strong> en el CRM.
+                    El cliente entra en <strong>/login</strong> con identificador
+                    de empresa + usuario + contraseña.
+                    {isCuitSucursalFormat(selectedEmpresa.cuit) ? (
+                      <>
+                        {" "}
+                        Para sucursales, el identificador es el CUIT completo:{" "}
+                        <strong>{selectedEmpresa.cuit}</strong>.
+                      </>
+                    ) : null}{" "}
+                    Para cambiar la contraseña, usá <strong>Usuarios</strong> en
+                    el CRM.
                   </p>
                 </div>
               ) : (
@@ -1136,7 +1601,11 @@ export default function AdminEmpresasPage() {
       {/* 4. MODAL: Crear/Editar Empresa */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-6">
+          <div
+            className={`bg-white border border-slate-200 rounded-2xl p-6 w-full shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto ${
+              modalAnchoExtendido ? "max-w-2xl" : "max-w-lg"
+            }`}
+          >
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-base font-black text-slate-900 font-sans">
                 {editingEmpresa
@@ -1158,21 +1627,101 @@ export default function AdminEmpresasPage() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
-                    CUIT (Sin guiones)
+                    {empresaMultiplesSucursales
+                      ? "CUIT fiscal (sin guiones)"
+                      : "CUIT (Sin guiones)"}
                   </label>
                   <input
                     type="text"
                     required
                     placeholder="e.g. 30712345678"
                     value={cuit}
-                    onChange={(e) => setCuit(e.target.value.replace(/\D/g, ""))}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-hidden focus:border-blue-600 transition-colors"
+                    onChange={(e) =>
+                      setCuit(sanitizeCuitNumericoInput(e.target.value))
+                    }
+                    readOnly={Boolean(editingEmpresa && empresaMultiplesSucursales)}
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-hidden focus:border-blue-600 transition-colors read-only:bg-slate-50 read-only:text-slate-500"
                   />
                 </div>
 
+                {editingEmpresa && empresaMultiplesSucursales ? (
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                      Código sucursal
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. CENTRAL, SUC-LOMAS "
+                      value={sucursalCodigo}
+                      onChange={(e) =>
+                        setSucursalCodigo(
+                          formatSucursalCodigoInput(e.target.value),
+                        )
+                      }
+                      className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-hidden focus:border-blue-600 transition-colors font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEmpresaMultiplesSucursales(false);
+                        setSucursalCodigo("");
+                        setCuit(
+                          sanitizeCuitNumericoInput(cuit).slice(0, 11),
+                        );
+                      }}
+                      className="text-[10px] font-bold text-violet-700 hover:text-violet-900 cursor-pointer"
+                    >
+                      Usar como empresa principal (sin sucursal)
+                    </button>
+                  </div>
+                ) : !empresaMultiplesSucursales ? (
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                      Razón Social
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Razón Social"
+                      value={razonSocial}
+                      onChange={(e) => setRazonSocial(e.target.value)}
+                      className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-hidden focus:border-blue-600 transition-colors"
+                    />
+                  </div>
+                ) : null}
+              </div>
+
+              {!editingEmpresa ? (
+                <label className="flex items-start gap-2.5 rounded-xl border border-slate-100 bg-slate-50/70 px-3.5 py-3 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={empresaMultiplesSucursales}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setEmpresaMultiplesSucursales(checked);
+                      setCuit(sanitizeCuitNumericoInput(cuit).slice(0, 11));
+                      if (checked) {
+                        setSucursalesDraft([createEmptySucursalDraft()]);
+                        setSucursalesPanelOpen(true);
+                      }
+                    }}
+                    className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500/30 cursor-pointer"
+                  />
+                  <span className="text-[11px] font-bold text-slate-600 leading-snug">
+                    Empresa con varias sucursales
+                    <span className="mt-0.5 block text-[10px] font-semibold text-slate-400">
+                      Cargá una vez los datos comunes y definí todas las
+                      sucursales en el desplegable de abajo.
+                    </span>
+                  </span>
+                </label>
+              ) : null}
+
+              {empresaMultiplesSucursales ? (
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
-                    Razón Social
+                    Razón Social (común)
                   </label>
                   <input
                     type="text"
@@ -1183,7 +1732,44 @@ export default function AdminEmpresasPage() {
                     className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-hidden focus:border-blue-600 transition-colors"
                   />
                 </div>
-              </div>
+              ) : null}
+
+              {!editingEmpresa && empresaMultiplesSucursales ? (
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Datos comunes de la empresa
+                </p>
+              ) : null}
+
+              {editingEmpresa ? (
+                <div className="rounded-xl border border-slate-100 bg-slate-50/70 px-3.5 py-3 space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                    Legajos del mismo CUIT fiscal
+                  </p>
+                  {empresasGrupoModal.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {empresasGrupoModal.map((empresa) => {
+                        const esActual = empresa.id === editingEmpresa.id;
+                        return (
+                          <span
+                            key={empresa.id}
+                            className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-bold ${
+                              esActual
+                                ? "border-violet-300 bg-violet-50 text-violet-800"
+                                : "border-slate-200 bg-white text-slate-600"
+                            }`}
+                          >
+                            {formatLegajoIdentificador(empresa.cuit || "")}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-[10px] font-semibold text-slate-500">
+                      Solo este legajo por ahora. Podés sumar sucursales abajo.
+                    </p>
+                  )}
+                </div>
+              ) : null}
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
@@ -1283,6 +1869,215 @@ export default function AdminEmpresasPage() {
                 </div>
               </div>
 
+              {mostrarPanelSucursales ? (
+                <div className="rounded-xl border border-violet-100 bg-violet-50/30 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setSucursalesPanelOpen((open) => !open)}
+                    className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left cursor-pointer hover:bg-violet-50/60 transition-colors"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      {sucursalesPanelOpen ? (
+                        <ChevronDown className="h-4 w-4 text-violet-600 shrink-0" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 text-violet-600 shrink-0" />
+                      )}
+                      <GitBranch className="h-4 w-4 text-violet-600 shrink-0" />
+                      <span className="text-xs font-black text-slate-800">
+                        {editingEmpresa
+                          ? "Agregar sucursales al grupo"
+                          : "Sucursales a crear"}
+                      </span>
+                      <span className="rounded-full border border-violet-200 bg-white px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-violet-700">
+                        {sucursalesDraftConCodigo.length || sucursalesDraft.length}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-bold text-violet-700 shrink-0">
+                      {sucursalesPanelOpen ? "Ocultar" : "Mostrar"}
+                    </span>
+                  </button>
+
+                  {sucursalesPanelOpen ? (
+                    <div className="space-y-3 border-t border-violet-100 px-4 py-4">
+                      <p className="text-[10px] font-semibold text-slate-500 leading-relaxed">
+                        {editingEmpresa
+                          ? "Completá solo las sucursales nuevas. Los campos de domicilio son opcionales y heredan los datos comunes de arriba."
+                          : "Los campos de domicilio abajo son opcionales. Si los dejás vacíos, se usa el domicilio común de arriba."}
+                      </p>
+
+                      {sucursalesDraft.map((sucursal, index) => (
+                        <div
+                          key={sucursal.id}
+                          className="rounded-xl border border-white bg-white/90 p-3 space-y-3 shadow-2xs"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                updateSucursalDraft(sucursal.id, {
+                                  expanded: !sucursal.expanded,
+                                })
+                              }
+                              className="flex items-center gap-2 min-w-0 cursor-pointer"
+                            >
+                              {sucursal.expanded ? (
+                                <ChevronDown className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                              ) : (
+                                <ChevronRight className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                              )}
+                              <span className="text-[11px] font-black text-slate-800 truncate">
+                                {sucursal.codigo
+                                  ? normalizeSucursalCodigoInput(sucursal.codigo)
+                                  : `Sucursal ${index + 1}`}
+                              </span>
+                              {cuit && sucursal.codigo ? (
+                                <span className="text-[10px] font-mono text-slate-400 truncate">
+                                  {buildCuitSucursal(
+                                    cuit,
+                                    normalizeSucursalCodigoInput(sucursal.codigo),
+                                  )}
+                                </span>
+                              ) : null}
+                            </button>
+
+                            {sucursalesDraft.length > 1 ? (
+                              <button
+                                type="button"
+                                onClick={() => removeSucursalDraft(sucursal.id)}
+                                className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-red-500 hover:text-red-700 cursor-pointer shrink-0"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                                Quitar
+                              </button>
+                            ) : null}
+                          </div>
+
+                          {sucursal.expanded ? (
+                            <div className="space-y-3 pt-1">
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                                  Código sucursal
+                                </label>
+                                <input
+                                  type="text"
+                                  required
+                                  placeholder="e.g. SUC-LOMAS (SUC agrega el guión solo)"
+                                  value={sucursal.codigo}
+                                  onChange={(e) =>
+                                    updateSucursalDraft(sucursal.id, {
+                                      codigo: formatSucursalCodigoInput(
+                                        e.target.value,
+                                      ),
+                                    })
+                                  }
+                                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-hidden focus:border-blue-600 transition-colors font-mono"
+                                />
+                              </div>
+
+                              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                <div className="space-y-1 sm:col-span-2">
+                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                                    Domicilio (opcional)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="Usa el domicilio común si queda vacío"
+                                    value={sucursal.domicilio}
+                                    onChange={(e) =>
+                                      updateSucursalDraft(sucursal.id, {
+                                        domicilio: e.target.value,
+                                      })
+                                    }
+                                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-hidden focus:border-blue-600 transition-colors"
+                                  />
+                                </div>
+
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                                    Localidad (opcional)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder={localidad || "e.g. San Rafael"}
+                                    value={sucursal.localidad}
+                                    onChange={(e) =>
+                                      updateSucursalDraft(sucursal.id, {
+                                        localidad: e.target.value,
+                                      })
+                                    }
+                                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-hidden focus:border-blue-600 transition-colors"
+                                  />
+                                </div>
+
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                                    Provincia (opcional)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder={provincia || "e.g. Mendoza"}
+                                    value={sucursal.provincia}
+                                    onChange={(e) =>
+                                      updateSucursalDraft(sucursal.id, {
+                                        provincia: e.target.value,
+                                      })
+                                    }
+                                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-hidden focus:border-blue-600 transition-colors"
+                                  />
+                                </div>
+
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                                    CP (opcional)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder={codigoPostal || "e.g. M5600"}
+                                    value={sucursal.codigo_postal}
+                                    onChange={(e) =>
+                                      updateSucursalDraft(sucursal.id, {
+                                        codigo_postal: e.target.value,
+                                      })
+                                    }
+                                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-hidden focus:border-blue-600 transition-colors"
+                                  />
+                                </div>
+
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                                    Teléfono (opcional)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder={telefono || "e.g. +54 260 442-1180"}
+                                    value={sucursal.telefono}
+                                    onChange={(e) =>
+                                      updateSucursalDraft(sucursal.id, {
+                                        telefono: e.target.value,
+                                      })
+                                    }
+                                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-hidden focus:border-blue-600 transition-colors"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
+
+                      <button
+                        type="button"
+                        onClick={addSucursalDraft}
+                        className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-violet-200 bg-white px-3 py-2.5 text-[11px] font-black uppercase tracking-wider text-violet-700 hover:bg-violet-50 cursor-pointer transition-colors"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Agregar sucursal
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
               <div className="pt-3 border-t border-slate-100 flex flex-col-reverse gap-3.5 sm:flex-row sm:justify-end">
                 <button
                   type="button"
@@ -1298,7 +2093,13 @@ export default function AdminEmpresasPage() {
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-xs font-bold text-white transition-colors shadow-md hover:bg-slate-850 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto cursor-pointer"
                 >
                   {isSaving && <Loader2 className="h-4.5 w-4.5 animate-spin" />}
-                  {editingEmpresa ? "Guardar Cambios" : "Registrar Empresa"}
+                  {editingEmpresa
+                    ? sucursalesDraftConCodigo.length > 0
+                      ? `Guardar y agregar ${sucursalesDraftConCodigo.length} sucursal${sucursalesDraftConCodigo.length === 1 ? "" : "es"}`
+                      : "Guardar Cambios"
+                    : empresaMultiplesSucursales
+                      ? `Registrar ${sucursalesDraft.length} sucursal${sucursalesDraft.length === 1 ? "" : "es"}`
+                      : "Registrar Empresa"}
                 </button>
               </div>
             </form>

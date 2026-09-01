@@ -1,8 +1,14 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import axios from "axios";
 import { useAuth } from "@/hooks/useAuth";
 import { useApiWarmup } from "@/hooks/useApiWarmup";
+import {
+  cuitForLogin,
+  formatCuitDisplay,
+  type LoginSucursalOption,
+} from "@/lib/cuit";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Lock, User, Briefcase, Eye, EyeOff, AlertCircle } from "lucide-react";
@@ -11,6 +17,8 @@ export default function LoginPage() {
   const { login } = useAuth();
   const router = useRouter();
   const [cuit, setCuit] = useState("");
+  const [selectedSucursalCuit, setSelectedSucursalCuit] = useState("");
+  const [sucursales, setSucursales] = useState<LoginSucursalOption[]>([]);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -23,6 +31,8 @@ export default function LoginPage() {
     router.prefetch("/dashboard");
   }, [router]);
 
+  const loginCuit = selectedSucursalCuit || cuitForLogin(cuit);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -32,10 +42,34 @@ export default function LoginPage() {
       return;
     }
 
+    if (sucursales.length > 0 && !selectedSucursalCuit) {
+      setError("Seleccioná la sucursal a la que querés ingresar.");
+      return;
+    }
+
     setSubmitting(true);
     try {
-      await login(cuit.replace(/\D/g, ""), username.trim(), password);
+      await login(loginCuit, username.trim(), password);
     } catch (err: unknown) {
+      if (
+        axios.isAxiosError(err) &&
+        err.response?.status === 409 &&
+        err.response.data?.code === "MULTIPLE_SUCURSALES"
+      ) {
+        const options = (err.response.data.sucursales ?? []) as LoginSucursalOption[];
+        setSucursales(options);
+        if (options.length === 1) {
+          setSelectedSucursalCuit(options[0].cuit);
+        }
+        setError(
+          typeof err.response.data.error === "string"
+            ? err.response.data.error
+            : "Esta empresa tiene varias sucursales. Elegí cuál ingresar.",
+        );
+        setSubmitting(false);
+        return;
+      }
+
       setError(
         err instanceof Error
           ? err.message
@@ -69,7 +103,8 @@ export default function LoginPage() {
             </h2>
             <p className="text-sm text-brand-text-muted font-medium">
               Ingresá con el CUIT de tu empresa y tus credenciales
-              (dueño o preventor asignado).
+               Si tenés varias sucursales,
+              podés usar el CUIT completo con sucursal o elegirla al ingresar.
             </p>
           </div>
 
@@ -100,19 +135,56 @@ export default function LoginPage() {
                     id="cuit"
                     name="cuit"
                     type="text"
-                    inputMode="numeric"
+                    inputMode="text"
                     autoComplete="organization"
                     autoCapitalize="none"
                     autoCorrect="off"
                     spellCheck={false}
                     required
-                    placeholder="30-12345678-9"
+                    placeholder="30-12345678-9 o 30637182907 SUC-LOMAS"
                     value={cuit}
-                    onChange={(e) => setCuit(e.target.value)}
+                    onChange={(e) => {
+                      setCuit(e.target.value);
+                      setSucursales([]);
+                      setSelectedSucursalCuit("");
+                    }}
                     className="block w-full pl-10 pr-3 py-3 border border-brand-input-border rounded-xl bg-brand-input-bg text-brand-text-dark placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-brand-secondary/25 focus:border-brand-secondary text-sm transition-all font-medium"
                   />
                 </div>
               </div>
+
+              {sucursales.length > 0 && (
+                <div className="space-y-2">
+                  <label
+                    htmlFor="sucursal"
+                    className="block text-[11px] font-bold text-brand-text-muted uppercase tracking-wider"
+                  >
+                    Sucursal
+                  </label>
+                  <select
+                    id="sucursal"
+                    required
+                    value={selectedSucursalCuit}
+                    onChange={(e) => {
+                      setSelectedSucursalCuit(e.target.value);
+                      setError(null);
+                    }}
+                    className="block w-full px-3 py-3 border border-brand-input-border rounded-xl bg-brand-input-bg text-brand-text-dark focus:outline-hidden focus:ring-2 focus:ring-brand-secondary/25 focus:border-brand-secondary text-sm transition-all font-medium"
+                  >
+                    <option value="">Seleccioná sucursal…</option>
+                    {sucursales.map((sucursal) => (
+                      <option key={sucursal.id} value={sucursal.cuit}>
+                        {sucursal.label} · {formatCuitDisplay(sucursal.cuit)}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-brand-text-muted font-medium">
+                    Cada sucursal tiene legajo y accesos propios. Si ya conocés
+                    el identificador completo, también podés pegarlo directo en
+                    CUIT (ej. 30637182907 SUC-LOMAS).
+                  </p>
+                </div>
+              )}
 
               {/* Usuario */}
               <div className="space-y-2">
