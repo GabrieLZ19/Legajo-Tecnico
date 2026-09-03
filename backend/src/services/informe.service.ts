@@ -261,15 +261,21 @@ export const informeService = {
 
   async listarPorEmpresa(
     empresaId: string,
-    opts?: { limit?: number; offset?: number },
+    opts?: { limit?: number; offset?: number; soloVisibleEnte?: boolean },
   ) {
     const limit = Math.min(Math.max(opts?.limit ?? 50, 1), 200);
     const offset = Math.max(opts?.offset ?? 0, 0);
 
-    const { data, error, count } = await supabaseAdmin
+    let query = supabaseAdmin
       .from("informes_visita")
       .select("*", { count: "exact" })
-      .eq("empresa_id", empresaId)
+      .eq("empresa_id", empresaId);
+
+    if (opts?.soloVisibleEnte) {
+      query = query.eq("visible_ente_regulador", true);
+    }
+
+    const { data, error, count } = await query
       .order("numero_informe", { ascending: false })
       .range(offset, offset + limit - 1);
 

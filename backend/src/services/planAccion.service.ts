@@ -5,6 +5,7 @@ import { recalcularCumplimientoEmpresa } from '../utils/compliance';
 export type PlanAccionListOpts = {
   limit?: number;
   offset?: number;
+  soloVisibleEnte?: boolean;
 };
 
 export type PlanAccionResumen = {
@@ -15,11 +16,17 @@ export type PlanAccionResumen = {
 };
 
 export const planAccionService = {
-  async obtenerResumen(empresaId: string): Promise<PlanAccionResumen> {
-    const { data, error } = await supabaseAdmin
+  async obtenerResumen(empresaId: string, soloVisibleEnte?: boolean): Promise<PlanAccionResumen> {
+    let query = supabaseAdmin
       .from('acciones_mejora')
       .select('estado')
       .eq('empresa_id', empresaId);
+
+    if (soloVisibleEnte) {
+      query = query.eq('visible_ente_regulador', true);
+    }
+
+    const { data, error } = await query;
 
     if (error) throw error;
 
@@ -72,6 +79,10 @@ export const planAccionService = {
       )
       .eq('empresa_id', empresaId);
 
+    if (opts?.soloVisibleEnte) {
+      query = query.eq('visible_ente_regulador', true);
+    }
+
     if (estado) {
       query = query.eq('estado', estado);
     }
@@ -90,7 +101,7 @@ export const planAccionService = {
 
     if (error) throw error;
 
-    const resumen = await this.obtenerResumen(empresaId);
+    const resumen = await this.obtenerResumen(empresaId, opts?.soloVisibleEnte);
 
     return {
       items: data || [],

@@ -20,7 +20,7 @@ type EmpresaLoginRow = {
 };
 
 const EMPRESA_LOGIN_SELECT =
-  "id, razon_social, cuit, logo_url, consultora_id, estado";
+  "id, razon_social, cuit, logo_url, consultora_id, estado, domicilio, localidad";
 
 async function resolveEmpresaForLogin(cuitInput: string): Promise<
   | { kind: "single"; empresa: EmpresaLoginRow }
@@ -145,18 +145,41 @@ async function findPerfilLoginEmpresa(
 
   if (asigError) throw asigError;
   const preventorIds = (asignaciones ?? []).map((a) => a.preventor_id);
-  if (preventorIds.length === 0) return null;
+  if (preventorIds.length > 0) {
+    const { data: preventores, error: prevError } = await supabaseAdmin
+      .from("perfiles")
+      .select("*")
+      .in("id", preventorIds)
+      .eq("rol", "preventor")
+      .ilike("username", usernameNorm)
+      .limit(1);
 
-  const { data: preventores, error: prevError } = await supabaseAdmin
-    .from("perfiles")
-    .select("*")
-    .in("id", preventorIds)
-    .eq("rol", "preventor")
-    .ilike("username", usernameNorm)
-    .limit(1);
+    if (prevError) throw prevError;
+    if (preventores?.[0]) return preventores[0];
+  }
 
-  if (prevError) throw prevError;
-  return preventores?.[0] ?? null;
+  // Verificar si es un ente regulador asignado a la empresa
+  const { data: asignacionesEnte, error: enteError } = await supabaseAdmin
+    .from("ente_regulador_empresas")
+    .select("ente_id")
+    .eq("empresa_id", empresaId);
+
+  if (enteError) throw enteError;
+  const enteIds = (asignacionesEnte ?? []).map((a) => a.ente_id);
+  if (enteIds.length > 0) {
+    const { data: entes, error: entesError } = await supabaseAdmin
+      .from("perfiles")
+      .select("*")
+      .in("id", enteIds)
+      .eq("rol", "ente_regulador")
+      .ilike("username", usernameNorm)
+      .limit(1);
+
+    if (entesError) throw entesError;
+    if (entes?.[0]) return entes[0];
+  }
+
+  return null;
 }
 
 export const authController = {
@@ -350,7 +373,7 @@ export const authController = {
         const consultoraId = requireConsultoraId(req.user!);
         const { data, error } = await supabaseAdmin
           .from('empresas')
-          .select('id, razon_social, cuit, logo_url, actividad, estado')
+          .select('id, razon_social, cuit, logo_url, actividad, estado, domicilio, localidad')
           .eq('consultora_id', consultoraId)
           .neq('estado', 'eliminada')
           .order('razon_social');
@@ -362,7 +385,7 @@ export const authController = {
         // Preventor ve solo las empresas asignadas vía preventor_empresas
         const { data, error } = await supabaseAdmin
           .from('preventor_empresas')
-          .select('empresa_id, empresas(id, razon_social, cuit, logo_url, actividad, estado)')
+          .select('empresa_id, empresas(id, razon_social, cuit, logo_url, actividad, estado, domicilio, localidad)')
           .eq('preventor_id', userId);
 
         if (error) throw error;
@@ -376,7 +399,7 @@ export const authController = {
         // Ente regulador ve las empresas autorizadas
         const { data, error } = await supabaseAdmin
           .from('ente_regulador_empresas')
-          .select('empresa_id, empresas(id, razon_social, cuit, logo_url, actividad, estado)')
+          .select('empresa_id, empresas(id, razon_social, cuit, logo_url, actividad, estado, domicilio, localidad)')
           .eq('ente_id', userId);
 
         if (error) throw error;
@@ -391,7 +414,7 @@ export const authController = {
         if (req.user!.empresa_id) {
           const { data, error } = await supabaseAdmin
             .from('empresas')
-            .select('id, razon_social, cuit, logo_url, actividad, estado')
+            .select('id, razon_social, cuit, logo_url, actividad, estado, domicilio, localidad')
             .eq('id', req.user!.empresa_id)
             .single();
 

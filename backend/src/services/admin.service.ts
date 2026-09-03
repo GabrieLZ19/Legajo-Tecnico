@@ -22,6 +22,39 @@ const ESTADOS_EMPRESA: EstadoEmpresa[] = [
   "eliminada",
 ];
 
+const DEFAULT_ENTE_PERMISOS = [
+  {
+    module: "Informe de visita",
+    access: "lectura",
+    description: "Consulta informes autorizados por la consultora.",
+  },
+  {
+    module: "Plan de acción",
+    access: "lectura",
+    description: "Visualiza el seguimiento de acciones derivadas.",
+  },
+  {
+    module: "Entrega EPP",
+    access: "lectura",
+    description: "Consulta constancias de entrega de EPP autorizadas.",
+  },
+  {
+    module: "Capacitaciones",
+    access: "lectura",
+    description: "Consulta registros de capacitaciones autorizadas.",
+  },
+  {
+    module: "Métricas y reportes",
+    access: "lectura",
+    description: "Consulta indicadores de control y auditoría.",
+  },
+  {
+    module: "Gestión empresas",
+    access: "oculto",
+    description: "No puede administrar empresas.",
+  },
+];
+
 export const adminService = {
   async listarUsuarios(consultoraId: string) {
     const { data, error } = await supabaseAdmin
@@ -99,6 +132,7 @@ export const adminService = {
         username,
         rol,
         activo: true,
+        permisos_personalizados: rol === "ente_regulador" ? DEFAULT_ENTE_PERMISOS : null,
       })
       .select()
       .single();
@@ -166,7 +200,16 @@ export const adminService = {
 
     // Solo tocar permisos cuando el cliente los envía (evita borrarlos en ediciones parciales)
     if (permisos_personalizados !== undefined) {
-      updatePayload.permisos_personalizados = permisos_personalizados;
+      if (rol === "ente_regulador" && Array.isArray(permisos_personalizados)) {
+        updatePayload.permisos_personalizados = (
+          permisos_personalizados as Array<{ module: string; access: string; description?: string }>
+        ).map((p) => ({
+          ...p,
+          access: p.access === "total" ? "lectura" : p.access,
+        }));
+      } else {
+        updatePayload.permisos_personalizados = permisos_personalizados;
+      }
     }
 
     const { data, error } = await supabaseAdmin

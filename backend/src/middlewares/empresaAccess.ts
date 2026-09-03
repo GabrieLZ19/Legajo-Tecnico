@@ -110,24 +110,48 @@ async function empresaIdDe(
 }
 
 export async function assertInformeAccess(user: AuthUser, informeId: string) {
-  await assertEmpresaAccess(
-    user,
-    await empresaIdDe("informes_visita", informeId, "Informe no encontrado"),
-  );
+  const empresaId = await empresaIdDe("informes_visita", informeId, "Informe no encontrado");
+  await assertEmpresaAccess(user, empresaId);
+  if (user.rol === "ente_regulador") {
+    const { data } = await supabaseAdmin
+      .from("informes_visita")
+      .select("visible_ente_regulador")
+      .eq("id", informeId)
+      .maybeSingle();
+    if (!data?.visible_ente_regulador) {
+      throw new HttpError(403, "Este informe no está habilitado para el ente regulador");
+    }
+  }
 }
 
 export async function assertCapacitacionAccess(user: AuthUser, capId: string) {
-  await assertEmpresaAccess(
-    user,
-    await empresaIdDe("capacitaciones", capId, "Capacitación no encontrada"),
-  );
+  const empresaId = await empresaIdDe("capacitaciones", capId, "Capacitación no encontrada");
+  await assertEmpresaAccess(user, empresaId);
+  if (user.rol === "ente_regulador") {
+    const { data } = await supabaseAdmin
+      .from("capacitaciones")
+      .select("visible_ente_regulador")
+      .eq("id", capId)
+      .maybeSingle();
+    if (!data?.visible_ente_regulador) {
+      throw new HttpError(403, "Esta capacitación no está habilitada para el ente regulador");
+    }
+  }
 }
 
 export async function assertAccionAccess(user: AuthUser, accionId: string) {
-  await assertEmpresaAccess(
-    user,
-    await empresaIdDe("acciones_mejora", accionId, "Acción no encontrada"),
-  );
+  const empresaId = await empresaIdDe("acciones_mejora", accionId, "Acción no encontrada");
+  await assertEmpresaAccess(user, empresaId);
+  if (user.rol === "ente_regulador") {
+    const { data } = await supabaseAdmin
+      .from("acciones_mejora")
+      .select("visible_ente_regulador")
+      .eq("id", accionId)
+      .maybeSingle();
+    if (!data?.visible_ente_regulador) {
+      throw new HttpError(403, "Esta acción no está habilitada para el ente regulador");
+    }
+  }
 }
 
 export async function assertEmpleadoAccess(user: AuthUser, empleadoId: string) {
@@ -138,10 +162,18 @@ export async function assertEmpleadoAccess(user: AuthUser, empleadoId: string) {
 }
 
 export async function assertEntregaAccess(user: AuthUser, entregaId: string) {
-  await assertEmpresaAccess(
-    user,
-    await empresaIdDe("epp_entregas", entregaId, "Entrega de EPP no encontrada"),
-  );
+  const empresaId = await empresaIdDe("epp_entregas", entregaId, "Entrega de EPP no encontrada");
+  await assertEmpresaAccess(user, empresaId);
+  if (user.rol === "ente_regulador") {
+    const { data } = await supabaseAdmin
+      .from("epp_entregas")
+      .select("visible_ente_regulador")
+      .eq("id", entregaId)
+      .maybeSingle();
+    if (!data?.visible_ente_regulador) {
+      throw new HttpError(403, "Esta entrega de EPP no está habilitada para el ente regulador");
+    }
+  }
 }
 
 export async function userPerteneceAEmpresa(

@@ -74,7 +74,7 @@ function detectImageExtension(
 /**
  * Descarga imagen vía Storage admin (soporta buckets privados como firmas_digitales).
  */
-async function fetchImageBuffer(
+export async function fetchImageBuffer(
   url?: string | null,
 ): Promise<{ buffer: Buffer; extension: "png" | "jpeg" } | null> {
   if (!url) return null;

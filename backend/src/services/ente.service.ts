@@ -31,7 +31,7 @@ export const enteService = {
   async listarEmpresasAsignadas(enteId: string) {
     const { data, error } = await supabaseAdmin
       .from("ente_regulador_empresas")
-      .select("empresa_id, permisos, empresas(id, razon_social, cuit, logo_url, actividad)")
+      .select("empresa_id, permisos, empresas(id, razon_social, cuit, logo_url, actividad, localidad, domicilio, estado)")
       .eq("ente_id", enteId);
     if (error) throw error;
 
@@ -96,7 +96,7 @@ export const enteService = {
 
     if (asignadas.length === 0) {
       return {
-        empresas: asignadas,
+        empresas: [],
         totalEmpresas: 0,
         totalInformes: 0,
         totalCapacitaciones: 0,
@@ -105,43 +105,60 @@ export const enteService = {
       };
     }
 
-    const countVisible = async (
-      table: "informes_visita" | "capacitaciones" | "epp_entregas" | "acciones_mejora",
-      empresaIds: string[],
-      extra?: { estado?: string },
-    ) => {
-      if (empresaIds.length === 0) return 0;
-      let query = supabaseAdmin
-        .from(table)
-        .select("*", { count: "exact", head: true })
-        .in("empresa_id", empresaIds)
-        .eq("visible_ente_regulador", true);
-      if (extra?.estado) {
-        query = query.eq("estado", extra.estado);
-      }
-      const { count } = await query;
-      return count ?? 0;
-    };
-
-    const [
-      totalInformes,
-      totalCapacitaciones,
-      totalEntregasEpp,
-      observacionesAbiertas,
-    ] = await Promise.all([
-      countVisible("informes_visita", informeEmpresaIds),
-      countVisible("capacitaciones", capEmpresaIds),
-      countVisible("epp_entregas", eppEmpresaIds),
-      countVisible("acciones_mejora", empresaIdsMetricas, { estado: "pendiente" }),
+    const [infRows, capRows, eppRows, accRows] = await Promise.all([
+      informeEmpresaIds.length > 0
+        ? supabaseAdmin
+            .from("informes_visita")
+            .select("empresa_id")
+            .in("empresa_id", informeEmpresaIds)
+            .eq("visible_ente_regulador", true)
+        : Promise.resolve({ data: [] }),
+      capEmpresaIds.length > 0
+        ? supabaseAdmin
+            .from("capacitaciones")
+            .select("empresa_id")
+            .in("empresa_id", capEmpresaIds)
+            .eq("visible_ente_regulador", true)
+        : Promise.resolve({ data: [] }),
+      eppEmpresaIds.length > 0
+        ? supabaseAdmin
+            .from("epp_entregas")
+            .select("empresa_id")
+            .in("empresa_id", eppEmpresaIds)
+            .eq("visible_ente_regulador", true)
+        : Promise.resolve({ data: [] }),
+      empresaIdsMetricas.length > 0
+        ? supabaseAdmin
+            .from("acciones_mejora")
+            .select("empresa_id")
+            .in("empresa_id", empresaIdsMetricas)
+            .eq("visible_ente_regulador", true)
+            .eq("estado", "pendiente")
+        : Promise.resolve({ data: [] }),
     ]);
 
+    const infData = (infRows as any).data ?? [];
+    const capData = (capRows as any).data ?? [];
+    const eppData = (eppRows as any).data ?? [];
+    const accData = (accRows as any).data ?? [];
+
+    const empresasConConteos = asignadas.map((a) => ({
+      ...a,
+      conteos: {
+        informes: infData.filter((i: any) => i.empresa_id === a.empresa_id).length,
+        capacitaciones: capData.filter((c: any) => c.empresa_id === a.empresa_id).length,
+        epp: eppData.filter((e: any) => e.empresa_id === a.empresa_id).length,
+        observaciones: accData.filter((o: any) => o.empresa_id === a.empresa_id).length,
+      },
+    }));
+
     return {
-      empresas: asignadas,
+      empresas: empresasConConteos,
       totalEmpresas: asignadas.length,
-      totalInformes,
-      totalCapacitaciones,
-      totalEntregasEpp,
-      observacionesAbiertas,
+      totalInformes: infData.length,
+      totalCapacitaciones: capData.length,
+      totalEntregasEpp: eppData.length,
+      observacionesAbiertas: accData.length,
     };
   },
 

@@ -27,6 +27,7 @@ type EppHistoricoFiltros = {
   fecha_hasta?: string;
   limit?: number;
   offset?: number;
+  soloVisibleEnte?: boolean;
 };
 
 export type EppHistoricoRow = {
@@ -73,6 +74,10 @@ function applyEppHistoricoFilters(query: any, opts: EppHistoricoFiltros) {
   const hasta = parseDateFilter(opts.fecha_hasta);
   if (hasta) {
     query = query.lte("entregado_at", `${hasta}T23:59:59.999`);
+  }
+
+  if (opts.soloVisibleEnte) {
+    query = query.eq("visible_ente_regulador", true);
   }
 
   return query;
@@ -129,6 +134,7 @@ type EntregaRow = {
   firma_empleador_url: string | null;
   estado: string;
   url_registro_oficial: string | null;
+  visible_ente_regulador?: boolean | null;
   epp_tipos?: { id: string; nombre: string; descripcion: string | null; foto_url: string | null } | null;
 };
 
@@ -167,6 +173,7 @@ function mapEntrega(e: EntregaRow) {
     firma_empleador_url: e.firma_empleador_url,
     estado: e.estado,
     pdf_url: e.url_registro_oficial,
+    visible_ente_regulador: Boolean(e.visible_ente_regulador),
     epp_tipos: e.epp_tipos,
   };
 }
@@ -388,11 +395,17 @@ export const eppService = {
     return { qr, payload, empleado: data };
   },
 
-  async listarEntregas(empresaId: string) {
-    const { data, error } = await supabaseAdmin
+  async listarEntregas(empresaId: string, opts?: { soloVisibleEnte?: boolean }) {
+    let query = supabaseAdmin
       .from("epp_entregas")
       .select(`*, epp_tipos(id, nombre, descripcion, foto_url)`)
-      .eq("empresa_id", empresaId)
+      .eq("empresa_id", empresaId);
+
+    if (opts?.soloVisibleEnte) {
+      query = query.eq("visible_ente_regulador", true);
+    }
+
+    const { data, error } = await query
       .order("entregado_at", { ascending: false, nullsFirst: false })
       .order("id", { ascending: false });
     if (error) throw error;

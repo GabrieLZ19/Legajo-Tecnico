@@ -35,6 +35,7 @@ function parseHistoricoQuery(req: Request) {
     fecha_hasta: parseDateFilter(req.query.fecha_hasta),
     limit: clampInt(req.query.limit, 25, 1, 100),
     offset: clampInt(req.query.offset, 0, 0, 500_000),
+    soloVisibleEnte: req.user?.rol === "ente_regulador",
   };
 }
 
@@ -158,7 +159,9 @@ export const eppController = {
       const empresaId = String(req.query.empresa_id || "");
       if (!empresaId) throw new HttpError(400, "empresa_id es requerido");
       await assertEmpresaAccess(requireUser(req), empresaId);
-      const data = await eppService.listarEntregas(empresaId);
+      const data = await eppService.listarEntregas(empresaId, {
+        soloVisibleEnte: req.user?.rol === "ente_regulador",
+      });
       res.json(data);
     } catch (error) {
       next(error);

@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "../config/supabase";
 import QRCode from "qrcode";
 import { randomUUID } from "crypto";
+import ExcelJS from "exceljs";
 import {
   CapacitacionDiapositiva,
   ensureDiapositivas,
@@ -9,7 +10,9 @@ import {
 import {
   buildRegistroExcel,
   buildRegistroPdf,
+  fetchImageBuffer,
 } from "./capacitacionRegistroExport.service";
+import sharp from "sharp";
 import { storageService } from "./storage.service";
 import { safeExtensionFromUpload } from "../config/multer";
 import { HttpError } from "../utils/httpError";
@@ -250,8 +253,8 @@ export const capacitacionesService = {
   /**
    * Listar capacitaciones de la empresa
    */
-  async listar(empresaId: string) {
-    const { data, error } = await supabaseAdmin
+  async listar(empresaId: string, opts?: { soloVisibleEnte?: boolean }) {
+    let query = supabaseAdmin
       .from("capacitaciones")
       .select(
         `
@@ -260,7 +263,13 @@ export const capacitacionesService = {
         capacitacion_asistencias(id)
       `,
       )
-      .eq("empresa_id", empresaId)
+      .eq("empresa_id", empresaId);
+
+    if (opts?.soloVisibleEnte) {
+      query = query.eq("visible_ente_regulador", true);
+    }
+
+    const { data, error } = await query
       .order("fecha", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false });
 
@@ -1398,18 +1407,228 @@ export const capacitacionesService = {
       );
     }
 
-    const escape = (value: string) => {
-      const s = String(value ?? "");
-      if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-      return s;
+    const { data: empresa } = await supabaseAdmin
+      .from("empresas")
+      .select(`
+        id,
+        razon_social,
+        cuit,
+        logo_url,
+        consultora_id,
+        consultoras (
+          id,
+          nombre,
+          logo_url
+        )
+      `)
+      .eq("id", empresaId)
+      .maybeSingle();
+
+    const consultoraRaw = (empresa as any)?.consultoras;
+    const consultora = Array.isArray(consultoraRaw)
+      ? consultoraRaw[0]
+      : consultoraRaw;
+
+    let consultoraLogoUrl = consultora?.logo_url;
+    let consultoraNombre = consultora?.nombre;
+    if (!consultoraNombre && empresa?.consultora_id) {
+      const { data: c } = await supabaseAdmin
+        .from("consultoras")
+        .select("nombre, logo_url")
+        .eq("id", empresa.consultora_id)
+        .maybeSingle();
+      if (c) {
+        consultoraLogoUrl = c.logo_url;
+        consultoraNombre = c.nombre;
+      }
+    }
+
+    const [logoEmpresa, logoConsultora] = await Promise.all([
+      getScaledLogo(empresa?.logo_url, 130, 50),
+      getScaledLogo(consultoraLogoUrl, 130, 50),
+    ]);
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "Legajo Técnico Digital";
+    wb.created = new Date();
+
+    const ws = wb.addWorksheet("Capacitaciones", {
+      views: [{ showGridLines: true, state: "frozen", ySplit: 5 }],
+      pageSetup: {
+        orientation: "landscape",
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: 0,
+      },
+    });
+
+    // Ancho de columnas optimizado
+    ws.columns = [
+      { width: 7 },   // A: N°
+      { width: 34 },  // B: Participante
+      { width: 16 },  // C: DNI
+      { width: 40 },  // D: Tema de Capacitación
+      { width: 22 },  // E: Fecha y Hora
+      { width: 16 },  // F: Calificación
+      { width: 18 },  // G: Estado
+    ];
+
+    // Fila 1: Header con Logos y Título
+    ws.getRow(1).height = 62;
+
+    // Col A y B: Logo Consultora
+    ws.mergeCells("A1:B1");
+    const cellCons = ws.getCell("A1");
+    cellCons.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } };
+    cellCons.border = {
+      top: { style: "thin", color: { argb: "FFE2E8F0" } },
+      bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
+      left: { style: "thin", color: { argb: "FFE2E8F0" } },
+      right: { style: "thin", color: { argb: "FFE2E8F0" } },
     };
 
-    const header = "Participante,DNI,Tema de capacitación,Fecha,Calificación";
-    const lines = allRows.map((r) => {
-      const calif = r.con_evaluacion
-        ? `${r.calificacion ?? 0}%`
-        : "Asistió";
-      const fecha = r.fecha
+    if (logoConsultora) {
+      const imgIdCons = wb.addImage({
+        buffer: logoConsultora.buffer as any,
+        extension: logoConsultora.extension,
+      });
+      // Centrado en A1:B1 (ancho cols A+B ~300px)
+      const colOffsetCons = Math.max(0.12, (2 - (logoConsultora.width / 140)) / 2);
+      const rowOffsetCons = Math.max(0.08, (62 - logoConsultora.height) / (2 * 62));
+      ws.addImage(imgIdCons, {
+        tl: { col: colOffsetCons, row: rowOffsetCons },
+        ext: { width: logoConsultora.width, height: logoConsultora.height },
+      });
+    } else {
+      cellCons.value = consultoraNombre || "CONSULTORA";
+      cellCons.font = { name: "Calibri", size: 11, bold: true, color: { argb: "FF1E3A8A" } };
+      cellCons.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+    }
+
+    // Col C, D y E: Título Central
+    ws.mergeCells("C1:E1");
+    const cellTitle = ws.getCell("C1");
+    cellTitle.value = "BASE DE DATOS HISTÓRICA DE CAPACITACIONES";
+    cellTitle.font = { name: "Calibri", size: 13, bold: true, color: { argb: "FFFFFFFF" } };
+    cellTitle.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E3A8A" } }; // Navy Blue
+    cellTitle.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+    cellTitle.border = {
+      top: { style: "thin", color: { argb: "FF1E3A8A" } },
+      bottom: { style: "thin", color: { argb: "FF1E3A8A" } },
+      left: { style: "thin", color: { argb: "FF1E3A8A" } },
+      right: { style: "thin", color: { argb: "FF1E3A8A" } },
+    };
+
+    // Col F y G: Logo Empresa
+    ws.mergeCells("F1:G1");
+    const cellEmp = ws.getCell("F1");
+    cellEmp.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } };
+    cellEmp.border = {
+      top: { style: "thin", color: { argb: "FFE2E8F0" } },
+      bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
+      left: { style: "thin", color: { argb: "FFE2E8F0" } },
+      right: { style: "thin", color: { argb: "FFE2E8F0" } },
+    };
+
+    if (logoEmpresa) {
+      const imgIdEmp = wb.addImage({
+        buffer: logoEmpresa.buffer as any,
+        extension: logoEmpresa.extension,
+      });
+      // Centrado en F1:G1 (col F es index 5)
+      const colOffsetEmp = 5 + Math.max(0.12, (2 - (logoEmpresa.width / 120)) / 2);
+      const rowOffsetEmp = Math.max(0.08, (62 - logoEmpresa.height) / (2 * 62));
+      ws.addImage(imgIdEmp, {
+        tl: { col: colOffsetEmp, row: rowOffsetEmp },
+        ext: { width: logoEmpresa.width, height: logoEmpresa.height },
+      });
+    } else {
+      cellEmp.value = empresa?.razon_social || "EMPRESA";
+      cellEmp.font = { name: "Calibri", size: 10, bold: true, color: { argb: "FF1E293B" } };
+      cellEmp.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+    }
+
+    // Fila 2: Subtítulo con metadata
+    ws.mergeCells("A2:G2");
+    const cellSub = ws.getCell("A2");
+    const fechaEmision = new Date().toLocaleString("es-AR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    cellSub.value = `Empresa: ${empresa?.razon_social || "N/A"}   |   CUIT: ${empresa?.cuit || "N/A"}   |   Fecha de emisión: ${fechaEmision}`;
+    cellSub.font = { name: "Calibri", size: 10, bold: false, color: { argb: "FF334155" } };
+    cellSub.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF1F5F9" } };
+    cellSub.alignment = { vertical: "middle", horizontal: "center" };
+    cellSub.border = {
+      bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
+    };
+    ws.getRow(2).height = 22;
+
+    // Fila 3: Resumen de filtros
+    ws.mergeCells("A3:G3");
+    const cellFiltros = ws.getCell("A3");
+    const partesFiltro: string[] = [`Total de registros exportados: ${allRows.length}`];
+    if (opts.tema) partesFiltro.push(`Tema: "${opts.tema}"`);
+    if (opts.participante) partesFiltro.push(`Participante: "${opts.participante}"`);
+    if (opts.fecha_desde || opts.fecha_hasta) {
+      partesFiltro.push(`Período: ${opts.fecha_desde || "Inicio"} al ${opts.fecha_hasta || "Hoy"}`);
+    }
+    if (opts.resultado && opts.resultado !== "todos") {
+      partesFiltro.push(`Resultado: ${opts.resultado.toUpperCase()}`);
+    }
+    cellFiltros.value = partesFiltro.join("   •   ");
+    cellFiltros.font = { name: "Calibri", size: 9.5, italic: true, color: { argb: "FF64748B" } };
+    cellFiltros.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF8FAFC" } };
+    cellFiltros.alignment = { vertical: "middle", horizontal: "center" };
+    cellFiltros.border = {
+      bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
+    };
+    ws.getRow(3).height = 20;
+
+    // Fila 4: Separador
+    ws.getRow(4).height = 8;
+
+    // Fila 5: Encabezados de la Tabla
+    const headers = [
+      "N°",
+      "Participante",
+      "DNI",
+      "Tema de Capacitación",
+      "Fecha de Visita",
+      "Calificación",
+      "Estado",
+    ];
+    const headerRow = ws.getRow(5);
+    headerRow.values = headers;
+    headerRow.height = 26;
+    headerRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+      cell.font = { name: "Calibri", size: 11, bold: true, color: { argb: "FFFFFFFF" } };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF2563EB" } }; // Royal Blue
+      cell.alignment = {
+        vertical: "middle",
+        horizontal: colNumber === 2 || colNumber === 4 ? "left" : "center",
+        wrapText: true,
+      };
+      cell.border = {
+        top: { style: "thin", color: { argb: "FF1D4ED8" } },
+        bottom: { style: "medium", color: { argb: "FF1D4ED8" } },
+        left: { style: "thin", color: { argb: "FF1D4ED8" } },
+        right: { style: "thin", color: { argb: "FF1D4ED8" } },
+      };
+    });
+
+    ws.autoFilter = { from: "A5", to: "G5" };
+
+    // Filas de Datos (a partir de la fila 6)
+    allRows.forEach((r, idx) => {
+      const rowNumber = idx + 6;
+      const row = ws.getRow(rowNumber);
+      row.height = 22;
+
+      const fechaStr = r.fecha
         ? new Date(r.fecha).toLocaleString("es-AR", {
             day: "2-digit",
             month: "2-digit",
@@ -1417,18 +1636,72 @@ export const capacitacionesService = {
             hour: "2-digit",
             minute: "2-digit",
           })
-        : "";
-      return [
-        escape(r.participante),
-        escape(r.dni),
-        escape(r.tema),
-        escape(fecha),
-        escape(calif),
-      ].join(",");
+        : "—";
+
+      const califStr = r.con_evaluacion
+        ? `${r.calificacion ?? 0}%`
+        : "Sin examen";
+
+      let estadoStr = "ASISTIÓ";
+      let estadoFg = "FF1E40AF"; // Blue
+      let estadoBg = "FFEFF6FF";
+
+      if (r.con_evaluacion) {
+        const puntaje = r.calificacion ?? 0;
+        if (puntaje >= 70 || r.aprobado) {
+          estadoStr = "APROBADO";
+          estadoFg = "FF166534"; // Dark Green
+          estadoBg = "FFDCFCE7"; // Light Green
+        } else {
+          estadoStr = "DESAPROBADO";
+          estadoFg = "FF991B1B"; // Dark Red
+          estadoBg = "FFFEE2E2"; // Light Red
+        }
+      }
+
+      row.values = [
+        idx + 1,
+        r.participante || "—",
+        r.dni || "—",
+        r.tema || "—",
+        fechaStr,
+        califStr,
+        estadoStr,
+      ];
+
+      const isEven = idx % 2 === 0;
+      const zebraBg = isEven ? "FFFFFFFF" : "FFF8FAFC";
+
+      row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+        if (colNumber === 7) {
+          cell.font = { name: "Calibri", size: 10, bold: true, color: { argb: estadoFg } };
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: estadoBg } };
+          cell.alignment = { vertical: "middle", horizontal: "center" };
+        } else {
+          cell.font = {
+            name: "Calibri",
+            size: 10,
+            bold: colNumber === 2,
+            color: { argb: "FF1E293B" },
+          };
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: zebraBg } };
+          cell.alignment = {
+            vertical: "middle",
+            horizontal: colNumber === 2 || colNumber === 4 ? "left" : "center",
+          };
+        }
+
+        cell.border = {
+          top: { style: "thin", color: { argb: "FFE2E8F0" } },
+          bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
+          left: { style: "thin", color: { argb: "FFE2E8F0" } },
+          right: { style: "thin", color: { argb: "FFE2E8F0" } },
+        };
+      });
     });
 
-    const csv = `\uFEFF${header}\n${lines.join("\n")}`;
-    return Buffer.from(csv, "utf-8");
+    const arrayBuffer = await wb.xlsx.writeBuffer();
+    return Buffer.from(arrayBuffer);
   },
 };
 
@@ -1466,3 +1739,34 @@ export type CapacitacionHistoricoRow = {
   aprobado: boolean;
   con_evaluacion: boolean;
 };
+
+async function getScaledLogo(
+  url?: string | null,
+  maxWidth = 130,
+  maxHeight = 50,
+): Promise<{ buffer: Buffer; extension: "png" | "jpeg"; width: number; height: number } | null> {
+  if (!url) return null;
+  const img = await fetchImageBuffer(url);
+  if (!img) return null;
+  try {
+    const meta = await sharp(img.buffer).metadata();
+    const origW = meta.width || maxWidth;
+    const origH = meta.height || maxHeight;
+    const scale = Math.min(maxWidth / origW, maxHeight / origH, 1);
+    const width = Math.max(24, Math.round(origW * scale));
+    const height = Math.max(24, Math.round(origH * scale));
+    return {
+      buffer: img.buffer,
+      extension: img.extension,
+      width,
+      height,
+    };
+  } catch {
+    return {
+      buffer: img.buffer,
+      extension: img.extension,
+      width: maxWidth,
+      height: maxHeight,
+    };
+  }
+}

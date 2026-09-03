@@ -33,7 +33,9 @@ export const capacitacionesController = {
         return res.status(400).json({ error: "empresa_id es requerido" });
 
       await assertEmpresaAccess(req.user!, empresaId);
-      const capacitaciones = await capacitacionesService.listar(empresaId);
+      const capacitaciones = await capacitacionesService.listar(empresaId, {
+        soloVisibleEnte: req.user!.rol === "ente_regulador",
+      });
       res.json({ capacitaciones });
     } catch (error) {
       next(error);
@@ -451,10 +453,13 @@ export const capacitacionesController = {
           resultado: filtros.resultado,
         },
       );
-      res.setHeader("Content-Type", "text/csv;charset=utf-8");
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      );
       res.setHeader(
         "Content-Disposition",
-        `attachment; filename=base_historica_capacitaciones_${empresaId.slice(0, 8)}.csv`,
+        `attachment; filename="base_historica_capacitaciones_${empresaId.slice(0, 8)}.xlsx"`,
       );
       res.send(buffer);
     } catch (error) {

@@ -35,7 +35,7 @@ export const informesController = {
         await assertEmpresaAccess(req.user!, empresaId as string);
         const result = await informeService.listarPorEmpresa(
           empresaId as string,
-          pageOpts,
+          { ...pageOpts, soloVisibleEnte: user?.rol === "ente_regulador" },
         );
         return res.json(result);
       }

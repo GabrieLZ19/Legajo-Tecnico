@@ -64,7 +64,7 @@ export const planAccionController = {
       const result = await planAccionService.listarAcciones(
         empresaId as string,
         estado as EstadoAccion | undefined,
-        { limit, offset },
+        { limit, offset, soloVisibleEnte: req.user?.rol === "ente_regulador" },
         responsable ? (responsable as string) : undefined,
       );
       res.json(result);
