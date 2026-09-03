@@ -149,18 +149,18 @@ export const MODULE_PERMISSIONS: Record<RolUsuario, RoleModulePermission[]> = {
     },
     {
       module: "Entrega EPP",
-      access: "oculto",
-      description: "No accede a este módulo desde el panel.",
+      access: "lectura",
+      description: "Consulta constancias de entrega de EPP autorizadas.",
     },
     {
       module: "Capacitaciones",
-      access: "oculto",
-      description: "No accede a este módulo desde el panel.",
+      access: "lectura",
+      description: "Consulta registros de capacitaciones autorizadas.",
     },
     {
       module: "Métricas y reportes",
       access: "lectura",
-      description: "Consulta indicadores de control.",
+      description: "Consulta indicadores de control y auditoría.",
     },
     {
       module: "Gestión empresas",

@@ -13,6 +13,7 @@ import {
   Loader2,
   X,
   RotateCcw,
+  CheckCircle2,
 } from "lucide-react";
 import { canWriteAppModule } from "@/lib/moduleAccess";
 import { useAlert } from "@/context/AlertContext";
@@ -224,13 +225,15 @@ export default function InformesPage() {
         const matchesHasta = !endDate || visitDate <= endDate;
         const matchesEstado = estado === "todos" || inf.estado_firma === estado;
         const matchesLugar = lugar === "todos" || inf.lugar_visita === lugar;
+        const matchesEnte = user?.rol !== "ente_regulador" || Boolean(inf.visible_ente_regulador);
 
         return (
           matchesText &&
           matchesDesde &&
           matchesHasta &&
           matchesEstado &&
-          matchesLugar
+          matchesLugar &&
+          matchesEnte
         );
       })
       .slice()
@@ -519,11 +522,17 @@ export default function InformesPage() {
                         })()}
                       </td>
                       <td className="whitespace-nowrap px-6 py-4.5">
-                        <VisibleEnteToggle
-                          checked={Boolean(inf.visible_ente_regulador)}
-                          disabled={!canEdit}
-                          onChange={(v) => void handleVisibilidadChange(inf.id, v)}
-                        />
+                        {user?.rol === "ente_regulador" ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                            <CheckCircle2 className="h-3 w-3" /> Habilitado
+                          </span>
+                        ) : (
+                          <VisibleEnteToggle
+                            checked={Boolean(inf.visible_ente_regulador)}
+                            disabled={!canEdit}
+                            onChange={(v) => void handleVisibilidadChange(inf.id, v)}
+                          />
+                        )}
                       </td>
                       <td className="whitespace-nowrap px-6 py-4.5 text-right text-sm font-bold">
                         <div className="inline-flex items-center gap-3 justify-end">
@@ -592,11 +601,17 @@ export default function InformesPage() {
                         {formatFullDate(inf.fecha_hora_visita)} ·{" "}
                         {formatTableTime(inf.fecha_hora_visita)}
                       </span>
-                      <VisibleEnteToggle
-                        checked={Boolean(inf.visible_ente_regulador)}
-                        disabled={!canEdit}
-                        onChange={(v) => void handleVisibilidadChange(inf.id, v)}
-                      />
+                      {user?.rol === "ente_regulador" ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full w-fit">
+                          <CheckCircle2 className="h-3 w-3" /> Habilitado
+                        </span>
+                      ) : (
+                        <VisibleEnteToggle
+                          checked={Boolean(inf.visible_ente_regulador)}
+                          disabled={!canEdit}
+                          onChange={(v) => void handleVisibilidadChange(inf.id, v)}
+                        />
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       {canCreate && (

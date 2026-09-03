@@ -41,13 +41,12 @@ function toInputDate(d: Date) {
   return `${y}-${m}-${day}`;
 }
 
-const RESULTADO_OPCIONES: { key: HistoricoResultadoFiltro; label: string }[] =
-  [
-    { key: "todos", label: "Todos" },
-    { key: "aprobado", label: "Aprobados" },
-    { key: "desaprobado", label: "Desaprobados" },
-    { key: "sin_evaluacion", label: "Sin evaluación" },
-  ];
+const RESULTADO_OPCIONES: { key: HistoricoResultadoFiltro; label: string }[] = [
+  { key: "todos", label: "Todos" },
+  { key: "aprobado", label: "Aprobados" },
+  { key: "desaprobado", label: "Desaprobados" },
+  { key: "sin_evaluacion", label: "Sin evaluación" },
+];
 
 export default function BaseDatosCapacitacionesPage() {
   const { empresa } = useAuth();
@@ -94,13 +93,7 @@ export default function BaseDatosCapacitacionesPage() {
       fecha_hasta: fechaHasta || undefined,
       resultado: resultado !== "todos" ? resultado : undefined,
     }),
-    [
-      participanteDebounced,
-      temaDebounced,
-      fechaDesde,
-      fechaHasta,
-      resultado,
-    ],
+    [participanteDebounced, temaDebounced, fechaDesde, fechaHasta, resultado],
   );
 
   const hasActiveFilters =
@@ -184,13 +177,13 @@ export default function BaseDatosCapacitacionesPage() {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `base_historica_capacitaciones_${empresa.cuit || empresa.id}.csv`;
+      link.download = `base_historica_capacitaciones_${empresa.cuit || empresa.id}.xlsx`;
       link.click();
       window.URL.revokeObjectURL(url);
       showAlert(
         "success",
-        "Exportación lista",
-        "Se descargó el CSV con los filtros aplicados.",
+        "Planilla Excel lista",
+        "Se descargó la base histórica en formato Excel (.xlsx)",
       );
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
@@ -234,14 +227,14 @@ export default function BaseDatosCapacitacionesPage() {
           type="button"
           disabled={exporting || loading || total === 0}
           onClick={() => void handleExport()}
-          className="inline-flex items-center justify-center gap-2 shrink-0 min-h-11 px-5 py-3 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 font-bold rounded-xl text-sm cursor-pointer disabled:opacity-50"
+          className="inline-flex items-center justify-center gap-2 shrink-0 min-h-11 px-5 py-3 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 font-bold rounded-xl text-sm cursor-pointer disabled:opacity-50 transition-all shadow-2xs"
         >
           {exporting ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
             <Download className="h-4 w-4" />
           )}
-          Descargar Excel (.csv)
+          Descargar Excel (.xlsx)
         </button>
       </div>
 

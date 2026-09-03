@@ -16,6 +16,7 @@ import {
   FileUp,
   Download,
   Database,
+  CheckCircle2,
 } from "lucide-react";
 
 import { useCapacitaciones } from "@/hooks/useCapacitaciones";
@@ -76,10 +77,11 @@ export default function CapacitacionesPage() {
     }
   };
 
-  const filtered =
+  const filtered = (
     filtroEstado === "todas"
       ? capacitaciones
-      : capacitaciones.filter((c) => c.estado === filtroEstado);
+      : capacitaciones.filter((c) => c.estado === filtroEstado)
+  ).filter((c) => user?.rol !== "ente_regulador" || Boolean(c.visible_ente_regulador));
 
   const handleInsertarRegistro = (capId: string) => {
     uploadTargetIdRef.current = capId;
@@ -357,11 +359,17 @@ export default function CapacitacionesPage() {
                 </div>
               </Link>
               <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 border-t border-slate-100 sm:border-t-0 pt-3 sm:pt-0 flex-wrap">
-                <VisibleEnteToggle
-                  checked={Boolean(cap.visible_ente_regulador)}
-                  disabled={!canEdit}
-                  onChange={(v) => void handleVisibilidadChange(cap.id, v)}
-                />
+                {user?.rol === "ente_regulador" ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                    <CheckCircle2 className="h-3 w-3" /> Habilitado
+                  </span>
+                ) : (
+                  <VisibleEnteToggle
+                    checked={Boolean(cap.visible_ente_regulador)}
+                    disabled={!canEdit}
+                    onChange={(v) => void handleVisibilidadChange(cap.id, v)}
+                  />
+                )}
                 {canCreate && cap.origen !== "manual" && (
                   cap.registro_manual_url ? (
                     <a

@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { usePlanAccion, usePlanAccionResponsables, exportarPlanAccion } from "@/hooks/usePlanAccion";
 
 import { AccionMejora, EstadoAccion } from "@/types";
-import { FileSpreadsheet, FileText, Loader, Plus, X } from "lucide-react";
+import { FileSpreadsheet, FileText, Loader, Plus, X, CheckCircle2 } from "lucide-react";
 import { useAlert } from "@/context/AlertContext";
 import { canWriteAppModule } from "@/lib/moduleAccess";
 import { VisibleEnteToggle } from "@/components/VisibleEnteToggle";
@@ -61,6 +61,14 @@ export default function PlanAccionPage() {
   );
 
   const { data: responsables = [] } = usePlanAccionResponsables(empresa?.id);
+
+  const accionesList = useMemo(
+    () =>
+      (acciones || []).filter(
+        (acc) => user?.rol !== "ente_regulador" || Boolean(acc.visible_ente_regulador),
+      ),
+    [acciones, user?.rol],
+  );
 
   const handleStatusChange = async (id: string, nuevoEstado: EstadoAccion) => {
     try {
@@ -359,7 +367,7 @@ export default function PlanAccionPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
-                  {acciones.map((acc, index) => {
+                  {accionesList.map((acc, index) => {
                     const sector = accionSector(acc);
                     const fechaVisita = formatAccionFecha(acc);
                     const origen = acc.es_manual ? "Manual" : sector;
@@ -439,12 +447,18 @@ export default function PlanAccionPage() {
                           </select>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <VisibleEnteToggle
-                            checked={Boolean(acc.visible_ente_regulador)}
-                            disabled={!canEdit}
-                            compact
-                            onChange={(v) => handleVisibilidadChange(acc.id, v)}
-                          />
+                          {user?.rol === "ente_regulador" ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                              <CheckCircle2 className="h-3 w-3" /> Habilitada
+                            </span>
+                          ) : (
+                            <VisibleEnteToggle
+                              checked={Boolean(acc.visible_ente_regulador)}
+                              disabled={!canEdit}
+                              compact
+                              onChange={(v) => handleVisibilidadChange(acc.id, v)}
+                            />
+                          )}
                         </td>
                       </tr>
                     );
@@ -456,7 +470,7 @@ export default function PlanAccionPage() {
 
           {/* Vista Mobile: Tarjetas */}
           <div className="block md:hidden space-y-4">
-            {acciones.map((acc, index) => {
+            {accionesList.map((acc, index) => {
               const sector = accionSector(acc);
               const fechaVisita = formatAccionFecha(acc);
               const origen = acc.es_manual ? "Manual" : sector;
@@ -494,11 +508,17 @@ export default function PlanAccionPage() {
                   </div>
 
                   <div className="flex items-center justify-between pt-3.5 border-t border-slate-100">
-                    <VisibleEnteToggle
-                      checked={Boolean(acc.visible_ente_regulador)}
-                      disabled={!canEdit}
-                      onChange={(v) => handleVisibilidadChange(acc.id, v)}
-                    />
+                    {user?.rol === "ente_regulador" ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                        <CheckCircle2 className="h-3 w-3" /> Habilitada
+                      </span>
+                    ) : (
+                      <VisibleEnteToggle
+                        checked={Boolean(acc.visible_ente_regulador)}
+                        disabled={!canEdit}
+                        onChange={(v) => handleVisibilidadChange(acc.id, v)}
+                      />
+                    )}
                     <select
                       value={acc.estado}
                       disabled={!canEdit}

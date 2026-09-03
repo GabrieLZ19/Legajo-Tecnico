@@ -88,6 +88,7 @@ export function canWriteModule(
   user: Pick<Perfil, "rol" | "permisos_personalizados"> | null | undefined,
   moduleName: string,
 ): boolean {
+  if (!user || user.rol === "ente_regulador") return false;
   return getModuleAccess(user, moduleName) === "total";
 }
 
@@ -104,6 +105,7 @@ export function canWriteAppModule(
   user: Pick<Perfil, "rol" | "permisos_personalizados"> | null | undefined,
   key: AppModuleKey,
 ): boolean {
+  if (!user || user.rol === "ente_regulador") return false;
   const mod = APP_NAV_MODULES.find((item) => item.key === key);
   if (!mod) return false;
   return canWriteModule(user, mod.module);
@@ -118,7 +120,8 @@ export function canWriteAppModule(
 export function canPublishToBibliotecaLt(
   user: Pick<Perfil, "rol"> | null | undefined,
 ): boolean {
-  return user?.rol === "admin" || user?.rol === "preventor";
+  if (!user || user.rol === "ente_regulador") return false;
+  return user.rol === "admin" || user.rol === "preventor";
 }
 
 export function getVisibleAppNavModules(

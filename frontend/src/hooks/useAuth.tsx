@@ -187,7 +187,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         typeof window !== "undefined"
           ? new URLSearchParams(window.location.search).get("next")
           : null;
-      const dest = next && next.startsWith("/") ? next : "/dashboard";
+      let dest = next && next.startsWith("/") ? next : "/dashboard";
+      if (!next && perfil.rol === "ente_regulador" && !empData) {
+        dest = "/ente/dashboard";
+      }
       postLoginRedirect(dest);
     } catch (error: unknown) {
       if (axios.isAxiosError(error) && error.response?.status === 409) {

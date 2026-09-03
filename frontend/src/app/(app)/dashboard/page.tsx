@@ -15,8 +15,11 @@ import {
   Award,
   HardHat,
   ClipboardList,
+  GitBranch,
+  Building2,
   type LucideIcon,
 } from "lucide-react";
+import { getSucursalLabel, getBaseCuit, formatCuitDisplay } from "@/lib/cuit";
 import {
   canWriteAppModule,
   getVisibleAppNavModules,
@@ -66,6 +69,7 @@ export default function DashboardPage() {
   const canCreate = canWriteAppModule(user, "informes");
   const visibleModules = getVisibleAppNavModules(user);
   const firstName = user?.nombre_completo?.split(" ")[0] || "Usuario";
+  const sucursalLabel = empresa?.cuit ? getSucursalLabel(empresa.cuit) : null;
 
   const pct = loadingMetrics ? 0 : metricas?.porcentaje_cumplimiento || 0;
   let badgeText = "Riesgo Alto";
@@ -106,18 +110,20 @@ export default function DashboardPage() {
   // Informes que requieren acción del usuario actual vs. solo seguimiento
   const rol = user?.rol;
   const informesPendientesFirma =
-    informes?.filter((inf) => {
-      if (inf.estado_firma === "pendiente_dueno") {
-        return rol === "dueno" || rol === "admin" || rol === "preventor";
-      }
-      if (
-        inf.estado_firma === "borrador" ||
-        inf.estado_firma === "pendiente_preventor"
-      ) {
-        return rol === "preventor" || rol === "admin";
-      }
-      return false;
-    }) || [];
+    rol === "ente_regulador"
+      ? []
+      : informes?.filter((inf) => {
+          if (inf.estado_firma === "pendiente_dueno") {
+            return rol === "dueno" || rol === "admin" || rol === "preventor";
+          }
+          if (
+            inf.estado_firma === "borrador" ||
+            inf.estado_firma === "pendiente_preventor"
+          ) {
+            return rol === "preventor" || rol === "admin";
+          }
+          return false;
+        }) || [];
 
   const pendientesMiFirma = informesPendientesFirma.filter((inf) => {
     if (inf.estado_firma === "pendiente_dueno") {
@@ -152,13 +158,26 @@ export default function DashboardPage() {
               className="h-full w-full object-contain"
             />
           </div>
-          <div>
-            <span className="text-sm font-semibold text-slate-500 flex items-center gap-1.5">
-              Hola, {firstName}{" "}
+          <div className="min-w-0">
+            <span className="text-xs sm:text-sm font-bold text-slate-400 uppercase tracking-wider block">
+              Hola, {firstName}
             </span>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight mt-0.5">
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mt-0.5">
               Panel de Legajo Técnico
             </h1>
+            {sucursalLabel && (
+              <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200/80 px-2 py-0.5 rounded-md text-xs font-bold shadow-2xs">
+                  <GitBranch className="h-3 w-3 text-blue-600" />
+                  Sede: {sucursalLabel}
+                </span>
+                {empresa?.localidad && (
+                  <span className="text-xs text-slate-400 font-medium truncate">
+                    ({empresa.localidad})
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
         {canCreate && (
@@ -273,10 +292,18 @@ export default function DashboardPage() {
             <ShieldCheck className="h-48 w-48" />
           </div>
 
-          <div className="flex items-center justify-between relative z-10">
-            <span className="text-xs font-bold uppercase tracking-wider text-blue-100">
-              Cumplimiento Global • {empresa?.razon_social || "Empresa"}
-            </span>
+          <div className="flex flex-wrap items-center justify-between gap-2 relative z-10">
+            <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-blue-100">
+              <span>Cumplimiento Global</span>
+              <span>•</span>
+              <span className="text-white">{empresa?.razon_social || "Empresa"}</span>
+              {sucursalLabel && (
+                <span className="inline-flex items-center gap-1 bg-white/20 text-white border border-white/30 px-2 py-0.5 rounded-md text-[11px] font-black normal-case tracking-normal backdrop-blur-xs">
+                  <GitBranch className="h-3 w-3 text-blue-200" />
+                  Sucursal {sucursalLabel}
+                </span>
+              )}
+            </div>
             <div
               className={`flex items-center gap-1 backdrop-blur-md border px-3 py-1 rounded-full text-xs font-bold ${badgeClass}`}
             >

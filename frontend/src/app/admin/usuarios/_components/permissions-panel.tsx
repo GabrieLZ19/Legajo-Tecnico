@@ -186,6 +186,12 @@ export function PermissionsPanel({
                     aria-label={`Acceso de ${module.module}`}
                   >
                     {ACCESS_OPTIONS.map((option) => {
+                      if (
+                        usuario?.rol === "ente_regulador" &&
+                        option.value === "total"
+                      ) {
+                        return null;
+                      }
                       const active = module.access === option.value;
                       return (
                         <button

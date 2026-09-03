@@ -12,6 +12,7 @@ import {
   FileText,
   Layers,
   Users,
+  CheckCircle2,
 } from "lucide-react";
 import { useEpp } from "@/hooks/useEpp";
 import { useAlert } from "@/context/AlertContext";
@@ -123,13 +124,15 @@ export default function EppPage() {
 
   const entregasOrdenadas = useMemo(
     () =>
-      [...entregas].sort((a, b) => {
-        const ta = new Date(a.fecha_entrega || 0).getTime();
-        const tb = new Date(b.fecha_entrega || 0).getTime();
-        if (tb !== ta) return tb - ta;
-        return b.id.localeCompare(a.id);
-      }),
-    [entregas],
+      entregas
+        .filter((e) => user?.rol !== "ente_regulador" || Boolean(e.visible_ente_regulador))
+        .sort((a, b) => {
+          const ta = new Date(a.fecha_entrega || 0).getTime();
+          const tb = new Date(b.fecha_entrega || 0).getTime();
+          if (tb !== ta) return tb - ta;
+          return b.id.localeCompare(a.id);
+        }),
+    [entregas, user?.rol],
   );
 
   const tabClass = (value: Tab) =>
@@ -236,12 +239,18 @@ export default function EppPage() {
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-3 shrink-0">
-                    <VisibleEnteToggle
-                      checked={Boolean(e.visible_ente_regulador)}
-                      disabled={!canEdit}
-                      onChange={(v) => void handleVisibilidadChange(e.id, v)}
-                      label="Visible ente regulador"
-                    />
+                    {user?.rol === "ente_regulador" ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Habilitado para auditoría
+                      </span>
+                    ) : (
+                      <VisibleEnteToggle
+                        checked={Boolean(e.visible_ente_regulador)}
+                        disabled={!canEdit}
+                        onChange={(v) => void handleVisibilidadChange(e.id, v)}
+                        label="Visible ente regulador"
+                      />
+                    )}
                     <button
                       type="button"
                       onClick={() => handleDownloadPdf(e.id, e.dni_empleado)}
