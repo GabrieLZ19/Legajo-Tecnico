@@ -1,5 +1,7 @@
 import { useState, useCallback } from "react";
 import { api } from "@/lib/api";
+import { eppService } from "@/utils/services/epp.service";
+import { eppLicitacionService } from "@/utils/services/eppLicitacion.service";
 import type { EppProveedor, EppHistoricoFiltros, EppHistoricoRow } from "@/types";
 
 export function useEpp() {
@@ -142,6 +144,15 @@ export function useEpp() {
     [run],
   );
 
+  const generarQrEntrega = useCallback(
+    (empresaId: string) =>
+      run(
+        () => eppService.generarQrEntrega(empresaId),
+        "Error al generar QR de entrega",
+      ),
+    [run],
+  );
+
   const getProveedores = useCallback(
     () =>
       run(async () => {
@@ -152,11 +163,43 @@ export function useEpp() {
   );
 
   const crearProveedor = useCallback(
-    (payload: { nombre: string; email: string }) =>
+    (payload: {
+      nombre: string;
+      email: string;
+      direccion?: string;
+      telefono?: string;
+    }) =>
       run(async () => {
         const { data } = await api.post<EppProveedor>("/epp/proveedores", payload);
         return data;
       }, "Error al crear proveedor"),
+    [run],
+  );
+
+  const actualizarProveedor = useCallback(
+    (
+      id: string,
+      payload: {
+        nombre?: string;
+        email?: string;
+        direccion?: string | null;
+        telefono?: string | null;
+        activo?: boolean;
+      },
+    ) =>
+      run(async () => {
+        const { data } = await api.patch<EppProveedor>(`/epp/proveedores/${id}`, payload);
+        return data;
+      }, "Error al actualizar proveedor"),
+    [run],
+  );
+
+  const eliminarProveedor = useCallback(
+    (id: string) =>
+      run(async () => {
+        const { data } = await api.delete(`/epp/proveedores/${id}`);
+        return data as { success: boolean; id: string };
+      }, "Error al eliminar proveedor"),
     [run],
   );
 
@@ -175,6 +218,36 @@ export function useEpp() {
         const { data } = await api.post("/epp/licitaciones", payload);
         return data;
       }, "Error al crear licitación"),
+    [run],
+  );
+
+  const getLicitacion = useCallback(
+    (id: string) =>
+      run(async () => eppLicitacionService.obtener(id), "Error al obtener licitación"),
+    [run],
+  );
+
+  const agregarProveedorLicitacion = useCallback(
+    (licitacionId: string, proveedorId: string) =>
+      run(
+        async () => eppLicitacionService.agregarProveedor(licitacionId, proveedorId),
+        "Error al agregar proveedor",
+      ),
+    [run],
+  );
+
+  const actualizarEstadoLicitacion = useCallback(
+    (
+      licitacionId: string,
+      payload: {
+        estado: "abierta" | "adjudicacion" | "cerrada";
+        ganador_cotizacion_id?: string | null;
+      },
+    ) =>
+      run(
+        async () => eppLicitacionService.actualizarEstado(licitacionId, payload),
+        "Error al actualizar estado de la licitación",
+      ),
     [run],
   );
 
@@ -235,10 +308,16 @@ export function useEpp() {
     actualizarEmpleado,
     buscarEmpleadoPorQr,
     generarQrEmpleado,
+    generarQrEntrega,
     getProveedores,
     crearProveedor,
+    actualizarProveedor,
+    eliminarProveedor,
     getLicitaciones,
     crearLicitacion,
+    getLicitacion,
+    agregarProveedorLicitacion,
+    actualizarEstadoLicitacion,
     getHistoricoEpp,
     exportarHistoricoEpp,
     descargarPlanillaHistoricaEmpleado,

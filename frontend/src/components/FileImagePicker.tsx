@@ -9,6 +9,8 @@ type FileImagePickerProps = {
   label?: string;
   hint?: string;
   previewUrl?: string | null;
+  /** En móvil abre la cámara trasera cuando el navegador lo soporta. */
+  capture?: boolean | "user" | "environment";
 };
 
 export function FileImagePicker({
@@ -17,6 +19,7 @@ export function FileImagePicker({
   label = "Foto",
   hint = "PNG o JPG, hasta 5 MB",
   previewUrl,
+  capture,
 }: FileImagePickerProps) {
   const [localPreview, setLocalPreview] = useState<string | null>(null);
 
@@ -31,6 +34,8 @@ export function FileImagePicker({
   }, [file]);
 
   const shown = localPreview || previewUrl || null;
+  const captureAttr =
+    capture === true ? "environment" : capture === false || capture == null ? undefined : capture;
 
   return (
     <div className="space-y-1.5">
@@ -54,6 +59,7 @@ export function FileImagePicker({
         <input
           type="file"
           accept="image/*"
+          capture={captureAttr}
           className="sr-only"
           onChange={(e) => onChange(e.target.files?.[0] ?? null)}
         />

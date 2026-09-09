@@ -163,6 +163,8 @@ const WRITE_ROUTE_RULES: WriteRouteRule[] = [
     key: "epp",
     match: (pathname) =>
       pathname.startsWith("/epp/nueva-entrega") ||
+      pathname.startsWith("/epp/nueva-licitacion") ||
+      pathname.startsWith("/epp/licitaciones/") ||
       (pathname.includes("/epp/") && pathname.includes("/editar")),
   },
   {

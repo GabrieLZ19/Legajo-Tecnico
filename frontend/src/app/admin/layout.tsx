@@ -18,6 +18,7 @@ import {
   Settings,
   History,
   GraduationCap,
+  HardHat,
 } from "lucide-react";
 import { NotificationBell } from "@/components/notification-bell";
 
@@ -61,6 +62,11 @@ export default function AdminLayout({
       name: "Biblioteca Capacitaciones",
       href: "/admin/capacitaciones-biblioteca",
       icon: GraduationCap,
+    },
+    {
+      name: "Proveedores EPP",
+      href: "/admin/epp-proveedores-sugeridos",
+      icon: HardHat,
     },
     { name: "Auditoría", href: "/admin/auditoria", icon: History },
     { name: "Archivo Histórico", href: "/admin/archivo", icon: Archive },

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { EppEntrega, EppTipo, Empleado, EppProveedor, EppLicitacion } from "@/types";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   HardHat,
   Plus,
@@ -13,6 +14,7 @@ import {
   Layers,
   Users,
   CheckCircle2,
+  QrCode,
 } from "lucide-react";
 import { useEpp } from "@/hooks/useEpp";
 import { useAlert } from "@/context/AlertContext";
@@ -24,6 +26,8 @@ import { LicitacionesTab } from "./_components/LicitacionesTab";
 import { canWriteAppModule } from "@/lib/moduleAccess";
 
 type Tab = "entregas" | "personal" | "catalogo" | "licitaciones";
+
+const VALID_TABS: Tab[] = ["entregas", "personal", "catalogo", "licitaciones"];
 
 const formatLocalDate = (dateStr: string | Date | null | undefined): string => {
   if (!dateStr) return "";
@@ -40,10 +44,23 @@ const formatLocalDate = (dateStr: string | Date | null | undefined): string => {
 
 export default function EppPage() {
   const { user, empresa } = useAuth();
-  const { getEntregas, getTiposEpp, descargarPdfEntrega, getEmpleados, getProveedores, getLicitaciones } =
-    useEpp();
+  const searchParams = useSearchParams();
+  const {
+    getEntregas,
+    getTiposEpp,
+    descargarPdfEntrega,
+    getEmpleados,
+    getProveedores,
+    getLicitaciones,
+    generarQrEntrega,
+  } = useEpp();
   const { showAlert } = useAlert();
-  const [tab, setTab] = useState<Tab>("entregas");
+  const tabParam = searchParams.get("tab");
+  const initialTab: Tab =
+    tabParam && VALID_TABS.includes(tabParam as Tab)
+      ? (tabParam as Tab)
+      : "entregas";
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [entregas, setEntregas] = useState<EppEntrega[]>([]);
   const [tipos, setTipos] = useState<EppTipo[]>([]);
   const [empleados, setEmpleados] = useState<Empleado[]>([]);
@@ -51,6 +68,12 @@ export default function EppPage() {
   const [licitaciones, setLicitaciones] = useState<EppLicitacion[]>([]);
   const [loading, setLoading] = useState(true);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [qrEntrega, setQrEntrega] = useState<{
+    qr: string;
+    url: string;
+    razonSocial: string;
+  } | null>(null);
+  const [generandoQr, setGenerandoQr] = useState(false);
 
   const canCreate = canWriteAppModule(user, "epp");
   const canEdit = canCreate;
@@ -73,6 +96,12 @@ export default function EppPage() {
       );
     }
   };
+
+  useEffect(() => {
+    if (tabParam && VALID_TABS.includes(tabParam as Tab) && tabParam !== tab) {
+      setTab(tabParam as Tab);
+    }
+  }, [tabParam, tab]);
 
   const fetchData = async () => {
     if (!empresa?.id) return;
@@ -120,6 +149,61 @@ export default function EppPage() {
     } finally {
       setDownloadingId(null);
     }
+  };
+
+  const handleGenerarQrEntrega = async () => {
+    if (!empresa?.id) return;
+    setGenerandoQr(true);
+    try {
+      const data = await generarQrEntrega(empresa.id);
+      setQrEntrega({
+        qr: data.qr,
+        url: data.url,
+        razonSocial: data.empresa.razon_social,
+      });
+    } catch {
+      showAlert(
+        "error",
+        "Error",
+        "No se pudo generar el QR de entrega. Reintentá en un momento.",
+      );
+    } finally {
+      setGenerandoQr(false);
+    }
+  };
+
+  const downloadQrEntrega = () => {
+    if (!qrEntrega) return;
+    const link = document.createElement("a");
+    link.href = qrEntrega.qr;
+    link.download = `QR_Entrega_EPP_${qrEntrega.razonSocial.replace(/\s+/g, "_")}.png`;
+    link.click();
+  };
+
+  const printQrEntrega = () => {
+    if (!qrEntrega) return;
+    const w = window.open("", "_blank", "noopener,noreferrer,width=480,height=640");
+    if (!w) {
+      showAlert("warning", "Impresión", "Permití ventanas emergentes para imprimir el QR.");
+      return;
+    }
+    const safeName = qrEntrega.razonSocial.replace(/</g, "");
+    const safeUrl = qrEntrega.url.replace(/</g, "");
+    w.document.write(`<!DOCTYPE html><html><head><title>QR Entrega EPP</title>
+      <style>
+        body{font-family:system-ui,sans-serif;text-align:center;padding:24px;color:#0f172a}
+        h1{font-size:16px;margin:0 0 8px}
+        p{font-size:12px;color:#64748b;margin:0 0 16px}
+        img{width:320px;height:320px}
+        .url{font-size:10px;word-break:break-all;margin-top:12px}
+      </style></head><body>
+      <h1>Entrega de EPP — ${safeName}</h1>
+      <p>Escaneá para registrar la entrega (Res. SRT 299/11)</p>
+      <img src="${qrEntrega.qr}" alt="QR entrega EPP" />
+      <p class="url">${safeUrl}</p>
+      <script>window.onload=function(){window.print();}</script>
+      </body></html>`);
+    w.document.close();
   };
 
   const entregasOrdenadas = useMemo(
@@ -174,7 +258,7 @@ export default function EppPage() {
         </div>
       </div>
 
-      <div className="flex border-b border-slate-200 gap-4 sm:gap-6 overflow-x-auto">
+      <div className="flex border-b border-slate-200 gap-4 sm:gap-6 overflow-x-auto items-end">
         <button type="button" onClick={() => setTab("entregas")} className={tabClass("entregas")}>
           <FileText className="h-4 w-4" />
           Entregas
@@ -195,6 +279,17 @@ export default function EppPage() {
           <Layers className="h-4 w-4" />
           Licitación
         </button>
+        {canCreate && (
+          <button
+            type="button"
+            onClick={() => void handleGenerarQrEntrega()}
+            disabled={generandoQr || !empresa?.id}
+            className="shrink-0 ml-auto min-h-11 px-1 pb-3 pt-1 text-sm font-bold text-blue-700 hover:text-blue-800 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+          >
+            <QrCode className="h-4 w-4" />
+            {generandoQr ? "Generando…" : "Generar QR para entrega"}
+          </button>
+        )}
       </div>
 
       {tab === "entregas" && (
@@ -213,7 +308,7 @@ export default function EppPage() {
               </div>
               <h3 className="text-slate-800 font-bold text-sm">Sin entregas registradas</h3>
               <p className="text-slate-400 text-xs mt-1">
-                Escaneá el QR del trabajador para generar la constancia SRT 299/11.
+                Escaneá el QR del trabajador o generá el QR de punto de entrega.
               </p>
             </div>
           ) : (
@@ -235,6 +330,7 @@ export default function EppPage() {
                         {e.epp_tipos?.nombre} · {formatLocalDate(e.fecha_entrega)}
                         {e.marca ? ` · ${e.marca}` : ""}
                         {e.modelo ? ` ${e.modelo}` : ""}
+                        {e.origen === "qr_publico" ? " · QR público" : ""}
                       </p>
                     </div>
                   </div>
@@ -286,11 +382,56 @@ export default function EppPage() {
         <LicitacionesTab
           licitaciones={licitaciones}
           proveedores={proveedores}
-          tipos={tipos.filter((t) => t.activo)}
-          empresaId={empresa.id}
           canEdit={canCreate}
           onChanged={fetchData}
         />
+      )}
+
+      {qrEntrega && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm text-center space-y-4">
+            <h3 className="text-sm font-black uppercase tracking-wider text-slate-800">
+              QR para entrega de EPP
+            </h3>
+            <img
+              src={qrEntrega.qr}
+              alt="QR punto de entrega"
+              className="mx-auto w-56 h-56"
+            />
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Imprimí este código y dejalo en los puntos de entrega. El trabajador lo
+              escanea con el celular, carga el EPP, la foto, la certificación y firma.
+              No requiere firma del responsable de la empresa.
+            </p>
+            <p className="text-[10px] text-slate-300 break-all">{qrEntrega.url}</p>
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setQrEntrega(null)}
+                  className="flex-1 min-h-12 py-3 border rounded-xl text-sm font-bold cursor-pointer"
+                >
+                  Cerrar
+                </button>
+                <button
+                  type="button"
+                  onClick={downloadQrEntrega}
+                  className="flex-1 min-h-12 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold inline-flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Download className="h-4 w-4" />
+                  Descargar
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={printQrEntrega}
+                className="w-full min-h-12 py-3 bg-slate-900 text-white rounded-xl text-sm font-bold cursor-pointer"
+              >
+                Imprimir
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

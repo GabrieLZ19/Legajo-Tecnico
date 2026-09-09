@@ -306,13 +306,37 @@ export interface EppProveedor {
   consultora_id: string;
   nombre: string;
   email: string;
+  direccion?: string | null;
+  telefono?: string | null;
   activo: boolean;
+}
+
+export type EstadoPublicacionProveedorSugerido =
+  | "pendiente"
+  | "aprobada"
+  | "rechazada";
+
+export interface EppProveedorSugerido {
+  id: string;
+  nombre: string;
+  email: string;
+  direccion?: string | null;
+  telefono?: string | null;
+  notas?: string | null;
+  estado_publicacion: EstadoPublicacionProveedorSugerido;
+  created_by?: string | null;
+  aprobado_por?: string | null;
+  aprobado_at?: string | null;
+  rechazo_motivo?: string | null;
+  created_at: string;
+  updated_at?: string;
 }
 
 export interface EppLicitacionItem {
   id: string;
   licitacion_id: string;
-  epp_tipo_id: string;
+  epp_tipo_id?: string | null;
+  nombre_manual?: string | null;
   cantidad: number;
   epp_tipos?: EppTipo | null;
 }
@@ -328,6 +352,7 @@ export interface EppCotizacion {
   token_publico?: string;
   items_ofertados?: unknown;
   comision_calculada?: number | null;
+  presupuesto_pdf_url?: string | null;
   estado: string;
   created_at: string;
 }
@@ -336,12 +361,22 @@ export interface EppLicitacion {
   id: string;
   empresa_id: string;
   consultora_id: string;
+  numero?: number | null;
   titulo: string;
   descripcion?: string | null;
-  estado: string;
+  estado: "abierta" | "adjudicacion" | "cerrada" | string;
   comision_porcentaje?: number | null;
   fecha_cierre?: string | null;
+  comprador_nombre?: string | null;
+  comprador_email?: string | null;
+  comprador_telefono?: string | null;
+  ganador_cotizacion_id?: string | null;
+  token_adjudicacion?: string | null;
+  url_adjudicacion?: string | null;
+  adjudicado_at?: string | null;
+  mensaje_adjudicacion?: string | null;
   created_at: string;
+  empresas?: { id?: string; razon_social?: string } | null;
   epp_licitacion_items?: EppLicitacionItem[];
   epp_licitacion_cotizaciones?: EppCotizacion[];
 }
@@ -360,7 +395,7 @@ export interface DocumentoArchivo {
 export interface EppEntrega {
   id: string;
   empresa_id: string;
-  preventor_id: string;
+  preventor_id: string | null;
   epp_tipo_id: string;
   empleado_id?: string | null;
   nombre_empleado: string;
@@ -372,6 +407,8 @@ export interface EppEntrega {
   fecha_entrega: string;
   visible_ente_regulador?: boolean;
   firma_url?: string;
+  foto_evidencia_url?: string | null;
+  origen?: "panel" | "qr_publico";
   estado: EstadoEntregaEpp;
   pdf_url?: string;
   created_at: string;

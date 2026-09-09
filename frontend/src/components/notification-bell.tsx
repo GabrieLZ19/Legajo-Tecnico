@@ -190,6 +190,8 @@ export function NotificationBell({
         return <AlertTriangle className="h-4 w-4 text-amber-600" />;
       case "error":
         return <AlertCircle className="h-4 w-4 text-rose-600" />;
+      case "success":
+        return <CheckCheck className="h-4 w-4 text-emerald-600" />;
       default:
         return <Info className="h-4 w-4 text-blue-600" />;
     }
@@ -201,6 +203,8 @@ export function NotificationBell({
         return "bg-amber-50";
       case "error":
         return "bg-rose-50";
+      case "success":
+        return "bg-emerald-50";
       default:
         return "bg-blue-50";
     }
