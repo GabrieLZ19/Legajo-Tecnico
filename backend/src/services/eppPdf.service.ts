@@ -172,7 +172,16 @@ export const eppPdfService = {
       pages.push(paddedItems.slice(i, i + ROWS_PER_PAGE));
     }
 
-    const colWidths = [24, 98, 80, 64, 72, 40, 64, PAGE_WIDTH - (24 + 98 + 80 + 64 + 72 + 40 + 64)];
+    const colWidths = [
+      22,
+      90,
+      76,
+      58,
+      88,
+      42,
+      62,
+      PAGE_WIDTH - (22 + 90 + 76 + 58 + 88 + 42 + 62),
+    ];
     const rowH = 34;
     const headerRowH = 36;
 
@@ -233,33 +242,31 @@ export const eppPdfService = {
             data.empresa.domicilio || "",
             PAGE_LEFT,
             y,
-            PAGE_WIDTH * 0.42,
+            PAGE_WIDTH * 0.36,
           );
           drawLabeledValue(
             doc,
             "Localidad: ",
             data.empresa.localidad || "",
-            PAGE_LEFT + PAGE_WIDTH * 0.42,
+            PAGE_LEFT + PAGE_WIDTH * 0.36,
             y,
-            PAGE_WIDTH * 0.28,
+            PAGE_WIDTH * 0.24,
           );
           drawLabeledValue(
             doc,
             "C.P.: ",
             data.empresa.codigo_postal || "",
-            PAGE_LEFT + PAGE_WIDTH * 0.7,
+            PAGE_LEFT + PAGE_WIDTH * 0.6,
             y,
-            PAGE_WIDTH * 0.14,
+            PAGE_WIDTH * 0.12,
           );
-          y += 14;
-
           drawLabeledValue(
             doc,
             "Provincia: ",
             data.empresa.provincia || "",
-            PAGE_LEFT,
+            PAGE_LEFT + PAGE_WIDTH * 0.72,
             y,
-            PAGE_WIDTH * 0.45,
+            PAGE_WIDTH * 0.28,
           );
           y += 14;
 
@@ -294,7 +301,7 @@ export const eppPdfService = {
             { width: halfW - 8 },
           );
           doc.text(
-            "Elementos de protección personal necesarios según el puesto de trabajo:",
+            "Elementos de protección personal, necesarios para el trabajador, según el puesto de trabajo:",
             PAGE_LEFT + halfW + 12,
             y + 4,
             { width: halfW - 8 },
@@ -319,8 +326,8 @@ export const eppPdfService = {
             "Producto",
             "Tipo // Modelo",
             "Marca",
-            "Certificación SI // NO",
-            "Cant.",
+            "Posee certificación SI // NO",
+            "Cantidad",
             "Fecha de entrega",
             "Firma del trabajador",
           ];

@@ -17,6 +17,7 @@ import adminRoutes from "./routes/admin.routes";
 import dashboardRoutes from "./routes/dashboard.routes";
 import plantillasRoutes from "./routes/plantillas.routes";
 import capacitacionPlantillasRoutes from "./routes/capacitacion-plantillas.routes";
+import eppProveedoresSugeridosRoutes from "./routes/eppProveedoresSugeridos.routes";
 import enteRoutes from "./routes/ente.routes";
 import archivoRoutes from "./routes/archivo.routes";
 
@@ -74,6 +75,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/plantillas-declaracion", plantillasRoutes);
 app.use("/api/capacitacion-plantillas", capacitacionPlantillasRoutes);
+app.use("/api/epp-proveedores-sugeridos", eppProveedoresSugeridosRoutes);
 app.use("/api/ente", enteRoutes);
 app.use("/api/archivo", archivoRoutes);
 

@@ -14,6 +14,7 @@ import {
   sanitizeSearchTerm,
 } from "../utils/searchSanitize";
 import type { RolUsuario } from "../types/database";
+import { notificacionService } from "./notificacion.service";
 
 const HISTORICO_PAGE_DEFAULT = 25;
 const HISTORICO_PAGE_MAX = 100;
@@ -120,7 +121,7 @@ type EntregaItemInput = {
 type EntregaRow = {
   id: string;
   empresa_id: string;
-  preventor_id: string;
+  preventor_id: string | null;
   epp_tipo_id: string;
   empleado_id: string | null;
   empleado_nombre: string;
@@ -132,6 +133,8 @@ type EntregaRow = {
   entregado_at: string;
   firma_empleado_url: string | null;
   firma_empleador_url: string | null;
+  foto_evidencia_url?: string | null;
+  origen?: string | null;
   estado: string;
   url_registro_oficial: string | null;
   visible_ente_regulador?: boolean | null;
@@ -146,6 +149,60 @@ type ConsultoraConfig = {
 function firstRelation<T>(value: T | T[] | null | undefined): T | null {
   if (!value) return null;
   return Array.isArray(value) ? (value[0] ?? null) : value;
+}
+
+type LicitacionEstado = "abierta" | "adjudicacion" | "cerrada";
+
+type CotizacionResumen = {
+  id: string;
+  estado?: string | null;
+  proveedor_nombre?: string | null;
+  proveedor_email?: string | null;
+  monto?: number | null;
+};
+
+function buildMensajeAdjudicacion(opts: {
+  titulo: string;
+  empresaNombre: string;
+  compradorNombre?: string | null;
+  ganadorNombre?: string | null;
+  numero?: number | null;
+}): string {
+  const comprador = opts.compradorNombre?.trim() || "el comprador";
+  const licRef =
+    opts.numero != null
+      ? `lic ${formatLicNumero(opts.numero)} "${opts.titulo}"`
+      : `lic "${opts.titulo}"`;
+  return `Ud fue adjudicado con la ${licRef} de ${opts.empresaNombre}, por favor ponerse en contacto con ${comprador} para coordinar la O/C y la entrega.`;
+}
+
+function formatLicNumero(numero: number): string {
+  return `LIC-${String(numero).padStart(4, "0")}`;
+}
+
+async function firmarPresupuestosCotizaciones<
+  T extends { presupuesto_pdf_url?: string | null },
+>(cotizaciones: T[]): Promise<T[]> {
+  return Promise.all(
+    cotizaciones.map(async (cot) => ({
+      ...cot,
+      presupuesto_pdf_url: await storageService.signUrl(cot.presupuesto_pdf_url),
+    })),
+  );
+}
+
+/** La comisión es interna LT ↔ proveedor adjudicado; no se expone al cliente ni en cotizar. */
+function ocultarComisionLicitacion<T extends Record<string, unknown>>(lic: T): T {
+  const { comision_porcentaje: _pct, ...rest } = lic as T & {
+    comision_porcentaje?: unknown;
+  };
+  const cotizaciones = Array.isArray(rest.epp_licitacion_cotizaciones)
+    ? (rest.epp_licitacion_cotizaciones as Record<string, unknown>[]).map((cot) => {
+        const { comision_calculada: _calc, ...cotRest } = cot;
+        return cotRest;
+      })
+    : rest.epp_licitacion_cotizaciones;
+  return { ...rest, epp_licitacion_cotizaciones: cotizaciones } as unknown as T;
 }
 
 function requireConsultoraId(user: AuthUser): string {
@@ -171,6 +228,8 @@ function mapEntrega(e: EntregaRow) {
     fecha_entrega: e.entregado_at,
     firma_url: e.firma_empleado_url,
     firma_empleador_url: e.firma_empleador_url,
+    foto_evidencia_url: e.foto_evidencia_url ?? null,
+    origen: e.origen ?? "panel",
     estado: e.estado,
     pdf_url: e.url_registro_oficial,
     visible_ente_regulador: Boolean(e.visible_ente_regulador),
@@ -482,6 +541,7 @@ export const eppService = {
       firma_empleado_url: firmaUrl,
       firma_empleador_url: firmaEmpleadorUrl,
       estado: "firmada",
+      origen: "panel",
     }));
 
     const { data: entregas, error: entregaError } = await supabaseAdmin
@@ -616,17 +676,33 @@ export const eppService = {
   async descargarPdf(entregaId: string): Promise<{ buffer: Buffer; filename: string }> {
     const { data: entrega, error } = await supabaseAdmin
       .from("epp_entregas")
-      .select("empleado_documento, url_registro_oficial")
+      .select(
+        `id, empresa_id, preventor_id, empleado_id, empleado_nombre, empleado_documento, cantidad, marca, modelo, certificacion, entregado_at, firma_empleado_url, firma_empleador_url, estado, url_registro_oficial, epp_tipo_id, epp_tipos(id, nombre, descripcion, foto_url)`,
+      )
       .eq("id", entregaId)
       .single();
 
     if (error || !entrega) throw new HttpError(404, "Entrega de EPP no encontrada");
-    if (!entrega.url_registro_oficial) {
-      throw new HttpError(404, "El PDF de esta entrega aún no ha sido generado");
+
+    const entregaRow: EntregaRow = {
+      ...(entrega as Omit<EntregaRow, "epp_tipos">),
+      epp_tipos: firstRelation(
+        (entrega as { epp_tipos?: EntregaRow["epp_tipos"] | EntregaRow["epp_tipos"][] })
+          .epp_tipos,
+      ),
+    };
+
+    let pdfUrl = entregaRow.url_registro_oficial;
+    if (!pdfUrl) {
+      // Generación lazy: el PDF async pudo fallar o cortarse (p. ej. reinicio del server).
+      pdfUrl = await this.generarYGuardarPdf(
+        { id: "sistema", rol: "preventor" },
+        entregaRow,
+      );
     }
 
     const bucketName = "informes_pdf";
-    const parts = entrega.url_registro_oficial.split(`/public/${bucketName}/`);
+    const parts = pdfUrl.split(`/public/${bucketName}/`);
     if (parts.length < 2) {
       throw new HttpError(400, "Ruta del archivo PDF inválida");
     }
@@ -635,13 +711,32 @@ export const eppService = {
       .from(bucketName)
       .download(parts[1]);
     if (downloadError || !fileData) {
-      throw new HttpError(500, "No se pudo obtener el archivo del storage");
+      // Si el path quedó huérfano en DB, regeneramos una vez.
+      pdfUrl = await this.generarYGuardarPdf(
+        { id: "sistema", rol: "preventor" },
+        entregaRow,
+      );
+      const retryParts = pdfUrl.split(`/public/${bucketName}/`);
+      if (retryParts.length < 2) {
+        throw new HttpError(500, "No se pudo regenerar el archivo PDF");
+      }
+      const { data: retryData, error: retryError } = await supabaseAdmin.storage
+        .from(bucketName)
+        .download(retryParts[1]);
+      if (retryError || !retryData) {
+        throw new HttpError(500, "No se pudo obtener el archivo del storage");
+      }
+      const buffer = Buffer.from(await retryData.arrayBuffer());
+      return {
+        buffer,
+        filename: `Constancia_SRT_299_${entregaRow.empleado_documento}.pdf`,
+      };
     }
 
     const buffer = Buffer.from(await fileData.arrayBuffer());
     return {
       buffer,
-      filename: `Constancia_SRT_299_${entrega.empleado_documento}.pdf`,
+      filename: `Constancia_SRT_299_${entregaRow.empleado_documento}.pdf`,
     };
   },
 
@@ -655,13 +750,23 @@ export const eppService = {
     return { proveedores: data ?? [] };
   },
 
-  async crearProveedor(consultoraId: string, payload: { nombre: string; email: string }) {
+  async crearProveedor(
+    consultoraId: string,
+    payload: {
+      nombre: string;
+      email: string;
+      direccion?: string | null;
+      telefono?: string | null;
+    },
+  ) {
     const { data, error } = await supabaseAdmin
       .from("epp_proveedores")
       .insert({
         consultora_id: consultoraId,
         nombre: payload.nombre.trim(),
         email: payload.email.trim().toLowerCase(),
+        direccion: payload.direccion?.trim() || null,
+        telefono: payload.telefono?.trim() || null,
         activo: true,
       })
       .select()
@@ -673,11 +778,28 @@ export const eppService = {
   async actualizarProveedor(
     consultoraId: string,
     id: string,
-    payload: { nombre?: string; email?: string; activo?: boolean },
+    payload: {
+      nombre?: string;
+      email?: string;
+      direccion?: string | null;
+      telefono?: string | null;
+      activo?: boolean;
+    },
   ) {
+    const updates: Record<string, unknown> = {};
+    if (payload.nombre !== undefined) updates.nombre = payload.nombre.trim();
+    if (payload.email !== undefined) updates.email = payload.email.trim().toLowerCase();
+    if (payload.direccion !== undefined) {
+      updates.direccion = payload.direccion?.trim() || null;
+    }
+    if (payload.telefono !== undefined) {
+      updates.telefono = payload.telefono?.trim() || null;
+    }
+    if (payload.activo !== undefined) updates.activo = payload.activo;
+
     const { data, error } = await supabaseAdmin
       .from("epp_proveedores")
-      .update(payload)
+      .update(updates)
       .eq("id", id)
       .eq("consultora_id", consultoraId)
       .select()
@@ -687,6 +809,20 @@ export const eppService = {
     return data;
   },
 
+  async eliminarProveedor(consultoraId: string, id: string) {
+    const { data, error } = await supabaseAdmin
+      .from("epp_proveedores")
+      .update({ activo: false })
+      .eq("id", id)
+      .eq("consultora_id", consultoraId)
+      .eq("activo", true)
+      .select("id, nombre")
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw new HttpError(404, "Proveedor no encontrado");
+    return { success: true, id: data.id };
+  },
+
   async listarLicitaciones(empresaId: string) {
     const { data, error } = await supabaseAdmin
       .from("epp_licitaciones")
@@ -694,13 +830,26 @@ export const eppService = {
         `
         *,
         epp_licitacion_items(*, epp_tipos(id, nombre, descripcion, foto_url)),
-        epp_licitacion_cotizaciones(*)
+        epp_licitacion_cotizaciones!epp_licitacion_cotizaciones_licitacion_id_fkey(*)
       `,
       )
       .eq("empresa_id", empresaId)
       .order("created_at", { ascending: false });
     if (error) throw error;
-    return { licitaciones: data ?? [] };
+
+    const licitaciones = await Promise.all(
+      (data ?? []).map(async (lic) => {
+        const cotizaciones = Array.isArray(lic.epp_licitacion_cotizaciones)
+          ? lic.epp_licitacion_cotizaciones
+          : [];
+        return ocultarComisionLicitacion({
+          ...lic,
+          epp_licitacion_cotizaciones: await firmarPresupuestosCotizaciones(cotizaciones),
+        });
+      }),
+    );
+
+    return { licitaciones };
   },
 
   async crearLicitacion(
@@ -710,12 +859,29 @@ export const eppService = {
       titulo: string;
       descripcion?: string | null;
       fecha_cierre?: string | null;
+      comprador_nombre: string;
+      comprador_email: string;
+      comprador_telefono: string;
       proveedor_ids: string[];
-      items: Array<{ epp_tipo_id: string; cantidad: number }>;
+      items: Array<{
+        epp_tipo_id?: string | null;
+        nombre_manual?: string | null;
+        cantidad: number;
+      }>;
     },
   ) {
     const consultoraId = requireConsultoraId(user);
     const comision = await getComisionPorcentaje(consultoraId);
+
+    const { data: maxRow, error: maxError } = await supabaseAdmin
+      .from("epp_licitaciones")
+      .select("numero")
+      .eq("consultora_id", consultoraId)
+      .order("numero", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (maxError) throw maxError;
+    const siguienteNumero = Number(maxRow?.numero ?? 0) + 1;
 
     const { data: licitacion, error: licError } = await supabaseAdmin
       .from("epp_licitaciones")
@@ -725,19 +891,27 @@ export const eppService = {
         titulo: payload.titulo.trim(),
         descripcion: payload.descripcion?.trim() || null,
         fecha_cierre: payload.fecha_cierre || null,
+        comprador_nombre: payload.comprador_nombre.trim(),
+        comprador_email: payload.comprador_email.trim().toLowerCase(),
+        comprador_telefono: payload.comprador_telefono.trim(),
         estado: "abierta",
         comision_porcentaje: comision,
+        numero: siguienteNumero,
       })
       .select()
       .single();
     if (licError) throw licError;
 
     const { error: itemsError } = await supabaseAdmin.from("epp_licitacion_items").insert(
-      payload.items.map((item) => ({
-        licitacion_id: licitacion.id,
-        epp_tipo_id: item.epp_tipo_id,
-        cantidad: item.cantidad,
-      })),
+      payload.items.map((item) => {
+        const nombreManual = item.nombre_manual?.trim() || null;
+        return {
+          licitacion_id: licitacion.id,
+          epp_tipo_id: nombreManual ? null : item.epp_tipo_id || null,
+          nombre_manual: nombreManual,
+          cantidad: item.cantidad,
+        };
+      }),
     );
     if (itemsError) throw itemsError;
 
@@ -776,16 +950,287 @@ export const eppService = {
     };
   },
 
+  async obtenerLicitacion(licitacionId: string) {
+    const { data, error } = await supabaseAdmin
+      .from("epp_licitaciones")
+      .select(
+        `
+        *,
+        empresas(id, razon_social),
+        epp_licitacion_items(*, epp_tipos(id, nombre, descripcion, foto_url)),
+        epp_licitacion_cotizaciones!epp_licitacion_cotizaciones_licitacion_id_fkey(*)
+      `,
+      )
+      .eq("id", licitacionId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw new HttpError(404, "Licitación no encontrada");
+
+    const empresas = firstRelation(data.empresas);
+    const cotizacionesRaw = (
+      Array.isArray(data.epp_licitacion_cotizaciones)
+        ? data.epp_licitacion_cotizaciones
+        : []
+    ) as Array<CotizacionResumen & { presupuesto_pdf_url?: string | null }>;
+    const cotizaciones = await firmarPresupuestosCotizaciones(cotizacionesRaw);
+    const ganador = cotizaciones.find((c) => c.id === data.ganador_cotizacion_id) ?? null;
+
+    return ocultarComisionLicitacion({
+      ...data,
+      empresas,
+      epp_licitacion_cotizaciones: cotizaciones,
+      mensaje_adjudicacion: buildMensajeAdjudicacion({
+        titulo: data.titulo,
+        empresaNombre: empresas?.razon_social ?? "la empresa",
+        compradorNombre: data.comprador_nombre,
+        ganadorNombre: ganador?.proveedor_nombre ?? null,
+        numero: data.numero,
+      }),
+    });
+  },
+
+  async agregarProveedorALicitacion(
+    user: AuthUser,
+    licitacionId: string,
+    proveedorId: string,
+  ) {
+    const consultoraId = requireConsultoraId(user);
+    const { data: licitacion, error: licError } = await supabaseAdmin
+      .from("epp_licitaciones")
+      .select("id, estado, consultora_id, titulo")
+      .eq("id", licitacionId)
+      .maybeSingle();
+    if (licError) throw licError;
+    if (!licitacion) throw new HttpError(404, "Licitación no encontrada");
+    if (licitacion.consultora_id !== consultoraId) {
+      throw new HttpError(403, "No tenés acceso a esta licitación");
+    }
+    if (licitacion.estado !== "abierta") {
+      throw new HttpError(
+        400,
+        "Solo se pueden agregar proveedores mientras la licitación está abierta",
+      );
+    }
+
+    const { data: proveedor, error: provError } = await supabaseAdmin
+      .from("epp_proveedores")
+      .select("*")
+      .eq("id", proveedorId)
+      .eq("consultora_id", consultoraId)
+      .eq("activo", true)
+      .maybeSingle();
+    if (provError) throw provError;
+    if (!proveedor) throw new HttpError(404, "Proveedor no encontrado");
+
+    const { data: existente, error: existError } = await supabaseAdmin
+      .from("epp_licitacion_cotizaciones")
+      .select("id")
+      .eq("licitacion_id", licitacionId)
+      .eq("proveedor_id", proveedorId)
+      .maybeSingle();
+    if (existError) throw existError;
+    if (existente) {
+      throw new HttpError(409, "Ese proveedor ya está invitado a esta licitación");
+    }
+
+    const token = randomUUID();
+    const { data: cotizacion, error: cotError } = await supabaseAdmin
+      .from("epp_licitacion_cotizaciones")
+      .insert({
+        licitacion_id: licitacionId,
+        proveedor_id: proveedor.id,
+        proveedor_nombre: proveedor.nombre,
+        proveedor_email: proveedor.email,
+        token_publico: token,
+        url_carga: `${env.FRONTEND_URL}/cotizar/${token}`,
+        estado: "pendiente",
+      })
+      .select()
+      .single();
+    if (cotError) throw cotError;
+
+    return { cotizacion };
+  },
+
+  async actualizarEstadoLicitacion(
+    user: AuthUser,
+    licitacionId: string,
+    payload: {
+      estado: "abierta" | "adjudicacion" | "cerrada";
+      ganador_cotizacion_id?: string | null;
+    },
+  ) {
+    const consultoraId = requireConsultoraId(user);
+    const { data: licitacion, error: licError } = await supabaseAdmin
+      .from("epp_licitaciones")
+      .select(
+        `
+        *,
+        empresas(id, razon_social),
+        epp_licitacion_cotizaciones!epp_licitacion_cotizaciones_licitacion_id_fkey(
+          id, estado, proveedor_nombre, proveedor_email
+        )
+      `,
+      )
+      .eq("id", licitacionId)
+      .maybeSingle();
+    if (licError) throw licError;
+    if (!licitacion) throw new HttpError(404, "Licitación no encontrada");
+    if (licitacion.consultora_id !== consultoraId) {
+      throw new HttpError(403, "No tenés acceso a esta licitación");
+    }
+
+    const estadoActual = licitacion.estado as LicitacionEstado;
+    const estadoNuevo = payload.estado;
+    if (estadoActual === "cerrada" && estadoNuevo !== "cerrada") {
+      throw new HttpError(400, "Una licitación cerrada no se puede reabrir");
+    }
+
+    const allowed: Record<LicitacionEstado, LicitacionEstado[]> = {
+      abierta: ["abierta", "adjudicacion", "cerrada"],
+      adjudicacion: ["adjudicacion", "abierta", "cerrada"],
+      cerrada: ["cerrada"],
+    };
+    if (!allowed[estadoActual]?.includes(estadoNuevo)) {
+      throw new HttpError(400, `No se puede pasar de ${estadoActual} a ${estadoNuevo}`);
+    }
+
+    const cotizaciones = (
+      Array.isArray(licitacion.epp_licitacion_cotizaciones)
+        ? licitacion.epp_licitacion_cotizaciones
+        : []
+    ) as CotizacionResumen[];
+    const cargadas = cotizaciones.filter((c) => c.estado === "cargada");
+
+    let ganadorId =
+      payload.ganador_cotizacion_id === undefined
+        ? licitacion.ganador_cotizacion_id
+        : payload.ganador_cotizacion_id;
+
+    if (estadoNuevo === "cerrada" && cargadas.length > 0 && !ganadorId) {
+      throw new HttpError(
+        400,
+        "Para cerrar la licitación debés indicar qué cotización ganó",
+      );
+    }
+
+    if (ganadorId) {
+      const ganador = cotizaciones.find((c) => c.id === ganadorId);
+      if (!ganador) {
+        throw new HttpError(400, "La cotización ganadora no pertenece a esta licitación");
+      }
+      if (ganador.estado !== "cargada") {
+        throw new HttpError(
+          400,
+          "Solo se puede adjudicar una cotización que ya fue cargada",
+        );
+      }
+    }
+
+    if (estadoNuevo === "abierta") {
+      ganadorId = null;
+    }
+
+    const updatePayload: Record<string, unknown> = {
+      estado: estadoNuevo,
+      ganador_cotizacion_id: ganadorId,
+    };
+
+    const necesitaAdjudicacion =
+      Boolean(ganadorId) &&
+      (estadoNuevo === "adjudicacion" || estadoNuevo === "cerrada");
+
+    if (necesitaAdjudicacion) {
+      const token = licitacion.token_adjudicacion || randomUUID();
+      updatePayload.token_adjudicacion = token;
+      updatePayload.url_adjudicacion = `${env.FRONTEND_URL}/adjudicacion-epp/${token}`;
+      if (!licitacion.adjudicado_at || ganadorId !== licitacion.ganador_cotizacion_id) {
+        updatePayload.adjudicado_at = new Date().toISOString();
+      }
+    }
+
+    if (estadoNuevo === "abierta") {
+      updatePayload.token_adjudicacion = null;
+      updatePayload.url_adjudicacion = null;
+      updatePayload.adjudicado_at = null;
+    }
+
+    const { error: updateError } = await supabaseAdmin
+      .from("epp_licitaciones")
+      .update(updatePayload)
+      .eq("id", licitacionId);
+    if (updateError) throw updateError;
+
+    return this.obtenerLicitacion(licitacionId);
+  },
+
+  async obtenerAdjudicacionPublica(token: string) {
+    const { data, error } = await supabaseAdmin
+      .from("epp_licitaciones")
+      .select(
+        `
+        id, titulo, estado, comprador_nombre, comprador_email, comprador_telefono,
+        ganador_cotizacion_id, adjudicado_at, url_adjudicacion, numero,
+        empresas(razon_social),
+        epp_licitacion_cotizaciones!epp_licitacion_cotizaciones_licitacion_id_fkey(
+          id, proveedor_nombre, proveedor_email, monto, estado
+        )
+      `,
+      )
+      .eq("token_adjudicacion", token)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw new HttpError(404, "Enlace de adjudicación inválido");
+    if (!data.ganador_cotizacion_id) {
+      throw new HttpError(404, "Esta licitación aún no tiene ganador adjudicado");
+    }
+
+    const empresas = firstRelation(data.empresas);
+    const cotizaciones = (
+      Array.isArray(data.epp_licitacion_cotizaciones)
+        ? data.epp_licitacion_cotizaciones
+        : []
+    ) as CotizacionResumen[];
+    const ganador = cotizaciones.find((c) => c.id === data.ganador_cotizacion_id);
+    if (!ganador) {
+      throw new HttpError(404, "No se encontró la cotización ganadora");
+    }
+
+    const empresaNombre = empresas?.razon_social ?? "la empresa";
+    const mensaje = buildMensajeAdjudicacion({
+      titulo: data.titulo,
+      empresaNombre,
+      compradorNombre: data.comprador_nombre,
+      ganadorNombre: ganador.proveedor_nombre,
+      numero: data.numero,
+    });
+
+    return {
+      titulo: data.titulo,
+      numero: data.numero ?? null,
+      codigo: data.numero != null ? formatLicNumero(data.numero) : null,
+      estado: data.estado,
+      empresa: empresaNombre,
+      comprador_nombre: data.comprador_nombre,
+      comprador_email: data.comprador_email,
+      comprador_telefono: data.comprador_telefono,
+      ganador_nombre: ganador.proveedor_nombre,
+      adjudicado_at: data.adjudicado_at,
+      mensaje,
+    };
+  },
+
   async obtenerCotizacionPublica(token: string) {
     const { data: cotizacion, error } = await supabaseAdmin
       .from("epp_licitacion_cotizaciones")
       .select(
         `
         id, proveedor_nombre, proveedor_email, monto, estado, items_ofertados,
-        epp_licitaciones(
+        epp_licitaciones!epp_licitacion_cotizaciones_licitacion_id_fkey(
           id, titulo, descripcion, estado, fecha_cierre,
+          comprador_nombre, comprador_email, comprador_telefono,
           empresas(razon_social),
-          epp_licitacion_items(cantidad, epp_tipos(id, nombre, descripcion, foto_url))
+          epp_licitacion_items(cantidad, nombre_manual, epp_tipos(id, nombre, descripcion, foto_url))
         )
       `,
       )
@@ -823,16 +1268,34 @@ export const eppService = {
       proveedor_nombre?: string;
       monto: number;
       items_ofertados: Array<{
-        epp_tipo_id: string;
+        epp_tipo_id?: string | null;
+        nombre?: string | null;
         cantidad: number;
         precio_unitario: number;
       }>;
     },
+    presupuestoFile?: Express.Multer.File,
   ) {
+    if (!presupuestoFile) {
+      throw new HttpError(400, "Debés adjuntar el presupuesto formal en PDF");
+    }
+    const mime = (presupuestoFile.mimetype || "").toLowerCase();
+    const name = (presupuestoFile.originalname || "").toLowerCase();
+    if (mime !== "application/pdf" && !name.endsWith(".pdf")) {
+      throw new HttpError(400, "El presupuesto debe ser un archivo PDF");
+    }
+
     const { data: cotizacion, error } = await supabaseAdmin
       .from("epp_licitacion_cotizaciones")
       .select(
-        "id, licitacion_id, estado, epp_licitaciones(comision_porcentaje, estado, fecha_cierre)",
+        `
+        id, licitacion_id, estado, proveedor_nombre,
+        epp_licitaciones!epp_licitacion_cotizaciones_licitacion_id_fkey(
+          id, titulo, numero, estado, fecha_cierre, comision_porcentaje,
+          empresa_id, consultora_id,
+          empresas(razon_social)
+        )
+      `,
       )
       .eq("token_publico", token)
       .maybeSingle();
@@ -852,8 +1315,18 @@ export const eppService = {
       throw new HttpError(410, "El plazo de cotización expiró");
     }
 
+    if (cotizacion.estado === "cargada") {
+      throw new HttpError(409, "Esta cotización ya fue enviada");
+    }
+
+    const pdfPath = `epp/cotizaciones/${cotizacion.licitacion_id}/${cotizacion.id}_${Date.now()}.pdf`;
+    await storageService.subirArchivo("informes_pdf", pdfPath, presupuestoFile);
+    const presupuestoPdfUrl = storageService.obtenerUrlPublica("informes_pdf", pdfPath);
+
     const comisionPct = Number(licitacion.comision_porcentaje ?? 0);
     const comisionCalculada = Number(((payload.monto * comisionPct) / 100).toFixed(2));
+    const proveedorNombre =
+      payload.proveedor_nombre?.trim() || cotizacion.proveedor_nombre || "Un proveedor";
 
     const { data, error: updateError } = await supabaseAdmin
       .from("epp_licitacion_cotizaciones")
@@ -861,6 +1334,7 @@ export const eppService = {
         monto: payload.monto,
         items_ofertados: payload.items_ofertados,
         comision_calculada: comisionCalculada,
+        presupuesto_pdf_url: presupuestoPdfUrl,
         estado: "cargada",
         ...(payload.proveedor_nombre ? { proveedor_nombre: payload.proveedor_nombre } : {}),
       })
@@ -869,6 +1343,37 @@ export const eppService = {
       .single();
 
     if (updateError) throw updateError;
+
+    const empresa = firstRelation(
+      (licitacion as { empresas?: { razon_social?: string } | { razon_social?: string }[] })
+        .empresas,
+    );
+    const montoFmt = new Intl.NumberFormat("es-AR", {
+      style: "currency",
+      currency: "ARS",
+      maximumFractionDigits: 0,
+    }).format(Number(payload.monto));
+
+    void notificacionService
+      .enviarAEquipoEmpresa({
+        consultora_id: licitacion.consultora_id,
+        empresa_id: licitacion.empresa_id,
+        tipo: "success",
+        titulo: "Nueva cotización EPP",
+        mensaje: `${proveedorNombre} respondió la licitación ${
+          licitacion.numero != null ? `${formatLicNumero(licitacion.numero)} ` : ""
+        }“${licitacion.titulo}”${
+          empresa?.razon_social ? ` (${empresa.razon_social})` : ""
+        } por ${montoFmt}. Revisala en EPP → Licitación.`,
+      })
+      .catch((err) => {
+        console.error(
+          "No se pudo notificar cotización EPP:",
+          cotizacion.id,
+          err,
+        );
+      });
+
     return data;
   },
 
@@ -1054,6 +1559,245 @@ export const eppService = {
     return {
       buffer: pdfBuffer,
       filename: `Planilla_EPP_historica_${empleado.documento}.pdf`,
+    };
+  },
+
+  /**
+   * QR imprimible para puntos de entrega (auto-registro del trabajador).
+   */
+  async generarQrEntrega(empresaId: string) {
+    const { data: empresa, error } = await supabaseAdmin
+      .from("empresas")
+      .select("id, razon_social, token_entrega_epp, estado")
+      .eq("id", empresaId)
+      .single();
+
+    if (error || !empresa) throw new HttpError(404, "Empresa no encontrada");
+    if (empresa.estado && empresa.estado !== "activa") {
+      throw new HttpError(400, "La empresa no está activa");
+    }
+
+    let token = empresa.token_entrega_epp as string | null;
+    if (!token) {
+      token = randomUUID();
+      const { error: updError } = await supabaseAdmin
+        .from("empresas")
+        .update({ token_entrega_epp: token })
+        .eq("id", empresaId);
+      if (updError) throw updError;
+    }
+
+    const frontendUrl = env.FRONTEND_URL || "http://localhost:3000";
+    const url = `${frontendUrl.replace(/\/$/, "")}/entrega-epp/${token}`;
+    const qr = await QRCode.toDataURL(url, {
+      width: 480,
+      margin: 2,
+      color: { dark: "#1e3a8a", light: "#ffffff" },
+    });
+
+    return {
+      qr,
+      url,
+      token,
+      empresa: { id: empresa.id, razon_social: empresa.razon_social },
+    };
+  },
+
+  async obtenerEntregaPublica(token: string) {
+    const { data: empresa, error } = await supabaseAdmin
+      .from("empresas")
+      .select("id, razon_social, consultora_id, estado, logo_url")
+      .eq("token_entrega_epp", token)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!empresa) throw new HttpError(404, "QR de entrega inválido o vencido");
+    if (empresa.estado && empresa.estado !== "activa") {
+      throw new HttpError(400, "La empresa no acepta entregas en este momento");
+    }
+
+    const { data: tipos, error: tiposError } = await supabaseAdmin
+      .from("epp_tipos")
+      .select("id, nombre, descripcion, foto_url, activo")
+      .eq("consultora_id", empresa.consultora_id)
+      .eq("activo", true)
+      .order("nombre");
+
+    if (tiposError) throw tiposError;
+
+    const tiposConFoto = await Promise.all(
+      (tipos ?? []).map(async (tipo) => ({
+        ...tipo,
+        foto_url: await signedEppFoto(tipo.foto_url),
+      })),
+    );
+
+    return {
+      empresa: {
+        id: empresa.id,
+        razon_social: empresa.razon_social,
+        logo_url: empresa.logo_url,
+      },
+      tipos: tiposConFoto,
+    };
+  },
+
+  async registrarEntregaPublica(
+    token: string,
+    payload: {
+      nombre_empleado: string;
+      dni_empleado: string;
+      sector?: string | null;
+      epp_tipo_id: string;
+      cantidad: number;
+      marca?: string | null;
+      modelo?: string | null;
+      certificacion?: string | null;
+      firma: string;
+    },
+    foto?: Express.Multer.File,
+  ) {
+    if (!foto) {
+      throw new HttpError(400, "La foto del EPP es obligatoria");
+    }
+    if (!payload.firma.startsWith("data:image/")) {
+      throw new HttpError(400, "La firma es inválida");
+    }
+
+    const { data: empresa, error: empresaError } = await supabaseAdmin
+      .from("empresas")
+      .select(
+        "id, razon_social, cuit, domicilio, localidad, codigo_postal, provincia, actividad, logo_url, consultora_id, estado",
+      )
+      .eq("token_entrega_epp", token)
+      .maybeSingle();
+
+    if (empresaError) throw empresaError;
+    if (!empresa) throw new HttpError(404, "QR de entrega inválido o vencido");
+    if (empresa.estado && empresa.estado !== "activa") {
+      throw new HttpError(400, "La empresa no acepta entregas en este momento");
+    }
+
+    const { data: tipo, error: tipoError } = await supabaseAdmin
+      .from("epp_tipos")
+      .select("id, nombre, activo, consultora_id")
+      .eq("id", payload.epp_tipo_id)
+      .maybeSingle();
+
+    if (tipoError) throw tipoError;
+    if (!tipo || !tipo.activo || tipo.consultora_id !== empresa.consultora_id) {
+      throw new HttpError(400, "El tipo de EPP no es válido para esta empresa");
+    }
+
+    const dni = payload.dni_empleado.replace(/\D/g, "");
+    const nombre = payload.nombre_empleado.trim();
+    const sector = payload.sector?.trim() || null;
+
+    let { data: empleado, error: empLookupError } = await supabaseAdmin
+      .from("empleados")
+      .select("id, nombre, documento, activo, sector")
+      .eq("empresa_id", empresa.id)
+      .eq("documento", dni)
+      .maybeSingle();
+
+    if (empLookupError) throw empLookupError;
+
+    if (empleado && !empleado.activo) {
+      throw new HttpError(400, "El trabajador no está activo en el padrón");
+    }
+
+    if (!empleado) {
+      const { data: creado, error: createError } = await supabaseAdmin
+        .from("empleados")
+        .insert({
+          empresa_id: empresa.id,
+          nombre,
+          documento: dni,
+          sector,
+          activo: true,
+        })
+        .select("id, nombre, documento, activo, sector")
+        .single();
+
+      if (createError) {
+        if (createError.code === "23505") {
+          const { data: retry } = await supabaseAdmin
+            .from("empleados")
+            .select("id, nombre, documento, activo, sector")
+            .eq("empresa_id", empresa.id)
+            .eq("documento", dni)
+            .maybeSingle();
+          if (!retry || !retry.activo) {
+            throw new HttpError(409, "No se pudo registrar al trabajador. Reintentá.");
+          }
+          empleado = retry;
+        } else {
+          throw createError;
+        }
+      } else {
+        empleado = creado;
+      }
+    } else if (sector && !empleado.sector) {
+      await supabaseAdmin
+        .from("empleados")
+        .update({ sector })
+        .eq("id", empleado.id);
+    }
+
+    if (!empleado) {
+      throw new HttpError(500, "No se pudo resolver el trabajador");
+    }
+
+    const ext = foto.originalname?.split(".").pop() || "jpg";
+    const fotoPath = `evidencias/${empresa.id}/${dni}_${Date.now()}.${ext}`;
+    await storageService.subirArchivo("epp_fotos", fotoPath, foto);
+    const fotoUrl = storageService.obtenerUrlPublica("epp_fotos", fotoPath);
+
+    const firmaUrl = await uploadBase64Png(
+      "firmas_digitales",
+      `epp/${empresa.id}/${dni}_qr_${Date.now()}.png`,
+      payload.firma,
+    );
+
+    const { data: entrega, error: entregaError } = await supabaseAdmin
+      .from("epp_entregas")
+      .insert({
+        empresa_id: empresa.id,
+        preventor_id: null,
+        epp_tipo_id: payload.epp_tipo_id,
+        empleado_id: empleado.id,
+        empleado_nombre: empleado.nombre || nombre,
+        empleado_documento: empleado.documento || dni,
+        cantidad: payload.cantidad || 1,
+        marca: payload.marca || null,
+        modelo: payload.modelo || null,
+        certificacion: payload.certificacion || null,
+        entregado_at: new Date().toISOString(),
+        firma_empleado_url: firmaUrl,
+        firma_empleador_url: null,
+        foto_evidencia_url: fotoUrl,
+        estado: "firmada",
+        origen: "qr_publico",
+      })
+      .select(`*, epp_tipos(id, nombre, descripcion, foto_url)`)
+      .single();
+
+    if (entregaError) throw entregaError;
+    const row = entrega as EntregaRow;
+
+    void this.generarYGuardarPdf(
+      { id: "qr_publico", rol: "preventor" },
+      row,
+    ).catch((err) => {
+      console.error(`Error generando PDF de entrega pública EPP ${row.id}:`, err);
+    });
+
+    return {
+      success: true,
+      entrega: mapEntrega(row),
+      pdf_generando: true,
+      mensaje:
+        "Entrega registrada. El registro oficial SRT 299/11 se está generando.",
     };
   },
 };

@@ -2,14 +2,18 @@ import { Request, Response, NextFunction } from "express";
 import { eppService } from "../services/epp.service";
 import {
   actualizarEmpleadoSchema,
+  actualizarEstadoLicitacionSchema,
   actualizarProveedorSchema,
   actualizarTipoSchema,
+  agregarProveedorLicitacionSchema,
   cotizarPublicoSchema,
   crearEmpleadoSchema,
   crearLicitacionSchema,
   crearProveedorSchema,
   crearTipoBodySchema,
+  empresaIdQuerySchema,
   idParamSchema,
+  registrarEntregaPublicaSchema,
   registrarEntregaSchema,
   tokenParamSchema,
 } from "../schemas/epp.schema";
@@ -247,6 +251,18 @@ export const eppController = {
     }
   },
 
+  async eliminarProveedor(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parsed = idParamSchema.parse({ params: { id: param(req.params.id) } });
+      const consultoraId = requireUser(req).consultora_id;
+      if (!consultoraId) throw new HttpError(400, "El usuario no tiene consultora asignada");
+      const data = await eppService.eliminarProveedor(consultoraId, parsed.params.id);
+      res.json(data);
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async listarLicitaciones(req: Request, res: Response, next: NextFunction) {
     try {
       const empresaId = String(req.query.empresa_id || "");
@@ -271,6 +287,67 @@ export const eppController = {
     }
   },
 
+  async obtenerLicitacion(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parsed = idParamSchema.parse({ params: { id: param(req.params.id) } });
+      const data = await eppService.obtenerLicitacion(parsed.params.id);
+      await assertEmpresaAccess(requireUser(req), data.empresa_id);
+      res.json({ licitacion: data });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async agregarProveedorALicitacion(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parsed = agregarProveedorLicitacionSchema.parse({
+        params: { id: param(req.params.id) },
+        body: req.body,
+      });
+      const user = requireUser(req);
+      const licitacion = await eppService.obtenerLicitacion(parsed.params.id);
+      await assertEmpresaAccess(user, licitacion.empresa_id);
+      const data = await eppService.agregarProveedorALicitacion(
+        user,
+        parsed.params.id,
+        parsed.body.proveedor_id,
+      );
+      res.status(201).json(data);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async actualizarEstadoLicitacion(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parsed = actualizarEstadoLicitacionSchema.parse({
+        params: { id: param(req.params.id) },
+        body: req.body,
+      });
+      const user = requireUser(req);
+      const actual = await eppService.obtenerLicitacion(parsed.params.id);
+      await assertEmpresaAccess(user, actual.empresa_id);
+      const data = await eppService.actualizarEstadoLicitacion(
+        user,
+        parsed.params.id,
+        parsed.body,
+      );
+      res.json({ licitacion: data });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async obtenerAdjudicacionPublica(req: Request, res: Response, next: NextFunction) {
+    try {
+      const token = param(req.params.token);
+      const data = await eppService.obtenerAdjudicacionPublica(token);
+      res.json({ adjudicacion: data });
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async obtenerCotizacionPublica(req: Request, res: Response, next: NextFunction) {
     try {
       const token = param(req.params.token);
@@ -287,7 +364,11 @@ export const eppController = {
         params: { token: param(req.params.token) },
         body: req.body,
       });
-      const data = await eppService.cargarCotizacionPublica(parsed.params.token, parsed.body);
+      const data = await eppService.cargarCotizacionPublica(
+        parsed.params.token,
+        parsed.body,
+        req.file,
+      );
       res.json({ success: true, cotizacion: data });
     } catch (error) {
       next(error);
@@ -362,6 +443,49 @@ export const eppController = {
         `attachment; filename="${file.filename}"`,
       );
       res.send(file.buffer);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async generarQrEntrega(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parsed = empresaIdQuerySchema.parse({
+        query: { empresa_id: String(req.query.empresa_id || "") },
+      });
+      await assertEmpresaAccess(requireUser(req), parsed.query.empresa_id);
+      const data = await eppService.generarQrEntrega(parsed.query.empresa_id);
+      res.json(data);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async obtenerEntregaPublica(req: Request, res: Response, next: NextFunction) {
+    try {
+      const token = param(req.params.token);
+      if (!token || token.length < 8) {
+        throw new HttpError(400, "Token inválido");
+      }
+      const data = await eppService.obtenerEntregaPublica(token);
+      res.json(data);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async registrarEntregaPublica(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parsed = registrarEntregaPublicaSchema.parse({
+        params: { token: param(req.params.token) },
+        body: req.body,
+      });
+      const data = await eppService.registrarEntregaPublica(
+        parsed.params.token,
+        parsed.body,
+        req.file,
+      );
+      res.status(201).json(data);
     } catch (error) {
       next(error);
     }

@@ -82,6 +82,90 @@ export const notificacionService = {
     return data || [];
   },
 
+  /**
+   * Notifica a admins de la consultora, preventores asignados a la empresa
+   * y dueños de esa empresa (sin duplicados).
+   */
+  async enviarAEquipoEmpresa({
+    consultora_id,
+    empresa_id,
+    titulo,
+    mensaje,
+    tipo = 'info',
+  }: {
+    consultora_id: string;
+    empresa_id: string;
+    titulo: string;
+    mensaje: string;
+    tipo?: string;
+  }) {
+    const [{ data: admins, error: adminsError }, { data: links, error: linksError }, { data: duenos, error: duenosError }] =
+      await Promise.all([
+        supabaseAdmin
+          .from('perfiles')
+          .select('id')
+          .eq('consultora_id', consultora_id)
+          .eq('rol', 'admin')
+          .eq('activo', true),
+        supabaseAdmin
+          .from('preventor_empresas')
+          .select('preventor_id')
+          .eq('empresa_id', empresa_id),
+        supabaseAdmin
+          .from('perfiles')
+          .select('id')
+          .eq('empresa_id', empresa_id)
+          .eq('rol', 'dueno')
+          .eq('activo', true),
+      ]);
+
+    if (adminsError) throw adminsError;
+    if (linksError) throw linksError;
+    if (duenosError) throw duenosError;
+
+    const preventorIds = (links || [])
+      .map((l: { preventor_id: string }) => l.preventor_id)
+      .filter(Boolean);
+
+    let preventoresActivos: Array<{ id: string }> = [];
+    if (preventorIds.length > 0) {
+      const { data, error } = await supabaseAdmin
+        .from('perfiles')
+        .select('id')
+        .in('id', preventorIds)
+        .eq('activo', true);
+      if (error) throw error;
+      preventoresActivos = data || [];
+    }
+
+    const usuarioIds = Array.from(
+      new Set([
+        ...(admins || []).map((a: { id: string }) => a.id),
+        ...preventoresActivos.map((p) => p.id),
+        ...(duenos || []).map((d: { id: string }) => d.id),
+      ]),
+    );
+
+    if (usuarioIds.length === 0) return [];
+
+    const rows = usuarioIds.map((usuario_id) => ({
+      consultora_id,
+      usuario_id,
+      titulo,
+      mensaje,
+      tipo,
+      es_global: false,
+    }));
+
+    const { data, error } = await supabaseAdmin
+      .from('notificaciones')
+      .insert(rows)
+      .select();
+
+    if (error) throw error;
+    return data || [];
+  },
+
   async listarPorUsuario(usuarioId: string, consultoraId: string) {
     const { data, error } = await supabaseAdmin
       .from('notificaciones')

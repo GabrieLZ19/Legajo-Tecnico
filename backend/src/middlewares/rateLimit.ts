@@ -46,6 +46,34 @@ export const capacitacionPublicSubmitLimiter = rateLimit({
   },
 });
 
+/**
+ * Lectura pública del formulario de entrega EPP vía QR (varios puntos / misma IP).
+ */
+export const eppEntregaPublicReadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 300,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: {
+    error:
+      "Hay muchas personas accediendo a la entrega de EPP desde esta red. Esperá unos segundos y volvé a intentar.",
+  },
+});
+
+/**
+ * Envío público de entrega EPP + firma. Dimensionado para pico en planta.
+ */
+export const eppEntregaPublicSubmitLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 200,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: {
+    error:
+      "No pudimos registrar la entrega porque hay muchas solicitudes simultáneas. Esperá 30 segundos y tocá «Confirmar» de nuevo sin recargar la página.",
+  },
+});
+
 /** Exportaciones CSV de base histórica (evita abuso de CPU/memoria). */
 export const exportHistoricoLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
