@@ -8,8 +8,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Camera, ImagePlus, Loader2, SwitchCamera, X } from "lucide-react";
+import { Camera, ClipboardPaste, ImagePlus, Loader2, SwitchCamera, X } from "lucide-react";
 import { compressImage } from "@/lib/compressImage";
+import { getClipboardImageFile } from "@/lib/signature";
 
 type PhotoSourcePickerProps = {
   onSelect: (file: File) => void;
@@ -127,6 +128,35 @@ export function PhotoSourcePicker({
     if (cameraFallbackRef.current) cameraFallbackRef.current.value = "";
   };
 
+  const handleFileRef = useRef(handleFile);
+  handleFileRef.current = handleFile;
+
+  // Pegar recorte (Ctrl+V) mientras el sheet está abierto
+  useEffect(() => {
+    if (!sheetOpen || disabled) return;
+
+    const onPaste = (event: ClipboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      const file = getClipboardImageFile(event.clipboardData);
+      if (!file) return;
+
+      event.preventDefault();
+      void handleFileRef.current(file);
+    };
+
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [sheetOpen, disabled]);
+
   const openLiveCamera = () => {
     setSheetOpen(false);
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -227,7 +257,7 @@ export function PhotoSourcePicker({
                   Evidencia fotográfica
                 </h4>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Elegí cómo querés cargar la foto
+                  Cámara, galería o pegá un recorte (Ctrl+V)
                 </p>
               </div>
               <button
@@ -240,7 +270,18 @@ export function PhotoSourcePicker({
               </button>
             </div>
 
-            <div className="p-4 space-y-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <div
+              className="p-4 space-y-2 pb-[max(1rem,env(safe-area-inset-bottom))]"
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "copy";
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const file = getClipboardImageFile(e.dataTransfer);
+                if (file) void handleFile(file);
+              }}
+            >
               <button
                 type="button"
                 disabled={disabled}
@@ -278,6 +319,43 @@ export function PhotoSourcePicker({
                   </span>
                   <span className="block text-xs text-slate-500 mt-0.5">
                     Elegir una imagen ya guardada
+                  </span>
+                </span>
+              </button>
+
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={async () => {
+                  try {
+                    const items = await navigator.clipboard.read();
+                    for (const item of items) {
+                      const type = item.types.find((t) => t.startsWith("image/"));
+                      if (!type) continue;
+                      const blob = await item.getType(type);
+                      const file = new File(
+                        [blob],
+                        `recorte-${Date.now()}.png`,
+                        { type: blob.type || "image/png" },
+                      );
+                      void handleFile(file);
+                      return;
+                    }
+                  } catch {
+                    // Fallback: el usuario puede usar Ctrl+V con el sheet abierto
+                  }
+                }}
+                className="w-full flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 hover:bg-blue-50 hover:border-blue-200 px-4 py-3.5 text-left transition-colors disabled:opacity-50"
+              >
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-600 text-white shrink-0">
+                  <ClipboardPaste className="h-5 w-5" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-bold text-slate-900">
+                    Pegar recorte
+                  </span>
+                  <span className="block text-xs text-slate-500 mt-0.5">
+                    Desde el portapapeles · también Ctrl+V o arrastrar
                   </span>
                 </span>
               </button>

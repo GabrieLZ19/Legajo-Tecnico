@@ -142,13 +142,32 @@ export default function ConfiguracionPage() {
         {/* Acciones */}
         {isDuenoOrAdmin ? (
           <div className="flex flex-col gap-3">
-            <label className="flex items-center justify-center gap-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold px-4 py-2.5 rounded-lg text-sm transition-all cursor-pointer">
-              {uploading ? (
-                <Loader className="h-4 w-4 animate-spin text-slate-400" />
-              ) : (
-                <Upload className="h-4 w-4 text-slate-500" />
+            <label
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "copy";
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (uploading) return;
+                const file = getClipboardImageFile(e.dataTransfer);
+                if (file) void applyLogoFile(file);
+              }}
+              className="flex flex-col items-center justify-center gap-1 bg-white hover:bg-slate-50 border border-dashed border-slate-200 hover:border-blue-400 text-slate-700 font-bold px-4 py-3 rounded-lg text-sm transition-all cursor-pointer"
+            >
+              <span className="inline-flex items-center gap-2">
+                {uploading ? (
+                  <Loader className="h-4 w-4 animate-spin text-slate-400" />
+                ) : (
+                  <Upload className="h-4 w-4 text-slate-500" />
+                )}
+                {uploading ? "Subiendo Logo..." : "Subir, arrastrar o pegar logo"}
+              </span>
+              {!uploading && (
+                <span className="text-[11px] font-semibold text-slate-400">
+                  Ctrl+V para pegar un recorte
+                </span>
               )}
-              {uploading ? "Subiendo Logo..." : "Subir Nuevo Logo"}
               <input
                 type="file"
                 accept="image/*"

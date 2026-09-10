@@ -400,8 +400,9 @@ export default function EppPage() {
             />
             <p className="text-[11px] text-slate-400 leading-relaxed">
               Imprimí este código y dejalo en los puntos de entrega. El trabajador lo
-              escanea con el celular, carga el EPP, la foto, la certificación y firma.
-              No requiere firma del responsable de la empresa.
+              escanea con el celular, carga el EPP, la certificación y firma. La foto se
+              toma del catálogo si está cargada. No requiere firma del responsable de la
+              empresa.
             </p>
             <p className="text-[10px] text-slate-300 break-all">{qrEntrega.url}</p>
             <div className="flex flex-col gap-2">

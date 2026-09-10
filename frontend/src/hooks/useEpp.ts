@@ -277,9 +277,30 @@ export function useEpp() {
         if (filtros.fecha_hasta) params.set("fecha_hasta", filtros.fecha_hasta);
         const res = await api.get(`/epp/historico/exportar?${params.toString()}`, {
           responseType: "blob",
+          timeout: 120000,
         });
         return res.data as Blob;
       }, "Error al exportar base histórica de EPP"),
+    [run],
+  );
+
+  const exportarHistoricoEppPdf = useCallback(
+    (empresaId: string, filtros: Omit<EppHistoricoFiltros, "limit" | "offset"> = {}) =>
+      run(async () => {
+        const params = new URLSearchParams({ empresa_id: empresaId });
+        if (filtros.trabajador) params.set("trabajador", filtros.trabajador);
+        if (filtros.producto) params.set("producto", filtros.producto);
+        if (filtros.fecha_desde) params.set("fecha_desde", filtros.fecha_desde);
+        if (filtros.fecha_hasta) params.set("fecha_hasta", filtros.fecha_hasta);
+        const res = await api.get(
+          `/epp/historico/exportar-pdf?${params.toString()}`,
+          {
+            responseType: "blob",
+            timeout: 120000,
+          },
+        );
+        return res.data as Blob;
+      }, "Error al exportar PDF de base histórica de EPP"),
     [run],
   );
 
@@ -320,6 +341,7 @@ export function useEpp() {
     actualizarEstadoLicitacion,
     getHistoricoEpp,
     exportarHistoricoEpp,
+    exportarHistoricoEppPdf,
     descargarPlanillaHistoricaEmpleado,
   };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Settings,
   Upload,
@@ -15,6 +15,8 @@ import {
   Send,
 } from "lucide-react";
 import { useConfiguracion } from "@/hooks/useConfiguracion";
+import { getClipboardImageFile } from "@/lib/signature";
+import { useAlert } from "@/context/AlertContext";
 
 interface Consultora {
   id: string;
@@ -30,6 +32,7 @@ interface Consultora {
 export default function AdminConfiguracionPage() {
   const { getConsultora, updateConsultora, uploadConsultoraLogo } =
     useConfiguracion();
+  const { showAlert } = useAlert();
   const [consultora, setConsultora] = useState<Consultora | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -41,6 +44,7 @@ export default function AdminConfiguracionPage() {
     comision_epp_porcentaje: 0,
   });
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const uploadingLogoRef = useRef(false);
 
   useEffect(() => {
     fetchConsultora();
@@ -84,10 +88,10 @@ export default function AdminConfiguracionPage() {
     }
   };
 
-  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !consultora) return;
+  const applyLogoFile = async (file: File) => {
+    if (!consultora || uploadingLogoRef.current) return;
 
+    uploadingLogoRef.current = true;
     try {
       setUploadingLogo(true);
       setError(null);
@@ -98,13 +102,59 @@ export default function AdminConfiguracionPage() {
         setSuccess(true);
         setTimeout(() => setSuccess(false), 3000);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error uploading logo:", err);
-      setError(err.response?.data?.error || "Error al subir el logo.");
+      const message =
+        typeof err === "object" &&
+        err !== null &&
+        "response" in err &&
+        typeof (err as { response?: { data?: { error?: string } } }).response
+          ?.data?.error === "string"
+          ? (err as { response?: { data?: { error?: string } } }).response?.data
+              ?.error
+          : "Error al subir el logo.";
+      setError(message || "Error al subir el logo.");
+      showAlert("error", "No se pudo subir el logo", message || "Error al subir el logo.");
     } finally {
+      uploadingLogoRef.current = false;
       setUploadingLogo(false);
     }
   };
+
+  const applyLogoFileRef = useRef(applyLogoFile);
+  applyLogoFileRef.current = applyLogoFile;
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    await applyLogoFile(file);
+  };
+
+  useEffect(() => {
+    if (!consultora) return;
+
+    const onPaste = (event: ClipboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      const file = getClipboardImageFile(event.clipboardData);
+      if (!file) return;
+
+      event.preventDefault();
+      void applyLogoFileRef.current(file);
+    };
+
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [consultora]);
 
   if (loading) {
     return (
@@ -134,8 +184,21 @@ export default function AdminConfiguracionPage() {
         <div className="md:col-span-1 space-y-6">
           <div className="bg-white rounded-4xl p-8 shadow-sm border border-slate-100 flex flex-col items-center text-center">
             <div className="relative group">
-              <div className="h-32 w-32 rounded-3xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden transition-all group-hover:border-blue-400">
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "copy";
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (uploadingLogo) return;
+                  const file = getClipboardImageFile(e.dataTransfer);
+                  if (file) void applyLogoFile(file);
+                }}
+                className="h-32 w-32 rounded-3xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden transition-all group-hover:border-blue-400"
+              >
                 {consultora?.logo_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={consultora.logo_url}
                     alt="Logo"
@@ -170,6 +233,9 @@ export default function AdminConfiguracionPage() {
               </h3>
               <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">
                 Consultora Principal
+              </p>
+              <p className="text-[11px] font-semibold text-slate-400 mt-2">
+                Clic, arrastrá o pegá un recorte (Ctrl+V)
               </p>
             </div>
           </div>

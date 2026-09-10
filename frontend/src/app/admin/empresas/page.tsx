@@ -787,11 +787,8 @@ export default function AdminEmpresasPage() {
   }, [selectedEmpresa, uploadLogoEmpresaFile]);
 
   // Upload consultora logo handler
-  const handleUploadLogoConsultora = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = e.target.files?.[0];
-    if (!file || !selectedEmpresa?.consultora_id) return;
+  const uploadLogoConsultoraFile = async (file: File) => {
+    if (!selectedEmpresa?.consultora_id) return;
 
     const formData = new FormData();
     formData.append("logo", file);
@@ -813,6 +810,15 @@ export default function AdminEmpresasPage() {
         getErrorMessage(error, "No se pudo subir el logo."),
       );
     }
+  };
+
+  const handleUploadLogoConsultora = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    await uploadLogoConsultoraFile(file);
   };
 
   // Assign preventor to company
@@ -1380,6 +1386,16 @@ export default function AdminEmpresasPage() {
                 {/* Logo Consultora Upload Box */}
                 <div
                   onClick={() => fileConsultoraRef.current?.click()}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "copy";
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const file = getClipboardImageFile(e.dataTransfer);
+                    if (file) void uploadLogoConsultoraFile(file);
+                  }}
                   className="border border-slate-200 hover:border-slate-300 rounded-xl p-3 bg-slate-50/50 hover:bg-slate-50 flex flex-col items-center justify-center gap-1.5 cursor-pointer text-center group transition-all h-24"
                 >
                   <input
@@ -1422,6 +1438,16 @@ export default function AdminEmpresasPage() {
                     e.preventDefault();
                     e.stopPropagation();
                     void uploadLogoEmpresaFile(file);
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "copy";
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const file = getClipboardImageFile(e.dataTransfer);
+                    if (file) void uploadLogoEmpresaFile(file);
                   }}
                   className="border border-slate-200 hover:border-slate-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15 rounded-xl p-3 bg-slate-50/50 hover:bg-slate-50 flex flex-col items-center justify-center gap-1 cursor-pointer text-center group transition-all h-24 outline-none"
                 >

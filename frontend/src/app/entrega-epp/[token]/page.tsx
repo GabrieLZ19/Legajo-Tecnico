@@ -13,7 +13,6 @@ import {
   Package,
 } from "lucide-react";
 import SignaturePad, { readSignatureOrThrow } from "@/components/SignaturePad";
-import { FileImagePicker } from "@/components/FileImagePicker";
 import { eppService } from "@/utils/services/epp.service";
 import type { EppTipo } from "@/types";
 
@@ -70,7 +69,8 @@ export default function EntregaEppPublicaPage() {
   const [marca, setMarca] = useState("");
   const [modelo, setModelo] = useState("");
   const [certificacion, setCertificacion] = useState("");
-  const [foto, setFoto] = useState<File | null>(null);
+
+  const tipoSeleccionado = tipos.find((t) => t.id === eppTipoId) ?? null;
 
   useEffect(() => {
     if (!token) return;
@@ -125,10 +125,6 @@ export default function EntregaEppPublicaPage() {
     if (!token) return;
     setError(null);
 
-    if (!foto) {
-      setError("Sacá o adjuntá una foto del EPP.");
-      return;
-    }
     if (!eppTipoId) {
       setError("Seleccioná el tipo de EPP.");
       return;
@@ -154,7 +150,6 @@ export default function EntregaEppPublicaPage() {
         modelo: modelo.trim() || undefined,
         certificacion: certificacion.trim() || undefined,
         firma,
-        foto,
       });
       clearPersisted(token);
       setDone(true);
@@ -329,13 +324,24 @@ export default function EntregaEppPublicaPage() {
               />
             </label>
           </div>
-          <FileImagePicker
-            file={foto}
-            onChange={setFoto}
-            label="Foto del EPP"
-            hint="Usá la cámara del celular · PNG/JPG hasta 5 MB"
-            capture
-          />
+          {tipoSeleccionado?.foto_url ? (
+            <div className="space-y-1.5">
+              <span className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                Foto del EPP (catálogo)
+              </span>
+              <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={tipoSeleccionado.foto_url}
+                  alt={tipoSeleccionado.nombre}
+                  className="h-16 w-16 rounded-xl object-cover border border-slate-100 bg-white"
+                />
+                <p className="text-sm font-semibold text-slate-600 leading-snug">
+                  {tipoSeleccionado.nombre}
+                </p>
+              </div>
+            </div>
+          ) : null}
         </section>
 
         <section className="bg-white rounded-3xl border border-slate-100 p-5 shadow-sm space-y-3">

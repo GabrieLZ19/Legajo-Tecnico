@@ -44,6 +44,7 @@ export default function BaseDatosEppPage() {
   const {
     getHistoricoEpp,
     exportarHistoricoEpp,
+    exportarHistoricoEppPdf,
     descargarPlanillaHistoricaEmpleado,
   } = useEpp();
 
@@ -52,6 +53,7 @@ export default function BaseDatosEppPage() {
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
   const [downloadingEmpleadoId, setDownloadingEmpleadoId] = useState<string | null>(
     null,
   );
@@ -174,27 +176,95 @@ export default function BaseDatosEppPage() {
     setExporting(true);
     try {
       const blob = await exportarHistoricoEpp(empresa.id, filtrosActivos);
+      if (blob.type?.includes("application/json")) {
+        const text = await blob.text();
+        let message = "No se pudo exportar el Excel.";
+        try {
+          const parsed = JSON.parse(text) as { error?: string };
+          if (parsed.error) message = parsed.error;
+        } catch {
+          /* ignore */
+        }
+        showAlert("error", "Error", message);
+        return;
+      }
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `base_historica_epp_${empresa.cuit || empresa.id}.csv`;
+      link.download = `Planilla_EPP_historico_${empresa.cuit || empresa.id}.xlsx`;
       link.click();
       window.URL.revokeObjectURL(url);
       showAlert(
         "success",
-        "Exportación lista",
-        "Se descargó el CSV con los filtros aplicados.",
+        "Excel listo",
+        "Se descargó la planilla estilizada (Res. 299/11) con los filtros aplicados.",
       );
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { error?: string } } };
-      showAlert(
-        "error",
-        "Error",
-        axiosErr.response?.data?.error ||
-          "No se pudo exportar la base histórica.",
-      );
+      const axiosErr = err as { response?: { data?: Blob | { error?: string } } };
+      let message = "No se pudo exportar la base histórica.";
+      const data = axiosErr.response?.data;
+      if (data instanceof Blob) {
+        try {
+          const parsed = JSON.parse(await data.text()) as { error?: string };
+          if (parsed.error) message = parsed.error;
+        } catch {
+          /* ignore */
+        }
+      } else if (data && typeof data === "object" && "error" in data && data.error) {
+        message = data.error;
+      }
+      showAlert("error", "Error", message);
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleExportPdf = async () => {
+    if (!empresa?.id) return;
+    setExportingPdf(true);
+    try {
+      const blob = await exportarHistoricoEppPdf(empresa.id, filtrosActivos);
+      // Si el backend devolvió JSON de error como blob
+      if (blob.type?.includes("application/json")) {
+        const text = await blob.text();
+        let message = "No se pudo exportar el PDF.";
+        try {
+          const parsed = JSON.parse(text) as { error?: string };
+          if (parsed.error) message = parsed.error;
+        } catch {
+          /* ignore */
+        }
+        showAlert("error", "Error", message);
+        return;
+      }
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Lista_EPP_historico_${empresa.cuit || empresa.id}.pdf`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+      showAlert(
+        "success",
+        "PDF listo",
+        "Se descargó el listado completo Anexo I (Res. 299/11) con los filtros aplicados.",
+      );
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: Blob | { error?: string } } };
+      let message = "No se pudo exportar el PDF de la base histórica.";
+      const data = axiosErr.response?.data;
+      if (data instanceof Blob) {
+        try {
+          const parsed = JSON.parse(await data.text()) as { error?: string };
+          if (parsed.error) message = parsed.error;
+        } catch {
+          /* ignore */
+        }
+      } else if (data && typeof data === "object" && "error" in data && data.error) {
+        message = data.error;
+      }
+      showAlert("error", "Error", message);
+    } finally {
+      setExportingPdf(false);
     }
   };
 
@@ -247,7 +317,7 @@ export default function BaseDatosEppPage() {
             Base histórica de entregas
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Consultá todas las entregas y descargá la planilla Anexo I consolidada por trabajador.
+            Consultá todas las entregas y descargá Excel o PDF como listado Anexo I (Res. 299/11).
           </p>
         </div>
       </div>
@@ -338,19 +408,35 @@ export default function BaseDatosEppPage() {
               Limpiar filtros
             </button>
           )}
-          <button
-            type="button"
-            onClick={handleExport}
-            disabled={exporting || loading}
-            className="ml-auto inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 cursor-pointer"
-          >
-            {exporting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4" />
-            )}
-            Exportar CSV
-          </button>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={exporting || exportingPdf || loading}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 cursor-pointer"
+            >
+              {exporting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              Exportar Excel
+            </button>
+            <button
+              type="button"
+              onClick={handleExportPdf}
+              disabled={exporting || exportingPdf || loading || total === 0}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-blue-700 text-white hover:bg-blue-800 disabled:opacity-50 cursor-pointer"
+              title="Listado completo Anexo I (Res. 299/11)"
+            >
+              {exportingPdf ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FileText className="h-4 w-4" />
+              )}
+              Exportar PDF
+            </button>
+          </div>
         </div>
       </div>
 

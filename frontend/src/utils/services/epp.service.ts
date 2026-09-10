@@ -11,7 +11,7 @@ export type EppEntregaPublicaPayload = {
   modelo?: string;
   certificacion?: string;
   firma: string;
-  foto: File;
+  foto?: File | null;
 };
 
 export type EppEntregaPublicaInfo = {
@@ -56,7 +56,7 @@ export const eppService = {
     if (payload.modelo) form.append("modelo", payload.modelo);
     if (payload.certificacion) form.append("certificacion", payload.certificacion);
     form.append("firma", payload.firma);
-    form.append("foto", payload.foto);
+    if (payload.foto) form.append("foto", payload.foto);
 
     const { data } = await api.post(`/epp/entrega-publica/${token}`, form, {
       headers: { "Content-Type": "multipart/form-data" },
