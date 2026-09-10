@@ -412,18 +412,50 @@ export const eppController = {
       if (!empresaId) throw new HttpError(400, "empresa_id es requerido");
       await assertEmpresaAccess(requireUser(req), empresaId);
       const filtros = parseHistoricoQuery(req);
-      const buffer = await eppService.exportarHistorico(empresaId, {
+      const file = await eppService.exportarHistorico(empresaId, {
         trabajador: filtros.trabajador,
         producto: filtros.producto,
         fecha_desde: filtros.fecha_desde,
         fecha_hasta: filtros.fecha_hasta,
       });
-      res.setHeader("Content-Type", "text/csv;charset=utf-8");
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      );
       res.setHeader(
         "Content-Disposition",
-        `attachment; filename=base_historica_epp_${empresaId.slice(0, 8)}.csv`,
+        `attachment; filename="${file.filename}"`,
       );
-      res.send(buffer);
+      res.setHeader("X-Epp-Entregas", String(file.entregas));
+      res.send(file.buffer);
+    } catch (error) {
+      if (error instanceof HttpError) {
+        return res.status(error.statusCode).json({ error: error.message });
+      }
+      next(error);
+    }
+  },
+
+  async exportarHistoricoPdf(req: Request, res: Response, next: NextFunction) {
+    try {
+      const empresaId = String(req.query.empresa_id || "");
+      if (!empresaId) throw new HttpError(400, "empresa_id es requerido");
+      await assertEmpresaAccess(requireUser(req), empresaId);
+      const filtros = parseHistoricoQuery(req);
+      const file = await eppService.exportarHistoricoPdf(empresaId, {
+        trabajador: filtros.trabajador,
+        producto: filtros.producto,
+        fecha_desde: filtros.fecha_desde,
+        fecha_hasta: filtros.fecha_hasta,
+      });
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${file.filename}"`,
+      );
+      res.setHeader("X-Epp-Trabajadores", String(file.trabajadores));
+      res.setHeader("X-Epp-Entregas", String(file.entregas));
+      res.send(file.buffer);
     } catch (error) {
       if (error instanceof HttpError) {
         return res.status(error.statusCode).json({ error: error.message });

@@ -31,6 +31,11 @@ router.patch(
 
 router.get("/historico", requireAuth, eppController.historico);
 router.get("/historico/exportar", requireAuth, eppController.exportarHistorico);
+router.get(
+  "/historico/exportar-pdf",
+  requireAuth,
+  eppController.exportarHistoricoPdf,
+);
 
 router.get("/empleados", requireAuth, eppController.listarEmpleados);
 router.post(

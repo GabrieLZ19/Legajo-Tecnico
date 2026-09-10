@@ -4,6 +4,7 @@ import { supabaseAdmin } from "../config/supabase";
 import { env } from "../config/env";
 import { storageService } from "./storage.service";
 import { eppPdfService } from "./eppPdf.service";
+import { buildHistoricoEppExcel } from "./eppHistoricoExport.service";
 import { HttpError } from "../utils/httpError";
 import {
   normalizarEmpresaParaPlanilla,
@@ -20,6 +21,7 @@ const HISTORICO_PAGE_DEFAULT = 25;
 const HISTORICO_PAGE_MAX = 100;
 const HISTORICO_EXPORT_BATCH = 200;
 const HISTORICO_EXPORT_MAX = 10_000;
+const HISTORICO_PDF_MAX_ENTREGAS = 1_500;
 
 type EppHistoricoFiltros = {
   trabajador?: string;
@@ -1420,21 +1422,12 @@ export const eppService = {
   },
 
   async exportarHistorico(empresaId: string, opts: EppHistoricoFiltros = {}) {
-    const allRows: EppHistoricoRow[] = [];
-    let offset = 0;
-    let total = 0;
-
-    do {
-      const page = await this.listarHistorico(empresaId, {
-        ...opts,
-        limit: HISTORICO_EXPORT_BATCH,
-        offset,
-      });
-      total = page.total;
-      allRows.push(...page.registros);
-      offset += HISTORICO_EXPORT_BATCH;
-      if (allRows.length >= HISTORICO_EXPORT_MAX) break;
-    } while (offset < total);
+    const fetched = await this.cargarEntregasHistoricoExport(
+      empresaId,
+      opts,
+      HISTORICO_EXPORT_MAX,
+    );
+    const { empresa, entregas, total } = fetched;
 
     if (total > HISTORICO_EXPORT_MAX) {
       throw new HttpError(
@@ -1443,37 +1436,210 @@ export const eppService = {
       );
     }
 
-    const escape = (value: string) => {
-      const s = String(value ?? "");
-      if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-      return s;
-    };
+    const filtrosResumen = [
+      opts.trabajador ? `trabajador="${opts.trabajador}"` : null,
+      opts.producto ? `producto="${opts.producto}"` : null,
+      opts.fecha_desde ? `desde=${opts.fecha_desde}` : null,
+      opts.fecha_hasta ? `hasta=${opts.fecha_hasta}` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
 
-    const header =
-      "Trabajador,DNI,Producto,Cantidad,Marca,Modelo,Certificación,Fecha";
-    const lines = allRows.map((r) => {
-      const fecha = r.fecha
-        ? new Date(r.fecha).toLocaleString("es-AR", {
-            day: "2-digit",
-            month: "2-digit",
-            year: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-          })
-        : "";
-      return [
-        escape(r.trabajador),
-        escape(r.dni),
-        escape(r.producto),
-        escape(String(r.cantidad)),
-        escape(r.marca ?? ""),
-        escape(r.modelo ?? ""),
-        escape(r.certificacion ?? ""),
-        escape(fecha),
-      ].join(",");
+    const rows = entregas.map((e) => {
+      const tipo = firstRelation(e.epp_tipos);
+      return {
+        trabajador: e.empleado_nombre || "Sin nombre",
+        dni: e.empleado_documento || "",
+        producto: tipo?.nombre || "—",
+        modelo: e.modelo || "",
+        marca: e.marca || "",
+        certificacion: e.certificacion || "",
+        cantidad: e.cantidad || 1,
+        fecha: e.entregado_at || "",
+        firma: null as Buffer | null,
+      };
     });
 
-    return Buffer.from(`\uFEFF${header}\n${lines.join("\n")}`, "utf-8");
+    const buffer = await buildHistoricoEppExcel({
+      empresa: {
+        razon_social: empresa.razon_social,
+        cuit: empresa.cuit,
+        domicilio: empresa.domicilio,
+        localidad: empresa.localidad,
+        codigo_postal: empresa.codigo_postal,
+        provincia: empresa.provincia,
+      },
+      rows,
+      filtrosResumen: filtrosResumen || null,
+    });
+
+    return {
+      buffer,
+      filename: `Planilla_EPP_historico_${empresa.cuit || empresaId.slice(0, 8)}.xlsx`,
+      entregas: rows.length,
+    };
+  },
+
+  /**
+   * PDF consolidado: listado completo (Res. 299/11) en una sola tabla continua.
+   */
+  async exportarHistoricoPdf(empresaId: string, opts: EppHistoricoFiltros = {}) {
+    const fetched = await this.cargarEntregasHistoricoExport(
+      empresaId,
+      opts,
+      HISTORICO_PDF_MAX_ENTREGAS,
+    );
+    const { empresa, entregas, total } = fetched;
+
+    if (total > HISTORICO_PDF_MAX_ENTREGAS) {
+      throw new HttpError(
+        400,
+        `Hay más de ${HISTORICO_PDF_MAX_ENTREGAS} entregas. Acotá los filtros (fechas / trabajador) antes de exportar el PDF.`,
+      );
+    }
+
+    const filtrosResumen = [
+      opts.trabajador ? `trabajador="${opts.trabajador}"` : null,
+      opts.producto ? `producto="${opts.producto}"` : null,
+      opts.fecha_desde ? `desde=${opts.fecha_desde}` : null,
+      opts.fecha_hasta ? `hasta=${opts.fecha_hasta}` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+
+    const items = await Promise.all(
+      entregas.map(async (entrega) => {
+        const tipo = firstRelation(entrega.epp_tipos);
+        const firmaBuffer = entrega.firma_empleado_url
+          ? await storageService.downloadBuffer(entrega.firma_empleado_url)
+          : null;
+        return {
+          trabajador: entrega.empleado_nombre || "Sin nombre",
+          dni: entrega.empleado_documento || "",
+          producto: tipo?.nombre || "—",
+          modelo: entrega.modelo,
+          marca: entrega.marca,
+          certificacion: entrega.certificacion,
+          cantidad: entrega.cantidad || 1,
+          fecha_entrega: entrega.entregado_at || "",
+          firmaUrl: entrega.firma_empleado_url,
+          firmaBuffer,
+        };
+      }),
+    );
+
+    const buffer = await eppPdfService.generarListaHistorico({
+      empresa: {
+        razon_social: empresa.razon_social,
+        cuit: empresa.cuit,
+        domicilio: empresa.domicilio,
+        localidad: empresa.localidad,
+        codigo_postal: empresa.codigo_postal,
+        provincia: empresa.provincia,
+        actividad: empresa.actividad,
+        logo_url: empresa.logo_url,
+      },
+      items,
+      informacion_adicional: [
+        `Listado consolidado — ${items.length} entrega(s)`,
+        filtrosResumen ? `Filtros: ${filtrosResumen}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    });
+
+    const trabajadores = new Set(
+      items.map((i) => `${i.dni}|${i.trabajador.toLowerCase()}`),
+    ).size;
+
+    return {
+      buffer,
+      filename: `Lista_EPP_historico_${empresa.cuit || empresaId.slice(0, 8)}.pdf`,
+      trabajadores,
+      entregas: items.length,
+    };
+  },
+
+  async cargarEntregasHistoricoExport(
+    empresaId: string,
+    opts: EppHistoricoFiltros,
+    maxEntregas: number,
+  ) {
+    type EntregaExportRow = {
+      id: string;
+      empleado_id: string | null;
+      empleado_nombre: string | null;
+      empleado_documento: string | null;
+      cantidad: number;
+      marca: string | null;
+      modelo: string | null;
+      certificacion: string | null;
+      entregado_at: string;
+      firma_empleado_url: string | null;
+      epp_tipos:
+        | { id: string; nombre: string; descripcion: string | null }
+        | { id: string; nombre: string; descripcion: string | null }[]
+        | null;
+    };
+
+    const entregas: EntregaExportRow[] = [];
+    let offset = 0;
+    let total = 0;
+
+    do {
+      let query = supabaseAdmin
+        .from("epp_entregas")
+        .select(
+          `
+          id,
+          empleado_id,
+          empleado_nombre,
+          empleado_documento,
+          cantidad,
+          marca,
+          modelo,
+          certificacion,
+          entregado_at,
+          firma_empleado_url,
+          epp_tipos(id, nombre, descripcion)
+        `,
+          { count: "exact" },
+        )
+        .eq("empresa_id", empresaId)
+        .neq("estado", "anulada");
+
+      query = applyEppHistoricoFilters(query, opts);
+
+      const { data, error, count } = await query
+        .order("entregado_at", { ascending: true, nullsFirst: false })
+        .order("id", { ascending: true })
+        .range(offset, offset + HISTORICO_EXPORT_BATCH - 1);
+
+      if (error) throw error;
+      total = count ?? 0;
+      entregas.push(...((data ?? []) as unknown as EntregaExportRow[]));
+      offset += HISTORICO_EXPORT_BATCH;
+      if (entregas.length >= maxEntregas) break;
+    } while (offset < total);
+
+    if (total === 0 || entregas.length === 0) {
+      throw new HttpError(404, "No hay entregas para exportar con esos filtros");
+    }
+
+    const { data: empresaRaw, error: empresaError } = await supabaseAdmin
+      .from("empresas")
+      .select(
+        "razon_social, cuit, actividad, logo_url, domicilio, localidad, codigo_postal, provincia",
+      )
+      .eq("id", empresaId)
+      .single();
+    if (empresaError) throw empresaError;
+
+    return {
+      empresa: normalizarEmpresaParaPlanilla(empresaRaw),
+      entregas,
+      total,
+    };
   },
 
   async generarPlanillaHistoricaEmpleado(empleadoId: string) {
@@ -1657,9 +1823,6 @@ export const eppService = {
     },
     foto?: Express.Multer.File,
   ) {
-    if (!foto) {
-      throw new HttpError(400, "La foto del EPP es obligatoria");
-    }
     if (!payload.firma.startsWith("data:image/")) {
       throw new HttpError(400, "La firma es inválida");
     }
@@ -1680,7 +1843,7 @@ export const eppService = {
 
     const { data: tipo, error: tipoError } = await supabaseAdmin
       .from("epp_tipos")
-      .select("id, nombre, activo, consultora_id")
+      .select("id, nombre, activo, consultora_id, foto_url")
       .eq("id", payload.epp_tipo_id)
       .maybeSingle();
 
@@ -1748,10 +1911,16 @@ export const eppService = {
       throw new HttpError(500, "No se pudo resolver el trabajador");
     }
 
-    const ext = foto.originalname?.split(".").pop() || "jpg";
-    const fotoPath = `evidencias/${empresa.id}/${dni}_${Date.now()}.${ext}`;
-    await storageService.subirArchivo("epp_fotos", fotoPath, foto);
-    const fotoUrl = storageService.obtenerUrlPublica("epp_fotos", fotoPath);
+    let fotoUrl: string | null = null;
+    if (foto) {
+      const ext = foto.originalname?.split(".").pop() || "jpg";
+      const fotoPath = `evidencias/${empresa.id}/${dni}_${Date.now()}.${ext}`;
+      await storageService.subirArchivo("epp_fotos", fotoPath, foto);
+      fotoUrl = storageService.obtenerUrlPublica("epp_fotos", fotoPath);
+    } else if (tipo.foto_url) {
+      // Usar la foto del catálogo si existe; no se pide subir en la entrega
+      fotoUrl = tipo.foto_url;
+    }
 
     const firmaUrl = await uploadBase64Png(
       "firmas_digitales",
