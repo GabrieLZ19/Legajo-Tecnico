@@ -104,7 +104,11 @@ export const eppController = {
       const empresaId = String(req.query.empresa_id || "");
       if (!empresaId) throw new HttpError(400, "empresa_id es requerido");
       await assertEmpresaAccess(requireUser(req), empresaId);
-      const data = await eppService.listarEmpleados(empresaId);
+      const data = await eppService.listarEmpleados(empresaId, {
+        limit: clampInt(req.query.limit, 10, 1, 200),
+        offset: clampInt(req.query.offset, 0, 0, 500_000),
+        q: req.query.q ? String(req.query.q) : undefined,
+      });
       res.json(data);
     } catch (error) {
       next(error);
@@ -165,6 +169,9 @@ export const eppController = {
       await assertEmpresaAccess(requireUser(req), empresaId);
       const data = await eppService.listarEntregas(empresaId, {
         soloVisibleEnte: req.user?.rol === "ente_regulador",
+        limit: clampInt(req.query.limit, 10, 1, 100),
+        offset: clampInt(req.query.offset, 0, 0, 500_000),
+        q: req.query.q ? String(req.query.q) : undefined,
       });
       res.json(data);
     } catch (error) {
@@ -268,7 +275,11 @@ export const eppController = {
       const empresaId = String(req.query.empresa_id || "");
       if (!empresaId) throw new HttpError(400, "empresa_id es requerido");
       await assertEmpresaAccess(requireUser(req), empresaId);
-      const data = await eppService.listarLicitaciones(empresaId);
+      const data = await eppService.listarLicitaciones(empresaId, {
+        limit: clampInt(req.query.limit, 10, 1, 100),
+        offset: clampInt(req.query.offset, 0, 0, 500_000),
+        q: req.query.q ? String(req.query.q) : undefined,
+      });
       res.json(data);
     } catch (error) {
       next(error);

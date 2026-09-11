@@ -19,6 +19,8 @@ router.post('/usuarios', adminController.crearUsuario);
 router.put('/usuarios/:id', adminController.editarUsuario);
 router.post('/usuarios/:id/password/verificar', adminController.verificarPasswordUsuario);
 router.patch('/usuarios/:id/password', adminController.resetPasswordUsuario);
+router.post('/usuarios/:id/sello', upload.single('sello'), adminController.subirSelloUsuario);
+router.delete('/usuarios/:id/sello', adminController.eliminarSelloUsuario);
 
 router.get('/empresas', adminController.listarEmpresas);
 router.post('/empresas', adminController.crearEmpresa);

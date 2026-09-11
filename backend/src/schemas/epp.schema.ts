@@ -68,6 +68,10 @@ export const crearEmpleadoSchema = z.object({
       .string()
       .regex(/^\d{7,8}$/, "El DNI debe tener 7 u 8 números"),
     sector: z.string().optional().nullable(),
+    /** Descripción del puesto (Anexo I 299/11). */
+    puesto: z.string().max(500).optional().nullable(),
+    /** EPP necesarios según el puesto (Anexo I 299/11). */
+    epp_necesarios: z.string().max(1000).optional().nullable(),
   }),
 });
 
@@ -80,6 +84,8 @@ export const actualizarEmpleadoSchema = z.object({
       .regex(/^\d{7,8}$/)
       .optional(),
     sector: z.string().optional().nullable(),
+    puesto: z.string().max(500).optional().nullable(),
+    epp_necesarios: z.string().max(1000).optional().nullable(),
     activo: z.boolean().optional(),
   }),
 });

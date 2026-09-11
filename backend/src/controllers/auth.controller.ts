@@ -9,6 +9,9 @@ import {
   isCuitSucursalFormat,
   loginEmpresaOptionLabel,
 } from '../utils/cuit';
+import { storageService } from '../services/storage.service';
+import { adminService } from '../services/admin.service';
+import { HttpError } from '../utils/httpError';
 
 type EmpresaLoginRow = {
   id: string;
@@ -21,6 +24,15 @@ type EmpresaLoginRow = {
 
 const EMPRESA_LOGIN_SELECT =
   "id, razon_social, cuit, logo_url, consultora_id, estado, domicilio, localidad";
+
+async function withSignedSello<T extends { sello_url?: string | null }>(
+  perfil: T,
+): Promise<T> {
+  return {
+    ...perfil,
+    sello_url: await storageService.signUrl(perfil.sello_url),
+  };
+}
 
 async function resolveEmpresaForLogin(cuitInput: string): Promise<
   | { kind: "single"; empresa: EmpresaLoginRow }
@@ -285,7 +297,7 @@ export const authController = {
 
       setAuthCookie(res, authData.session.access_token);
       res.json({
-        perfil,
+        perfil: await withSignedSello(perfil),
         empresa: {
           id: empresa.id,
           razon_social: empresa.razon_social,
@@ -323,7 +335,7 @@ export const authController = {
 
       setAuthCookie(res, authData.session.access_token);
       res.json({
-        perfil
+        perfil: await withSignedSello(perfil)
       });
     } catch (error) {
       next(error);
@@ -335,7 +347,7 @@ export const authController = {
       const { data: perfil, error } = await supabaseAdmin
         .from("perfiles")
         .select(
-          "id, consultora_id, empresa_id, nombre_completo, username, rol, activo, created_at, permisos_personalizados",
+          "id, consultora_id, empresa_id, nombre_completo, username, rol, activo, created_at, permisos_personalizados, sello_url",
         )
         .eq("id", req.user!.id)
         .single();
@@ -344,7 +356,41 @@ export const authController = {
         return res.status(401).json({ error: "Sesión inválida" });
       }
 
-      res.json({ user: perfil });
+      res.json({ user: await withSignedSello(perfil) });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async subirMiSello(req: Request, res: Response, next: NextFunction) {
+    try {
+      const file = req.file;
+      if (!file) {
+        throw new HttpError(400, "No se subió ninguna imagen de sello");
+      }
+      const consultoraId = req.user!.consultora_id;
+      if (!consultoraId) {
+        throw new HttpError(403, "No tenés consultora asignada");
+      }
+      const selloUrl = await adminService.subirSelloUsuario(
+        consultoraId,
+        req.user!.id,
+        file,
+      );
+      res.json({ success: true, sello_url: selloUrl });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async eliminarMiSello(req: Request, res: Response, next: NextFunction) {
+    try {
+      const consultoraId = req.user!.consultora_id;
+      if (!consultoraId) {
+        throw new HttpError(403, "No tenés consultora asignada");
+      }
+      await adminService.eliminarSelloUsuario(consultoraId, req.user!.id);
+      res.json({ success: true });
     } catch (error) {
       next(error);
     }

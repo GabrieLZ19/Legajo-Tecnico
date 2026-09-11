@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
+import multer from 'multer';
 
 export const errorHandler = (err: any, req: Request, res: Response, next: NextFunction) => {
   console.error(err);
@@ -9,6 +10,26 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
       error: 'Error de validación',
       detalles: err.issues
     });
+    return;
+  }
+
+  if (err instanceof multer.MulterError) {
+    const message =
+      err.code === 'LIMIT_FILE_SIZE'
+        ? 'El archivo supera el máximo permitido (5 MB).'
+        : err.message || 'Error al subir el archivo';
+    res.status(400).json({ error: message });
+    return;
+  }
+
+  // fileFilter de multer (Error genérico con mensaje claro)
+  if (
+    typeof err?.message === 'string' &&
+    (err.message.includes('Formato no soportado') ||
+      err.message.includes('máx. 5 MB') ||
+      err.message.includes('máx. 10 MB'))
+  ) {
+    res.status(400).json({ error: err.message });
     return;
   }
 

@@ -33,10 +33,13 @@ export const capacitacionesController = {
         return res.status(400).json({ error: "empresa_id es requerido" });
 
       await assertEmpresaAccess(req.user!, empresaId);
-      const capacitaciones = await capacitacionesService.listar(empresaId, {
+      const data = await capacitacionesService.listar(empresaId, {
         soloVisibleEnte: req.user!.rol === "ente_regulador",
+        limit: clampInt(req.query.limit, 10, 1, 100),
+        offset: clampInt(req.query.offset, 0, 0, 500_000),
+        estado: req.query.estado ? String(req.query.estado) : undefined,
       });
-      res.json({ capacitaciones });
+      res.json(data);
     } catch (error) {
       next(error);
     }

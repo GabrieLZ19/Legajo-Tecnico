@@ -3,6 +3,7 @@ import QRCode from "qrcode";
 import { supabaseAdmin } from "../config/supabase";
 import { env } from "../config/env";
 import { storageService } from "./storage.service";
+import { safeExtensionFromUpload } from "../config/multer";
 import { eppPdfService } from "./eppPdf.service";
 import { buildHistoricoEppExcel } from "./eppHistoricoExport.service";
 import { HttpError } from "../utils/httpError";
@@ -314,7 +315,7 @@ export const eppService = {
     let fotoUrl: string | null = null;
 
     if (file) {
-      const ext = file.originalname.split(".").pop() || "jpg";
+      const ext = safeExtensionFromUpload(file);
       const path = `${consultoraId}/${randomUUID()}.${ext}`;
       await storageService.subirArchivo("epp_fotos", path, file);
       fotoUrl = storageService.obtenerUrlPublica("epp_fotos", path);
@@ -349,7 +350,7 @@ export const eppService = {
     if (payload.activo !== undefined) updates.activo = payload.activo;
 
     if (file) {
-      const ext = file.originalname.split(".").pop() || "jpg";
+      const ext = safeExtensionFromUpload(file);
       const path = `${consultoraId}/${id}.${ext}`;
       await storageService.subirArchivo("epp_fotos", path, file);
       updates.foto_url = storageService.obtenerUrlPublica("epp_fotos", path);
@@ -368,14 +369,43 @@ export const eppService = {
     return { ...data, foto_url: await signedEppFoto(data.foto_url) };
   },
 
-  async listarEmpleados(empresaId: string) {
-    const { data, error } = await supabaseAdmin
+  async listarEmpleados(
+    empresaId: string,
+    opts?: { limit?: number; offset?: number; q?: string },
+  ) {
+    const limit = clampInt(opts?.limit, 10, 1, 200);
+    const offset = clampInt(opts?.offset, 0, 0, 500_000);
+    const q = sanitizeSearchTerm(opts?.q);
+
+    let query = supabaseAdmin
       .from("empleados")
-      .select("*")
-      .eq("empresa_id", empresaId)
-      .order("nombre");
+      .select("*", { count: "exact" })
+      .eq("empresa_id", empresaId);
+
+    if (q) {
+      const digits = q.replace(/\D/g, "");
+      if (digits.length > 0) {
+        query = query.or(
+          `nombre.ilike.%${q}%,documento.ilike.%${digits}%,sector.ilike.%${q}%,puesto.ilike.%${q}%`,
+        );
+      } else {
+        query = query.or(
+          `nombre.ilike.%${q}%,sector.ilike.%${q}%,puesto.ilike.%${q}%`,
+        );
+      }
+    }
+
+    const { data, error, count } = await query
+      .order("nombre")
+      .range(offset, offset + limit - 1);
+
     if (error) throw error;
-    return { empleados: data ?? [] };
+    return {
+      empleados: data ?? [],
+      total: count ?? 0,
+      limit,
+      offset,
+    };
   },
 
   async crearEmpleado(payload: {
@@ -383,6 +413,8 @@ export const eppService = {
     nombre: string;
     documento: string;
     sector?: string | null;
+    puesto?: string | null;
+    epp_necesarios?: string | null;
   }) {
     const { data, error } = await supabaseAdmin
       .from("empleados")
@@ -391,6 +423,8 @@ export const eppService = {
         nombre: payload.nombre.trim(),
         documento: payload.documento,
         sector: payload.sector?.trim() || null,
+        puesto: payload.puesto?.trim() || null,
+        epp_necesarios: payload.epp_necesarios?.trim() || null,
         activo: true,
       })
       .select()
@@ -411,12 +445,24 @@ export const eppService = {
       nombre?: string;
       documento?: string;
       sector?: string | null;
+      puesto?: string | null;
+      epp_necesarios?: string | null;
       activo?: boolean;
     },
   ) {
+    const updates: Record<string, unknown> = {};
+    if (payload.nombre !== undefined) updates.nombre = payload.nombre.trim();
+    if (payload.documento !== undefined) updates.documento = payload.documento;
+    if (payload.sector !== undefined) updates.sector = payload.sector?.trim() || null;
+    if (payload.puesto !== undefined) updates.puesto = payload.puesto?.trim() || null;
+    if (payload.epp_necesarios !== undefined) {
+      updates.epp_necesarios = payload.epp_necesarios?.trim() || null;
+    }
+    if (payload.activo !== undefined) updates.activo = payload.activo;
+
     const { data, error } = await supabaseAdmin
       .from("empleados")
-      .update(payload)
+      .update(updates)
       .eq("id", id)
       .select()
       .single();
@@ -456,21 +502,75 @@ export const eppService = {
     return { qr, payload, empleado: data };
   },
 
-  async listarEntregas(empresaId: string, opts?: { soloVisibleEnte?: boolean }) {
+  async listarEntregas(
+    empresaId: string,
+    opts?: {
+      soloVisibleEnte?: boolean;
+      limit?: number;
+      offset?: number;
+      q?: string;
+    },
+  ) {
+    const limit = clampInt(opts?.limit, 10, 1, 100);
+    const offset = clampInt(opts?.offset, 0, 0, 500_000);
+    const q = sanitizeSearchTerm(opts?.q);
+
     let query = supabaseAdmin
       .from("epp_entregas")
-      .select(`*, epp_tipos(id, nombre, descripcion, foto_url)`)
+      .select(`*, epp_tipos(id, nombre, descripcion, foto_url)`, {
+        count: "exact",
+      })
       .eq("empresa_id", empresaId);
 
     if (opts?.soloVisibleEnte) {
       query = query.eq("visible_ente_regulador", true);
     }
 
-    const { data, error } = await query
+    if (q) {
+      const digits = q.replace(/\D/g, "");
+      const parts = [
+        `empleado_nombre.ilike.%${q}%`,
+        `marca.ilike.%${q}%`,
+        `modelo.ilike.%${q}%`,
+        `certificacion.ilike.%${q}%`,
+      ];
+      if (digits.length > 0) {
+        parts.push(`empleado_documento.ilike.%${digits}%`);
+      }
+      query = query.or(parts.join(","));
+    }
+
+    const { data, error, count } = await query
       .order("entregado_at", { ascending: false, nullsFirst: false })
-      .order("id", { ascending: false });
+      .order("id", { ascending: false })
+      .range(offset, offset + limit - 1);
+
     if (error) throw error;
-    return { entregas: ((data ?? []) as EntregaRow[]).map(mapEntrega) };
+
+    const entregas = await Promise.all(
+      ((data ?? []) as EntregaRow[]).map(async (row) => {
+        const mapped = mapEntrega(row);
+        if (mapped.epp_tipos?.foto_url) {
+          mapped.epp_tipos = {
+            ...mapped.epp_tipos,
+            foto_url: await signedEppFoto(mapped.epp_tipos.foto_url),
+          };
+        }
+        if (mapped.foto_evidencia_url) {
+          mapped.foto_evidencia_url = await signedEppFoto(
+            mapped.foto_evidencia_url,
+          );
+        }
+        return mapped;
+      }),
+    );
+
+    return {
+      entregas,
+      total: count ?? 0,
+      limit,
+      offset,
+    };
   },
 
   async registrarEntrega(
@@ -588,14 +688,17 @@ export const eppService = {
     if (empresaError) throw empresaError;
     const empresa = normalizarEmpresaParaPlanilla(empresaRaw);
 
-    let empleadoSector: string | null = null;
+    let empleadoPuesto: string | null = null;
+    let empleadoEppNecesarios: string | null = null;
     if (entrega.empleado_id) {
       const { data: empleado } = await supabaseAdmin
         .from("empleados")
-        .select("sector")
+        .select("puesto, epp_necesarios, sector")
         .eq("id", entrega.empleado_id)
         .maybeSingle();
-      empleadoSector = empleado?.sector ?? null;
+      // Fallback a sector solo para puesto (dato histórico pre-migración)
+      empleadoPuesto = empleado?.puesto?.trim() || empleado?.sector?.trim() || null;
+      empleadoEppNecesarios = empleado?.epp_necesarios?.trim() || null;
     }
 
     const firmaBuffer = await storageService.downloadBuffer(
@@ -616,8 +719,8 @@ export const eppService = {
       empleado: {
         nombre: entrega.empleado_nombre,
         dni: entrega.empleado_documento,
-        puesto: empleadoSector,
-        epp_necesarios: empleadoSector,
+        puesto: empleadoPuesto,
+        epp_necesarios: empleadoEppNecesarios,
       },
       items: [
         {
@@ -825,8 +928,15 @@ export const eppService = {
     return { success: true, id: data.id };
   },
 
-  async listarLicitaciones(empresaId: string) {
-    const { data, error } = await supabaseAdmin
+  async listarLicitaciones(
+    empresaId: string,
+    opts?: { limit?: number; offset?: number; q?: string },
+  ) {
+    const limit = clampInt(opts?.limit, 10, 1, 100);
+    const offset = clampInt(opts?.offset, 0, 0, 500_000);
+    const q = sanitizeSearchTerm(opts?.q);
+
+    let query = supabaseAdmin
       .from("epp_licitaciones")
       .select(
         `
@@ -834,9 +944,20 @@ export const eppService = {
         epp_licitacion_items(*, epp_tipos(id, nombre, descripcion, foto_url)),
         epp_licitacion_cotizaciones!epp_licitacion_cotizaciones_licitacion_id_fkey(*)
       `,
+        { count: "exact" },
       )
-      .eq("empresa_id", empresaId)
-      .order("created_at", { ascending: false });
+      .eq("empresa_id", empresaId);
+
+    if (q) {
+      query = query.or(
+        `titulo.ilike.%${q}%,comprador_nombre.ilike.%${q}%,descripcion.ilike.%${q}%`,
+      );
+    }
+
+    const { data, error, count } = await query
+      .order("created_at", { ascending: false })
+      .range(offset, offset + limit - 1);
+
     if (error) throw error;
 
     const licitaciones = await Promise.all(
@@ -846,12 +967,32 @@ export const eppService = {
           : [];
         return ocultarComisionLicitacion({
           ...lic,
-          epp_licitacion_cotizaciones: await firmarPresupuestosCotizaciones(cotizaciones),
+          epp_licitacion_cotizaciones:
+            await firmarPresupuestosCotizaciones(cotizaciones),
         });
       }),
     );
 
-    return { licitaciones };
+    const { data: estadoRows, error: estadoError } = await supabaseAdmin
+      .from("epp_licitaciones")
+      .select("estado")
+      .eq("empresa_id", empresaId);
+    if (estadoError) throw estadoError;
+
+    const stats = { abiertas: 0, adjudicacion: 0, cerradas: 0 };
+    for (const row of estadoRows ?? []) {
+      if (row.estado === "abierta") stats.abiertas += 1;
+      else if (row.estado === "adjudicacion") stats.adjudicacion += 1;
+      else if (row.estado === "cerrada") stats.cerradas += 1;
+    }
+
+    return {
+      licitaciones,
+      total: count ?? 0,
+      limit,
+      offset,
+      stats,
+    };
   },
 
   async crearLicitacion(
@@ -1645,7 +1786,7 @@ export const eppService = {
   async generarPlanillaHistoricaEmpleado(empleadoId: string) {
     const { data: empleado, error: empleadoError } = await supabaseAdmin
       .from("empleados")
-      .select("id, empresa_id, nombre, documento, sector")
+      .select("id, empresa_id, nombre, documento, sector, puesto, epp_necesarios")
       .eq("id", empleadoId)
       .single();
 
@@ -1715,8 +1856,8 @@ export const eppService = {
       empleado: {
         nombre: empleado.nombre,
         dni: empleado.documento,
-        puesto: empleado.sector,
-        epp_necesarios: empleado.sector,
+        puesto: empleado.puesto?.trim() || empleado.sector?.trim() || null,
+        epp_necesarios: empleado.epp_necesarios?.trim() || null,
       },
       items,
       informacion_adicional: `Registro histórico consolidado — ${entregasUnicas.length} entrega(s)`,
@@ -1913,7 +2054,7 @@ export const eppService = {
 
     let fotoUrl: string | null = null;
     if (foto) {
-      const ext = foto.originalname?.split(".").pop() || "jpg";
+      const ext = safeExtensionFromUpload(foto);
       const fotoPath = `evidencias/${empresa.id}/${dni}_${Date.now()}.${ext}`;
       await storageService.subirArchivo("epp_fotos", fotoPath, foto);
       fotoUrl = storageService.obtenerUrlPublica("epp_fotos", fotoPath);

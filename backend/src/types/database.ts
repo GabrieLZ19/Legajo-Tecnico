@@ -60,6 +60,7 @@ export interface Perfil {
   rol: RolUsuario;
   activo: boolean;
   created_at: string;
+  sello_url?: string | null;
   permisos_personalizados?: unknown;
 }
 

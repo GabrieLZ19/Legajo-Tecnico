@@ -253,7 +253,18 @@ export const capacitacionesService = {
   /**
    * Listar capacitaciones de la empresa
    */
-  async listar(empresaId: string, opts?: { soloVisibleEnte?: boolean }) {
+  async listar(
+    empresaId: string,
+    opts?: {
+      soloVisibleEnte?: boolean;
+      limit?: number;
+      offset?: number;
+      estado?: string;
+    },
+  ) {
+    const limit = clampInt(opts?.limit, 10, 1, 100);
+    const offset = clampInt(opts?.offset, 0, 0, 500_000);
+
     let query = supabaseAdmin
       .from("capacitaciones")
       .select(
@@ -262,6 +273,7 @@ export const capacitacionesService = {
         capacitacion_preguntas(id),
         capacitacion_asistencias(id)
       `,
+        { count: "exact" },
       )
       .eq("empresa_id", empresaId);
 
@@ -269,9 +281,14 @@ export const capacitacionesService = {
       query = query.eq("visible_ente_regulador", true);
     }
 
-    const { data, error } = await query
+    if (opts?.estado && opts.estado !== "todas") {
+      query = query.eq("estado", opts.estado);
+    }
+
+    const { data, error, count } = await query
       .order("fecha", { ascending: false, nullsFirst: false })
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .range(offset, offset + limit - 1);
 
     if (error) throw error;
 
@@ -283,12 +300,19 @@ export const capacitacionesService = {
       capacitacion_asistencias: undefined,
     }));
 
-    return Promise.all(
+    const capacitaciones = await Promise.all(
       mapped.map(async (cap) => ({
         ...cap,
         registro_manual_url: await storageService.signUrl(cap.registro_manual_url),
       })),
     );
+
+    return {
+      capacitaciones,
+      total: count ?? 0,
+      limit,
+      offset,
+    };
   },
 
   /**

@@ -354,6 +354,32 @@ export const adminController = {
     }
   },
 
+  async subirSelloUsuario(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const consultoraId = requireConsultoraId(req.user!);
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ error: "No se subió ninguna imagen de sello" });
+      }
+      const selloUrl = await adminService.subirSelloUsuario(consultoraId, id, file);
+      res.json({ success: true, sello_url: selloUrl });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async eliminarSelloUsuario(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const consultoraId = requireConsultoraId(req.user!);
+      await adminService.eliminarSelloUsuario(consultoraId, id);
+      res.json({ success: true });
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async buscarCuit(req: Request, res: Response, next: NextFunction) {
     try {
       const cuit = Array.isArray(req.params.cuit) ? req.params.cuit[0] : req.params.cuit;

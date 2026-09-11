@@ -13,6 +13,7 @@ import {
   validateCuit,
 } from "../utils/cuit";
 import { RolUsuario, EstadoEmpresa } from "../types/database";
+import { safeExtensionFromUpload } from "../config/multer";
 
 const ROLES_CREABLES: RolUsuario[] = ["dueno", "preventor", "ente_regulador"];
 const ESTADOS_EMPRESA: EstadoEmpresa[] = [
@@ -63,7 +64,12 @@ export const adminService = {
       .eq("consultora_id", consultoraId);
 
     if (error) throw error;
-    return data;
+    return Promise.all(
+      (data || []).map(async (row) => ({
+        ...row,
+        sello_url: await storageService.signUrl(row.sello_url),
+      })),
+    );
   },
 
   async crearUsuario(
@@ -975,6 +981,82 @@ export const adminService = {
 
   async marcarTodasNotificacionesLeidas(usuarioId: string, consultoraId: string) {
     return await notificacionService.marcarTodasLeidas(usuarioId, consultoraId);
+  },
+
+  async subirSelloUsuario(
+    consultoraId: string,
+    usuarioId: string,
+    file: Express.Multer.File,
+  ) {
+    const { data: perfil, error: errPerfil } = await supabaseAdmin
+      .from("perfiles")
+      .select("id, sello_url")
+      .eq("id", usuarioId)
+      .eq("consultora_id", consultoraId)
+      .maybeSingle();
+
+    if (errPerfil) throw errPerfil;
+    if (!perfil) throw new HttpError(404, "Usuario no encontrado");
+
+    const mime = file.mimetype.toLowerCase();
+    if (!mime.startsWith("image/") || mime.includes("svg")) {
+      throw new HttpError(400, "El sello debe ser una imagen JPG, PNG o WEBP.");
+    }
+
+    const ext = safeExtensionFromUpload(file);
+    if (!["jpg", "png", "webp"].includes(ext)) {
+      throw new HttpError(400, "El sello debe ser JPG, PNG o WEBP.");
+    }
+
+    const path = `sellos/${usuarioId}/sello_${Date.now()}.${ext}`;
+    await storageService.subirArchivo("firmas_digitales", path, file);
+    const selloUrl = storageService.obtenerUrlPublica("firmas_digitales", path);
+
+    const { error: dbError } = await supabaseAdmin
+      .from("perfiles")
+      .update({ sello_url: selloUrl })
+      .eq("id", usuarioId)
+      .eq("consultora_id", consultoraId);
+
+    if (dbError) {
+      await storageService.eliminarArchivo("firmas_digitales", path);
+      throw dbError;
+    }
+
+    return storageService.signUrl(selloUrl);
+  },
+
+  async eliminarSelloUsuario(consultoraId: string, usuarioId: string) {
+    const { data: perfil, error: errPerfil } = await supabaseAdmin
+      .from("perfiles")
+      .select("id, sello_url")
+      .eq("id", usuarioId)
+      .eq("consultora_id", consultoraId)
+      .maybeSingle();
+
+    if (errPerfil) throw errPerfil;
+    if (!perfil) throw new HttpError(404, "Usuario no encontrado");
+
+    const { error: dbError } = await supabaseAdmin
+      .from("perfiles")
+      .update({ sello_url: null })
+      .eq("id", usuarioId)
+      .eq("consultora_id", consultoraId);
+
+    if (dbError) throw dbError;
+
+    if (perfil.sello_url) {
+      const parsed = storageService.parseStorageUrl(perfil.sello_url);
+      if (parsed?.bucket === "firmas_digitales") {
+        try {
+          await storageService.eliminarArchivo(parsed.bucket, parsed.path);
+        } catch {
+          // best-effort cleanup
+        }
+      }
+    }
+
+    return { ok: true };
   },
 
   async subirLogoConsultora(consultoraId: string, file: Express.Multer.File) {

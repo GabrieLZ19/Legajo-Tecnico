@@ -309,7 +309,7 @@ function drawPlanillaPage(
   );
   y += 16;
 
-  const boxH = 34;
+  const boxH = 42;
   const halfW = PAGE_WIDTH / 2 - 4;
   doc.rect(PAGE_LEFT, y, halfW, boxH).stroke("#000000");
   doc.rect(PAGE_LEFT + halfW + 8, y, halfW, boxH).stroke("#000000");
@@ -330,13 +330,13 @@ function drawPlanillaPage(
   doc.font("Helvetica").fontSize(7);
   doc.text(data.empleado.puesto || "", PAGE_LEFT + 4, y + 20, {
     width: halfW - 8,
-    height: 12,
+    height: 18,
   });
   doc.text(
     data.empleado.epp_necesarios || "",
     PAGE_LEFT + halfW + 12,
     y + 20,
-    { width: halfW - 8, height: 12 },
+    { width: halfW - 8, height: 18 },
   );
   y += boxH + 8;
 
