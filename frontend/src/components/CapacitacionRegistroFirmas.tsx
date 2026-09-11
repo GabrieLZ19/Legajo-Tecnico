@@ -6,8 +6,10 @@ import { Capacitacion } from "@/types";
 import { PenLine, Save } from "lucide-react";
 import SignaturePad, { readSignatureOrThrow } from "@/components/SignaturePad";
 import SignatureImageImport from "@/components/SignatureImageImport";
+import UsarMiSelloButton from "@/components/UsarMiSelloButton";
 import { isSignatureEmpty } from "@/lib/signature";
 import CapacitacionAgendaFields from "@/components/CapacitacionAgendaFields";
+import { useAuth } from "@/hooks/useAuth";
 import {
   CapAgendaErrors,
   CapAgendaValue,
@@ -45,6 +47,7 @@ export default function CapacitacionRegistroFirmas({
   onSave,
   onAlert,
 }: Props) {
+  const { user } = useAuth();
   const [instructor, setInstructor] = useState(cap.instructor || "");
   const [agenda, setAgenda] = useState<CapAgendaValue>(() =>
     agendaFromStored({
@@ -233,7 +236,9 @@ export default function CapacitacionRegistroFirmas({
                 <SignaturePad ref={sigCapRef} heightClassName="h-36" />
               </div>
               <p className="text-[11px] text-slate-400 font-semibold">
-                También podés subir una imagen o pegar un recorte (Ctrl+V).
+                {user?.sello_url
+                  ? "Podés usar tu sello precargado, subir una imagen o pegar un recorte (Ctrl+V)."
+                  : "También podés subir una imagen o pegar un recorte (Ctrl+V)."}
               </p>
               <input
                 type="text"
@@ -250,6 +255,12 @@ export default function CapacitacionRegistroFirmas({
                 >
                   Limpiar
                 </button>
+                <UsarMiSelloButton
+                  canvasRef={sigCapRef}
+                  selloUrl={user?.sello_url}
+                  onError={(msg) => onAlert("error", "Sello", msg)}
+                  className="flex-1 min-w-[120px] inline-flex items-center justify-center gap-1.5 py-2 border border-blue-200 bg-blue-50 text-blue-800 rounded-xl text-xs font-bold hover:bg-blue-100 disabled:opacity-50"
+                />
                 <SignatureImageImport
                   canvasRef={sigCapRef}
                   enablePaste={activePad === "capacitador"}

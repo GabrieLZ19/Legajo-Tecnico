@@ -13,6 +13,7 @@ import {
   Package,
 } from "lucide-react";
 import SignaturePad, { readSignatureOrThrow } from "@/components/SignaturePad";
+import SignatureImageImport from "@/components/SignatureImageImport";
 import { eppService } from "@/utils/services/epp.service";
 import type { EppTipo } from "@/types";
 
@@ -349,17 +350,25 @@ export default function EntregaEppPublicaPage() {
             Firma del trabajador
           </h2>
           <p className="text-[11px] text-slate-400">
-            Con esta firma confirmás la recepción del EPP. No se solicita firma del
+            Con esta firma confirmás la recepción del EPP. Podés dibujar, subir
+            una imagen o pegar un recorte (Ctrl+V). No se solicita firma del
             responsable de la empresa.
           </p>
           <SignaturePad ref={sigRef} />
-          <button
-            type="button"
-            onClick={() => sigRef.current?.clear()}
-            className="text-[11px] font-bold text-slate-400 hover:text-slate-700 cursor-pointer"
-          >
-            Limpiar firma
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => sigRef.current?.clear()}
+              className="inline-flex items-center justify-center px-3.5 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-bold cursor-pointer"
+            >
+              Limpiar firma
+            </button>
+            <SignatureImageImport
+              canvasRef={sigRef}
+              onError={(msg) => setError(msg)}
+              label="Insertar imagen"
+            />
+          </div>
         </section>
 
         {error && (

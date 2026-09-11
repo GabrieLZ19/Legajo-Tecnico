@@ -5,6 +5,9 @@ import type SignatureCanvas from 'react-signature-canvas';
 import { RotateCcw, Check } from 'lucide-react';
 import SignaturePad, { readSignatureOrThrow } from '@/components/SignaturePad';
 import SignatureImageImport from '@/components/SignatureImageImport';
+import UsarMiSelloButton from '@/components/UsarMiSelloButton';
+import { useAuth } from '@/hooks/useAuth';
+import { useAlert } from '@/context/AlertContext';
 
 interface FirmaCanvasProps {
   onSave: (base64: string) => void;
@@ -14,6 +17,8 @@ interface FirmaCanvasProps {
 
 export const FirmaCanvas: React.FC<FirmaCanvasProps> = ({ onSave, onCancel, title = 'Registrar Firma Digital' }) => {
   const sigCanvas = useRef<SignatureCanvas>(null);
+  const { user } = useAuth();
+  const { showAlert } = useAlert();
 
   const handleClear = () => {
     sigCanvas.current?.clear();
@@ -28,12 +33,12 @@ export const FirmaCanvas: React.FC<FirmaCanvasProps> = ({ onSave, onCancel, titl
         err instanceof Error
           ? err.message
           : 'Por favor, dibujá tu firma antes de guardar.';
-      alert(message);
+      showAlert('warning', 'Firma incompleta', message);
     }
   };
 
   const handleImageError = (message: string) => {
-    alert(message);
+    showAlert('error', 'Imagen de firma', message);
   };
 
   return (
@@ -41,7 +46,9 @@ export const FirmaCanvas: React.FC<FirmaCanvasProps> = ({ onSave, onCancel, titl
       <div className="text-center">
         <h3 className="text-lg font-bold text-slate-900">{title}</h3>
         <p className="text-xs text-slate-500 mt-1">
-          Dibujá tu firma, subí una imagen o pegá un recorte (Ctrl+V / Cmd+V).
+          {user?.sello_url
+            ? 'Usá tu sello precargado, dibujá, subí una imagen o pegá un recorte (Ctrl+V).'
+            : 'Dibujá tu firma, subí una imagen o pegá un recorte (Ctrl+V / Cmd+V).'}
         </p>
       </div>
 
@@ -66,6 +73,11 @@ export const FirmaCanvas: React.FC<FirmaCanvasProps> = ({ onSave, onCancel, titl
             <RotateCcw className="h-3.5 w-3.5" />
             Limpiar
           </button>
+          <UsarMiSelloButton
+            canvasRef={sigCanvas}
+            selloUrl={user?.sello_url}
+            onError={handleImageError}
+          />
           <SignatureImageImport
             canvasRef={sigCanvas}
             onError={handleImageError}

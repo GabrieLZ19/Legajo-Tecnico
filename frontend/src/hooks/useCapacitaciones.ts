@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api } from "@/lib/api";
+import { capacitacionesService } from "@/utils/services/capacitaciones.service";
 import type {
   CapacitacionHistoricoFiltros,
   CapacitacionHistoricoRow,
@@ -8,12 +9,14 @@ export function useCapacitaciones() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const getCapacitaciones = async (empresaId: string) => {
+  const getCapacitaciones = async (
+    empresaId: string,
+    params?: { limit?: number; offset?: number; estado?: string },
+  ) => {
     setLoading(true);
     setError(null);
     try {
-      const { data } = await api.get(`/capacitaciones?empresa_id=${empresaId}`);
-      return data.capacitaciones || [];
+      return await capacitacionesService.listar(empresaId, params);
     } catch (err: any) {
       setError(err.response?.data?.error || "Error al cargar capacitaciones");
       throw err;

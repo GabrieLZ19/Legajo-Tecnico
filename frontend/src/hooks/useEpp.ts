@@ -30,11 +30,14 @@ export function useEpp() {
   }, []);
 
   const getEntregas = useCallback(
-    (empresaId: string) =>
-      run(async () => {
-        const { data } = await api.get(`/epp/entregas?empresa_id=${empresaId}`);
-        return data;
-      }, "Error al obtener entregas de EPP"),
+    (
+      empresaId: string,
+      params?: { limit?: number; offset?: number; q?: string },
+    ) =>
+      run(
+        () => eppService.listarEntregas(empresaId, params),
+        "Error al obtener entregas de EPP",
+      ),
     [run],
   );
 
@@ -60,32 +63,13 @@ export function useEpp() {
 
   const crearTipoEpp = useCallback(
     (payload: { nombre: string; descripcion?: string; foto?: File }) =>
-      run(async () => {
-        const form = new FormData();
-        form.append("nombre", payload.nombre);
-        if (payload.descripcion) form.append("descripcion", payload.descripcion);
-        if (payload.foto) form.append("foto", payload.foto);
-        const { data } = await api.post("/epp/tipos", form, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-        return data;
-      }, "Error al crear tipo de EPP"),
+      run(() => eppService.crearTipo(payload), "Error al crear tipo de EPP"),
     [run],
   );
 
   const actualizarTipoEpp = useCallback(
     (id: string, payload: { nombre?: string; descripcion?: string; activo?: boolean; foto?: File }) =>
-      run(async () => {
-        const form = new FormData();
-        if (payload.nombre !== undefined) form.append("nombre", payload.nombre);
-        if (payload.descripcion !== undefined) form.append("descripcion", payload.descripcion);
-        if (payload.activo !== undefined) form.append("activo", String(payload.activo));
-        if (payload.foto) form.append("foto", payload.foto);
-        const { data } = await api.patch(`/epp/tipos/${id}`, form, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-        return data;
-      }, "Error al actualizar tipo de EPP"),
+      run(() => eppService.actualizarTipo(id, payload), "Error al actualizar tipo de EPP"),
     [run],
   );
 
@@ -99,29 +83,43 @@ export function useEpp() {
   );
 
   const getEmpleados = useCallback(
-    (empresaId: string) =>
-      run(async () => {
-        const { data } = await api.get(`/epp/empleados?empresa_id=${empresaId}`);
-        return data;
-      }, "Error al obtener trabajadores"),
+    (
+      empresaId: string,
+      params?: { limit?: number; offset?: number; q?: string },
+    ) =>
+      run(
+        () => eppService.listarEmpleados(empresaId, params),
+        "Error al obtener trabajadores",
+      ),
     [run],
   );
 
   const crearEmpleado = useCallback(
-    (payload: { empresa_id: string; nombre: string; documento: string; sector?: string }) =>
-      run(async () => {
-        const { data } = await api.post("/epp/empleados", payload);
-        return data;
-      }, "Error al crear trabajador"),
+    (payload: {
+      empresa_id: string;
+      nombre: string;
+      documento: string;
+      sector?: string;
+      puesto?: string;
+      epp_necesarios?: string;
+    }) =>
+      run(() => eppService.crearEmpleado(payload), "Error al crear trabajador"),
     [run],
   );
 
   const actualizarEmpleado = useCallback(
-    (id: string, payload: { nombre?: string; documento?: string; sector?: string | null; activo?: boolean }) =>
-      run(async () => {
-        const { data } = await api.patch(`/epp/empleados/${id}`, payload);
-        return data;
-      }, "Error al actualizar trabajador"),
+    (
+      id: string,
+      payload: {
+        nombre?: string;
+        documento?: string;
+        sector?: string | null;
+        puesto?: string | null;
+        epp_necesarios?: string | null;
+        activo?: boolean;
+      },
+    ) =>
+      run(() => eppService.actualizarEmpleado(id, payload), "Error al actualizar trabajador"),
     [run],
   );
 
@@ -204,11 +202,14 @@ export function useEpp() {
   );
 
   const getLicitaciones = useCallback(
-    (empresaId: string) =>
-      run(async () => {
-        const { data } = await api.get(`/epp/licitaciones?empresa_id=${empresaId}`);
-        return data;
-      }, "Error al obtener licitaciones"),
+    (
+      empresaId: string,
+      params?: { limit?: number; offset?: number; q?: string },
+    ) =>
+      run(
+        () => eppService.listarLicitaciones(empresaId, params),
+        "Error al obtener licitaciones",
+      ),
     [run],
   );
 

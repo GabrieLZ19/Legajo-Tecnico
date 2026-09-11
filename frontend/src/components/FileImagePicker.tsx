@@ -1,8 +1,9 @@
 "use client";
 
-import { ImagePlus, X } from "lucide-react";
+import { ImagePlus, Loader2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useAlert } from "@/context/AlertContext";
+import { compressImage } from "@/lib/compressImage";
 import { getClipboardImageFile } from "@/lib/signature";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -32,7 +33,7 @@ export function FileImagePicker({
   file,
   onChange,
   label = "Foto",
-  hint = "PNG o JPG, hasta 5 MB · Ctrl+V para pegar un recorte",
+  hint = "JPG, PNG o WEBP, hasta 5 MB · Ctrl+V para pegar un recorte",
   previewUrl,
   capture,
   enablePaste = true,
@@ -43,6 +44,7 @@ export function FileImagePicker({
   const showAlertRef = useRef(showAlert);
   const [localPreview, setLocalPreview] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const dragDepthRef = useRef(0);
 
   onChangeRef.current = onChange;
@@ -58,32 +60,53 @@ export function FileImagePicker({
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
-  const applyFile = (next: File | null) => {
+  const applyFile = async (next: File | null) => {
     if (!next) return;
-    if (!next.type.startsWith("image/")) {
+    const mime = (next.type || "").toLowerCase();
+    const looksImage =
+      mime.startsWith("image/") ||
+      /\.(jpe?g|png|webp|heic|heif|gif|bmp|jfif)$/i.test(next.name || "");
+    if (!looksImage) {
       showAlertRef.current(
         "warning",
         "Formato no válido",
-        "Usá una imagen PNG, JPG, WEBP o GIF.",
+        "Usá una imagen JPG, PNG o WEBP.",
       );
       return;
     }
-    if (next.size > MAX_IMAGE_BYTES) {
+
+    setProcessing(true);
+    try {
+      const compressed = await compressImage(next);
+      if (compressed.size > MAX_IMAGE_BYTES) {
+        showAlertRef.current(
+          "warning",
+          "Archivo demasiado grande",
+          "La imagen supera el máximo de 5 MB. Probá con otra más liviana.",
+        );
+        return;
+      }
+      // Renombrar recortes del clipboard (suelen venir como "image.png")
+      const named =
+        !compressed.name ||
+        compressed.name === "image.png" ||
+        compressed.name === "image.jpg"
+          ? new File([compressed], `recorte-${Date.now()}.jpg`, {
+              type: compressed.type || "image/jpeg",
+            })
+          : compressed;
+      onChangeRef.current(named);
+    } catch (err) {
       showAlertRef.current(
         "warning",
-        "Archivo demasiado grande",
-        "La imagen supera el máximo de 5 MB.",
+        "No se pudo usar la imagen",
+        err instanceof Error
+          ? err.message
+          : "Usá JPG, PNG o WEBP (máx. 5 MB).",
       );
-      return;
+    } finally {
+      setProcessing(false);
     }
-    // Renombrar recortes del clipboard (suelen venir como "image.png")
-    const named =
-      !next.name || next.name === "image.png" || next.name === "image.jpg"
-        ? new File([next], `recorte-${Date.now()}.png`, {
-            type: next.type || "image/png",
-          })
-        : next;
-    onChangeRef.current(named);
   };
 
   useEffect(() => {
@@ -96,7 +119,7 @@ export function FileImagePicker({
       if (!pasted) return;
 
       event.preventDefault();
-      applyFile(pasted);
+      void applyFile(pasted);
     };
 
     window.addEventListener("paste", onPaste);
@@ -107,7 +130,10 @@ export function FileImagePicker({
   const captureAttr =
     capture === true ? "environment" : capture === false || capture == null ? undefined : capture;
 
-  const openPicker = () => inputRef.current?.click();
+  const openPicker = () => {
+    if (processing) return;
+    inputRef.current?.click();
+  };
 
   return (
     <div className="space-y-1.5">
@@ -147,19 +173,21 @@ export function FileImagePicker({
           dragDepthRef.current = 0;
           setDragging(false);
           const dropped = getClipboardImageFile(e.dataTransfer);
-          if (dropped) applyFile(dropped);
+          if (dropped) void applyFile(dropped);
         }}
         onPaste={(e) => {
           const pasted = getClipboardImageFile(e.clipboardData);
           if (!pasted) return;
           e.preventDefault();
           e.stopPropagation();
-          applyFile(pasted);
+          void applyFile(pasted);
         }}
         className={`flex items-center gap-3 w-full cursor-pointer rounded-2xl border-2 border-dashed transition-colors p-3 outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 ${
-          dragging
-            ? "border-blue-500 bg-blue-50"
-            : "border-slate-200 bg-slate-50 hover:border-blue-400 hover:bg-blue-50/40"
+          processing
+            ? "pointer-events-none opacity-70 border-slate-200 bg-slate-50"
+            : dragging
+              ? "border-blue-500 bg-blue-50"
+              : "border-slate-200 bg-slate-50 hover:border-blue-400 hover:bg-blue-50/40"
         }`}
       >
         <div className="h-14 w-14 rounded-xl bg-white border border-slate-100 overflow-hidden flex items-center justify-center shrink-0">
@@ -172,26 +200,32 @@ export function FileImagePicker({
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-bold text-slate-800 truncate">
-            {file
-              ? file.name
-              : shown
-                ? "Cambiar foto"
-                : dragging
-                  ? "Soltá la imagen acá"
-                  : "Elegir, arrastrar o pegar foto"}
+            {processing
+              ? "Procesando imagen..."
+              : file
+                ? file.name
+                : shown
+                  ? "Cambiar foto"
+                  : dragging
+                    ? "Soltá la imagen acá"
+                    : "Elegir, arrastrar o pegar foto"}
           </p>
           <p className="text-[11px] text-slate-400 font-semibold">{hint}</p>
         </div>
+        {processing ? (
+          <Loader2 className="h-5 w-5 text-blue-500 animate-spin shrink-0" />
+        ) : null}
         <input
           ref={inputRef}
           type="file"
-          accept="image/*"
+          accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif"
           capture={captureAttr}
+          disabled={processing}
           className="sr-only"
           onChange={(e) => {
             const next = e.target.files?.[0] ?? null;
             e.target.value = "";
-            applyFile(next);
+            void applyFile(next);
           }}
         />
       </div>

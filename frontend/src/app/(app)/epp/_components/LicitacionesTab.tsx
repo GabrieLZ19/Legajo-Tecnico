@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -21,17 +21,20 @@ import type { EppCotizacion, EppLicitacion, EppProveedor } from "@/types";
 import { useEpp } from "@/hooks/useEpp";
 import { useAlert } from "@/context/AlertContext";
 import { validateProveedorFicha } from "@/lib/proveedorValidation";
+import { PaginationBar } from "@/components/PaginationBar";
 import {
   emptyProveedorFicha,
   ProveedorFichaFields,
   type ProveedorFichaForm,
 } from "./ProveedorFichaFields";
 
+const PAGE_SIZE = 10;
+
 type LicitacionesTabProps = {
-  licitaciones: EppLicitacion[];
+  empresaId: string;
   proveedores: EppProveedor[];
   canEdit: boolean;
-  onChanged: () => Promise<void>;
+  onProveedoresChanged: () => Promise<void>;
 };
 
 function money(value: number | null | undefined): string {
@@ -109,32 +112,59 @@ function shareLinks(lic: EppLicitacion, cot: EppCotizacion) {
 }
 
 export function LicitacionesTab({
-  licitaciones,
+  empresaId,
   proveedores,
   canEdit,
-  onChanged,
+  onProveedoresChanged,
 }: LicitacionesTabProps) {
-  const { crearProveedor, actualizarProveedor, eliminarProveedor } = useEpp();
+  const { getLicitaciones, crearProveedor, actualizarProveedor, eliminarProveedor } =
+    useEpp();
   const { showAlert, showConfirm } = useAlert();
+  const [licitaciones, setLicitaciones] = useState<EppLicitacion[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    abiertas: 0,
+    adjudicacion: 0,
+    cerradas: 0,
+  });
   const [showGestion, setShowGestion] = useState(false);
   const [fichaId, setFichaId] = useState<string | null>(null);
   const [ficha, setFicha] = useState<ProveedorFichaForm>(emptyProveedorFicha());
   const [savingFicha, setSavingFicha] = useState(false);
+  const [page, setPage] = useState(0);
 
   const activos = useMemo(() => proveedores.filter((p) => p.activo), [proveedores]);
   const fichaAbierta = fichaId !== null;
   const esAltaFicha = fichaId === "nuevo";
 
-  const stats = useMemo(() => {
-    const abiertas = licitaciones.filter((l) => l.estado === "abierta").length;
-    const adjudicacion = licitaciones.filter((l) => l.estado === "adjudicacion").length;
-    const cerradas = licitaciones.filter((l) => l.estado === "cerrada").length;
-    const cotizaciones = licitaciones.reduce(
-      (acc, l) => acc + (l.epp_licitacion_cotizaciones?.length ?? 0),
-      0,
-    );
-    return { abiertas, adjudicacion, cerradas, cotizaciones };
-  }, [licitaciones]);
+  const fetchLicitaciones = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await getLicitaciones(empresaId, {
+        limit: PAGE_SIZE,
+        offset: page * PAGE_SIZE,
+      });
+      setLicitaciones(data.licitaciones || []);
+      setTotal(data.total ?? 0);
+      if (data.stats) setStats(data.stats);
+    } catch (err) {
+      console.error("Error cargando licitaciones:", err);
+      setLicitaciones([]);
+      setTotal(0);
+    } finally {
+      setLoading(false);
+    }
+  }, [empresaId, getLicitaciones, page]);
+
+  useEffect(() => {
+    void fetchLicitaciones();
+  }, [fetchLicitaciones]);
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    if (page > totalPages - 1) setPage(Math.max(0, totalPages - 1));
+  }, [total, page]);
 
   useEffect(() => {
     if (!fichaId || fichaId === "nuevo") return;
@@ -184,7 +214,7 @@ export function LicitacionesTab({
           direccion: ficha.direccion.trim() || undefined,
           telefono: ficha.telefono.trim() || undefined,
         });
-        await onChanged();
+        await onProveedoresChanged();
         closeFicha();
         showAlert("success", "Proveedor creado", "Ya figura en el listado.");
       } else if (fichaId) {
@@ -194,7 +224,7 @@ export function LicitacionesTab({
           direccion: ficha.direccion.trim() || null,
           telefono: ficha.telefono.trim() || null,
         });
-        await onChanged();
+        await onProveedoresChanged();
         showAlert("success", "Ficha actualizada", "Los datos del proveedor se guardaron.");
       }
     } catch {
@@ -221,7 +251,7 @@ export function LicitacionesTab({
     try {
       await eliminarProveedor(fichaId);
       closeFicha();
-      await onChanged();
+      await onProveedoresChanged();
       showAlert("success", "Proveedor eliminado", "Ya no figura en el listado activo.");
     } catch {
       showAlert("error", "Error", "No se pudo eliminar el proveedor.");
@@ -286,7 +316,14 @@ export function LicitacionesTab({
         </div>
       </div>
 
-      {licitaciones.length === 0 ? (
+      {loading ? (
+        <div className="bg-white rounded-2xl border border-slate-200 px-6 py-14 text-center">
+          <div className="mx-auto animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-teal-600" />
+          <p className="text-xs text-slate-400 mt-3 font-semibold">
+            Cargando licitaciones…
+          </p>
+        </div>
+      ) : total === 0 ? (
         <div className="bg-gradient-to-b from-teal-50/80 to-white rounded-2xl border border-teal-100 px-6 py-14 text-center">
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-teal-100 text-teal-700">
             <Layers className="h-6 w-6" />
@@ -307,7 +344,8 @@ export function LicitacionesTab({
           )}
         </div>
       ) : (
-        <div className="rounded-2xl border border-slate-200 overflow-hidden divide-y divide-slate-200/80 shadow-sm shadow-slate-200/40">
+        <div className="rounded-2xl border border-slate-200 overflow-hidden shadow-sm shadow-slate-200/40">
+          <div className="divide-y divide-slate-200/80">
           {licitaciones.map((lic) => {
             const meta = estadoMeta(lic.estado);
             const cots = lic.epp_licitacion_cotizaciones ?? [];
@@ -506,6 +544,16 @@ export function LicitacionesTab({
               </article>
             );
           })}
+          </div>
+          <div className="p-3 border-t border-slate-100 bg-white">
+            <PaginationBar
+              page={page}
+              pageSize={PAGE_SIZE}
+              total={total}
+              onPageChange={setPage}
+              disabled={loading}
+            />
+          </div>
         </div>
       )}
 

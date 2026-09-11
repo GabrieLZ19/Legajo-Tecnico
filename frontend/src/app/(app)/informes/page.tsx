@@ -20,6 +20,7 @@ import { useAlert } from "@/context/AlertContext";
 import { VisibleEnteToggle } from "@/components/VisibleEnteToggle";
 import { actualizarVisibilidadInforme } from "@/lib/visibilidadEnte";
 import { useQueryClient } from "@tanstack/react-query";
+import { PaginationBar } from "@/components/PaginationBar";
 
 function toInputDate(d: Date) {
   const y = d.getFullYear();
@@ -645,34 +646,14 @@ export default function InformesPage() {
         </div>
       )}
 
-      {!hasActiveFilters && total > PAGE_SIZE && (
-        <div className="flex items-center justify-between gap-3 bg-white border border-slate-200 rounded-2xl px-4 py-3 shadow-2xs">
-          <p className="text-xs font-semibold text-slate-500">
-            Mostrando {Math.min(page * PAGE_SIZE + 1, total)}–
-            {Math.min((page + 1) * PAGE_SIZE, total)} de {total}
-          </p>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={page === 0 || isLoading}
-              onClick={() => setPage((p) => Math.max(0, p - 1))}
-              className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-            >
-              Anterior
-            </button>
-            <span className="text-xs font-bold text-slate-600">
-              Pág. {page + 1} / {Math.max(1, Math.ceil(total / PAGE_SIZE))}
-            </span>
-            <button
-              type="button"
-              disabled={(page + 1) * PAGE_SIZE >= total || isLoading}
-              onClick={() => setPage((p) => p + 1)}
-              className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-            >
-              Siguiente
-            </button>
-          </div>
-        </div>
+      {!hasActiveFilters && (
+        <PaginationBar
+          page={page}
+          pageSize={PAGE_SIZE}
+          total={total}
+          onPageChange={setPage}
+          disabled={isLoading}
+        />
       )}
 
       {confirmDeleteId ? (

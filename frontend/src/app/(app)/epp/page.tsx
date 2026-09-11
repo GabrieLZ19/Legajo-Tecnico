@@ -1,57 +1,39 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { EppEntrega, EppTipo, Empleado, EppProveedor, EppLicitacion } from "@/types";
+import { EppTipo, EppProveedor } from "@/types";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
-  HardHat,
   Plus,
   Download,
   Package,
   FileText,
   Layers,
   Users,
-  CheckCircle2,
   QrCode,
 } from "lucide-react";
 import { useEpp } from "@/hooks/useEpp";
 import { useAlert } from "@/context/AlertContext";
-import { VisibleEnteToggle } from "@/components/VisibleEnteToggle";
 import { actualizarVisibilidadEppEntrega } from "@/lib/visibilidadEnte";
 import { CatalogoTab } from "./_components/CatalogoTab";
 import { PersonalTab } from "./_components/PersonalTab";
 import { LicitacionesTab } from "./_components/LicitacionesTab";
+import { EntregasTab } from "./_components/EntregasTab";
 import { canWriteAppModule } from "@/lib/moduleAccess";
 
 type Tab = "entregas" | "personal" | "catalogo" | "licitaciones";
 
 const VALID_TABS: Tab[] = ["entregas", "personal", "catalogo", "licitaciones"];
 
-const formatLocalDate = (dateStr: string | Date | null | undefined): string => {
-  if (!dateStr) return "";
-  const isoStr =
-    typeof dateStr === "string" ? dateStr : new Date(dateStr).toISOString();
-  const datePart = isoStr.split("T")[0];
-  const parts = datePart.split("-");
-  if (parts.length === 3) {
-    const [year, month, day] = parts;
-    return `${parseInt(day, 10)}/${parseInt(month, 10)}/${year}`;
-  }
-  return new Date(dateStr).toLocaleDateString("es-AR");
-};
-
 export default function EppPage() {
   const { user, empresa } = useAuth();
   const searchParams = useSearchParams();
   const {
-    getEntregas,
     getTiposEpp,
     descargarPdfEntrega,
-    getEmpleados,
     getProveedores,
-    getLicitaciones,
     generarQrEntrega,
   } = useEpp();
   const { showAlert } = useAlert();
@@ -61,12 +43,9 @@ export default function EppPage() {
       ? (tabParam as Tab)
       : "entregas";
   const [tab, setTab] = useState<Tab>(initialTab);
-  const [entregas, setEntregas] = useState<EppEntrega[]>([]);
   const [tipos, setTipos] = useState<EppTipo[]>([]);
-  const [empleados, setEmpleados] = useState<Empleado[]>([]);
   const [proveedores, setProveedores] = useState<EppProveedor[]>([]);
-  const [licitaciones, setLicitaciones] = useState<EppLicitacion[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingShared, setLoadingShared] = useState(true);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [qrEntrega, setQrEntrega] = useState<{
     qr: string;
@@ -81,11 +60,6 @@ export default function EppPage() {
   const handleVisibilidadChange = async (id: string, visible: boolean) => {
     try {
       await actualizarVisibilidadEppEntrega(id, visible);
-      setEntregas((prev) =>
-        prev.map((e) =>
-          e.id === id ? { ...e, visible_ente_regulador: visible } : e,
-        ),
-      );
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
       showAlert(
@@ -94,6 +68,7 @@ export default function EppPage() {
         axiosErr.response?.data?.error ||
           "No se pudo actualizar la visibilidad ante el ente regulador.",
       );
+      throw err;
     }
   };
 
@@ -103,33 +78,35 @@ export default function EppPage() {
     }
   }, [tabParam, tab]);
 
-  const fetchData = async () => {
+  const fetchShared = async () => {
     if (!empresa?.id) return;
-    setLoading(true);
+    setLoadingShared(true);
     try {
-      const [entregasRes, tiposRes, empleadosRes, proveedoresRes, licitacionesRes] =
-        await Promise.all([
-          getEntregas(empresa.id),
-          getTiposEpp(true),
-          getEmpleados(empresa.id),
-          getProveedores(),
-          getLicitaciones(empresa.id),
-        ]);
-      setEntregas(entregasRes.entregas || []);
+      const [tiposRes, proveedoresRes] = await Promise.all([
+        getTiposEpp(true),
+        getProveedores(),
+      ]);
       setTipos(tiposRes.tipos || []);
-      setEmpleados(empleadosRes.empleados || []);
       setProveedores(proveedoresRes.proveedores || []);
-      setLicitaciones(licitacionesRes.licitaciones || []);
     } catch (err) {
       console.error("Error cargando datos:", err);
     } finally {
-      setLoading(false);
+      setLoadingShared(false);
+    }
+  };
+
+  const fetchProveedores = async () => {
+    try {
+      const proveedoresRes = await getProveedores();
+      setProveedores(proveedoresRes.proveedores || []);
+    } catch (err) {
+      console.error("Error cargando proveedores:", err);
     }
   };
 
   useEffect(() => {
     if (empresa?.id) {
-      fetchData();
+      void fetchShared();
     }
   }, [empresa?.id]);
 
@@ -206,19 +183,6 @@ export default function EppPage() {
     w.document.close();
   };
 
-  const entregasOrdenadas = useMemo(
-    () =>
-      entregas
-        .filter((e) => user?.rol !== "ente_regulador" || Boolean(e.visible_ente_regulador))
-        .sort((a, b) => {
-          const ta = new Date(a.fecha_entrega || 0).getTime();
-          const tb = new Date(b.fecha_entrega || 0).getTime();
-          if (tb !== ta) return tb - ta;
-          return b.id.localeCompare(a.id);
-        }),
-    [entregas, user?.rol],
-  );
-
   const tabClass = (value: Tab) =>
     `shrink-0 min-h-11 px-1 pb-3 pt-1 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
       tab === value
@@ -292,99 +256,44 @@ export default function EppPage() {
         )}
       </div>
 
-      {tab === "entregas" && (
-        <div className="bg-white rounded-3xl border border-slate-100 p-4 sm:p-6 shadow-2xs">
-          {loading ? (
-            <div className="flex flex-col items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-600"></div>
-              <p className="text-xs text-slate-400 mt-2 font-semibold">
-                Cargando constancias...
-              </p>
-            </div>
-          ) : entregas.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="h-12 w-12 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-4">
-                <FileText className="h-6 w-6 text-slate-400" />
-              </div>
-              <h3 className="text-slate-800 font-bold text-sm">Sin entregas registradas</h3>
-              <p className="text-slate-400 text-xs mt-1">
-                Escaneá el QR del trabajador o generá el QR de punto de entrega.
-              </p>
-            </div>
-          ) : (
-            <ul className="divide-y divide-slate-50">
-              {entregasOrdenadas.map((e) => (
-                <li
-                  key={e.id}
-                  className="py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="h-10 w-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
-                      <HardHat className="h-5 w-5" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold text-slate-800 truncate">
-                        {e.nombre_empleado} · DNI {e.dni_empleado}
-                      </p>
-                      <p className="text-xs text-slate-400 font-semibold">
-                        {e.epp_tipos?.nombre} · {formatLocalDate(e.fecha_entrega)}
-                        {e.marca ? ` · ${e.marca}` : ""}
-                        {e.modelo ? ` ${e.modelo}` : ""}
-                        {e.origen === "qr_publico" ? " · QR público" : ""}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-3 shrink-0">
-                    {user?.rol === "ente_regulador" ? (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
-                        <CheckCircle2 className="h-3.5 w-3.5" /> Habilitado para auditoría
-                      </span>
-                    ) : (
-                      <VisibleEnteToggle
-                        checked={Boolean(e.visible_ente_regulador)}
-                        disabled={!canEdit}
-                        onChange={(v) => void handleVisibilidadChange(e.id, v)}
-                        label="Visible ente regulador"
-                      />
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => handleDownloadPdf(e.id, e.dni_empleado)}
-                      disabled={downloadingId === e.id}
-                      className="inline-flex items-center justify-center gap-2 shrink-0 min-h-11 px-4 py-2.5 bg-slate-900 text-white text-sm font-bold rounded-xl cursor-pointer disabled:opacity-50"
-                      title="Descargar PDF SRT 299/11"
-                    >
-                      <Download className="h-4 w-4" />
-                      PDF
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+      {tab === "entregas" && empresa && (
+        <EntregasTab
+          empresaId={empresa.id}
+          user={user}
+          canEdit={canEdit}
+          downloadingId={downloadingId}
+          onDownloadPdf={handleDownloadPdf}
+          onVisibilidadChange={handleVisibilidadChange}
+        />
       )}
 
       {tab === "personal" && empresa && (
         <PersonalTab
-          empleados={empleados}
+          tipos={tipos}
           empresaId={empresa.id}
           canEdit={canCreate}
-          onChanged={fetchData}
         />
       )}
 
       {tab === "catalogo" && (
-        <CatalogoTab tipos={tipos} canEdit={canCreate} onChanged={fetchData} />
+        <CatalogoTab
+          tipos={tipos}
+          canEdit={canCreate}
+          onChanged={fetchShared}
+        />
       )}
 
       {tab === "licitaciones" && empresa && (
         <LicitacionesTab
-          licitaciones={licitaciones}
+          empresaId={empresa.id}
           proveedores={proveedores}
           canEdit={canCreate}
-          onChanged={fetchData}
+          onProveedoresChanged={fetchProveedores}
         />
+      )}
+
+      {loadingShared && (tab === "personal" || tab === "catalogo") && tipos.length === 0 && (
+        <p className="text-xs font-semibold text-slate-400">Cargando catálogo…</p>
       )}
 
       {qrEntrega && (

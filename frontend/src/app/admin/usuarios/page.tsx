@@ -36,7 +36,10 @@ export default function AdminUsuariosPage() {
     createUsuario,
     updateUsuario,
     toggleUsuarioActivo,
+    subirSello,
+    eliminarSello,
     isSaving,
+    isSavingSello,
     isToggling,
   } = useAdminUsuarios();
 
@@ -365,8 +368,21 @@ export default function AdminUsuariosPage() {
         editingUsuario={editingUsuario}
         empresas={empresas}
         isSaving={isSaving}
+        isSavingSello={isSavingSello}
         onClose={handleCloseModal}
         onSubmit={handleSubmitUsuario}
+        onUploadSello={async (usuarioId, file) => {
+          const url = await subirSello({ usuarioId, file });
+          setEditingUsuario((prev) =>
+            prev && prev.id === usuarioId ? { ...prev, sello_url: url } : prev,
+          );
+        }}
+        onDeleteSello={async (usuarioId) => {
+          await eliminarSello(usuarioId);
+          setEditingUsuario((prev) =>
+            prev && prev.id === usuarioId ? { ...prev, sello_url: null } : prev,
+          );
+        }}
       />
 
       {isRefetching ? (

@@ -24,6 +24,9 @@ import { canWriteAppModule } from "@/lib/moduleAccess";
 import { useAlert } from "@/context/AlertContext";
 import { VisibleEnteToggle } from "@/components/VisibleEnteToggle";
 import { actualizarVisibilidadCapacitacion } from "@/lib/visibilidadEnte";
+import { PaginationBar } from "@/components/PaginationBar";
+
+const PAGE_SIZE = 10;
 
 export default function CapacitacionesPage() {
   const { user, empresa } = useAuth();
@@ -31,8 +34,10 @@ export default function CapacitacionesPage() {
   const { getCapacitaciones, adjuntarRegistroManualCapacitacion, descargarPlantillaRegistroCapacitacion } =
     useCapacitaciones();
   const [capacitaciones, setCapacitaciones] = useState<Capacitacion[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [filtroEstado, setFiltroEstado] = useState<string>("todas");
+  const [page, setPage] = useState(0);
   const [uploadingRegistroId, setUploadingRegistroId] = useState<string | null>(
     null,
   );
@@ -47,18 +52,29 @@ export default function CapacitacionesPage() {
   const canViewPlan = !!user;
 
   useEffect(() => {
+    setPage(0);
+  }, [filtroEstado]);
+
+  useEffect(() => {
     if (empresa?.id) {
-      fetchCapacitaciones();
+      void fetchCapacitaciones();
     }
-  }, [empresa?.id]);
+  }, [empresa?.id, filtroEstado, page]);
 
   const fetchCapacitaciones = async () => {
     setLoading(true);
     try {
-      const data = await getCapacitaciones(empresa!.id);
-      setCapacitaciones(data || []);
+      const data = await getCapacitaciones(empresa!.id, {
+        limit: PAGE_SIZE,
+        offset: page * PAGE_SIZE,
+        estado: filtroEstado,
+      });
+      setCapacitaciones(data.capacitaciones || []);
+      setTotal(data.total ?? 0);
     } catch (err) {
       console.error("Error cargando capacitaciones:", err);
+      setCapacitaciones([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
@@ -77,11 +93,9 @@ export default function CapacitacionesPage() {
     }
   };
 
-  const filtered = (
-    filtroEstado === "todas"
-      ? capacitaciones
-      : capacitaciones.filter((c) => c.estado === filtroEstado)
-  ).filter((c) => user?.rol !== "ente_regulador" || Boolean(c.visible_ente_regulador));
+  const filtered = capacitaciones.filter(
+    (c) => user?.rol !== "ente_regulador" || Boolean(c.visible_ente_regulador),
+  );
 
   const handleInsertarRegistro = (capId: string) => {
     uploadTargetIdRef.current = capId;
@@ -431,6 +445,13 @@ export default function CapacitacionesPage() {
               </div>
             </div>
           ))}
+          <PaginationBar
+            page={page}
+            pageSize={PAGE_SIZE}
+            total={total}
+            onPageChange={setPage}
+            disabled={loading}
+          />
         </div>
       )}
     </div>

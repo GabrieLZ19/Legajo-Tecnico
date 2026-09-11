@@ -48,6 +48,8 @@ export interface Perfil {
   rol: RolUsuario;
   activo: boolean;
   created_at: string;
+  /** URL firmada del sello/firma precargada (solo en memoria /me, no en cookie). */
+  sello_url?: string | null;
   permisos_personalizados?: Array<{
     module: string;
     access: "total" | "lectura" | "oculto";
@@ -296,6 +298,10 @@ export interface Empleado {
   nombre: string;
   documento: string;
   sector?: string | null;
+  /** Descripción del puesto (Anexo I Res. 299/11). */
+  puesto?: string | null;
+  /** EPP necesarios según el puesto (Anexo I Res. 299/11). */
+  epp_necesarios?: string | null;
   qr_token: string;
   activo: boolean;
   created_at: string;

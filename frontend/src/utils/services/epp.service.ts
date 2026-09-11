@@ -1,5 +1,37 @@
 import { api } from "@/lib/api";
-import type { EppTipo } from "@/types";
+import type { Empleado, EppEntrega, EppLicitacion, EppTipo } from "@/types";
+
+export type EppListParams = {
+  limit?: number;
+  offset?: number;
+  q?: string;
+};
+
+export type EmpleadosListResponse = {
+  empleados: Empleado[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type EntregasListResponse = {
+  entregas: EppEntrega[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type LicitacionesListResponse = {
+  licitaciones: EppLicitacion[];
+  total: number;
+  limit: number;
+  offset: number;
+  stats?: {
+    abiertas: number;
+    adjudicacion: number;
+    cerradas: number;
+  };
+};
 
 export type EppEntregaPublicaPayload = {
   nombre_empleado: string;
@@ -12,6 +44,37 @@ export type EppEntregaPublicaPayload = {
   certificacion?: string;
   firma: string;
   foto?: File | null;
+};
+
+export type EppTipoPayload = {
+  nombre: string;
+  descripcion?: string;
+  foto?: File;
+};
+
+export type EppTipoUpdatePayload = {
+  nombre?: string;
+  descripcion?: string;
+  activo?: boolean;
+  foto?: File;
+};
+
+export type EmpleadoCreatePayload = {
+  empresa_id: string;
+  nombre: string;
+  documento: string;
+  sector?: string;
+  puesto?: string;
+  epp_necesarios?: string;
+};
+
+export type EmpleadoUpdatePayload = {
+  nombre?: string;
+  documento?: string;
+  sector?: string | null;
+  puesto?: string | null;
+  epp_necesarios?: string | null;
+  activo?: boolean;
 };
 
 export type EppEntregaPublicaInfo = {
@@ -31,6 +94,84 @@ export type EppQrEntregaResult = {
 };
 
 export const eppService = {
+  async listarEmpleados(
+    empresaId: string,
+    params?: EppListParams,
+  ): Promise<EmpleadosListResponse> {
+    const { data } = await api.get<EmpleadosListResponse>("/epp/empleados", {
+      params: {
+        empresa_id: empresaId,
+        limit: params?.limit,
+        offset: params?.offset,
+        q: params?.q || undefined,
+      },
+    });
+    return data;
+  },
+
+  async listarEntregas(
+    empresaId: string,
+    params?: EppListParams,
+  ): Promise<EntregasListResponse> {
+    const { data } = await api.get<EntregasListResponse>("/epp/entregas", {
+      params: {
+        empresa_id: empresaId,
+        limit: params?.limit,
+        offset: params?.offset,
+        q: params?.q || undefined,
+      },
+    });
+    return data;
+  },
+
+  async listarLicitaciones(
+    empresaId: string,
+    params?: EppListParams,
+  ): Promise<LicitacionesListResponse> {
+    const { data } = await api.get<LicitacionesListResponse>("/epp/licitaciones", {
+      params: {
+        empresa_id: empresaId,
+        limit: params?.limit,
+        offset: params?.offset,
+        q: params?.q || undefined,
+      },
+    });
+    return data;
+  },
+
+  async crearTipo(payload: EppTipoPayload): Promise<EppTipo> {
+    const form = new FormData();
+    form.append("nombre", payload.nombre);
+    if (payload.descripcion) form.append("descripcion", payload.descripcion);
+    if (payload.foto) form.append("foto", payload.foto);
+    const { data } = await api.post<EppTipo>("/epp/tipos", form, {
+      timeout: 60000,
+    });
+    return data;
+  },
+
+  async actualizarTipo(id: string, payload: EppTipoUpdatePayload): Promise<EppTipo> {
+    const form = new FormData();
+    if (payload.nombre !== undefined) form.append("nombre", payload.nombre);
+    if (payload.descripcion !== undefined) form.append("descripcion", payload.descripcion);
+    if (payload.activo !== undefined) form.append("activo", String(payload.activo));
+    if (payload.foto) form.append("foto", payload.foto);
+    const { data } = await api.patch<EppTipo>(`/epp/tipos/${id}`, form, {
+      timeout: 60000,
+    });
+    return data;
+  },
+
+  async crearEmpleado(payload: EmpleadoCreatePayload): Promise<Empleado> {
+    const { data } = await api.post<Empleado>("/epp/empleados", payload);
+    return data;
+  },
+
+  async actualizarEmpleado(id: string, payload: EmpleadoUpdatePayload): Promise<Empleado> {
+    const { data } = await api.patch<Empleado>(`/epp/empleados/${id}`, payload);
+    return data;
+  },
+
   async generarQrEntrega(empresaId: string): Promise<EppQrEntregaResult> {
     const { data } = await api.get<EppQrEntregaResult>("/epp/entrega-qr", {
       params: { empresa_id: empresaId },

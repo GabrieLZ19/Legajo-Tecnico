@@ -85,6 +85,29 @@ export function getClipboardImageFile(
   return files.find((f) => f.type.startsWith("image/")) || null;
 }
 
+export async function fetchImageAsDataUrl(url: string): Promise<string> {
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error("No se pudo cargar la imagen del sello.");
+  }
+  const blob = await res.blob();
+  if (!blob.type.startsWith("image/")) {
+    throw new Error("El sello precargado no es una imagen válida.");
+  }
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error("No se pudo leer el sello."));
+    };
+    reader.onerror = () => reject(new Error("No se pudo leer el sello."));
+    reader.readAsDataURL(blob);
+  });
+}
+
 /**
  * Dibuja la imagen centrada y escalada dentro del pad.
  * Usa fromDataURL para que isEmpty() quede en false.

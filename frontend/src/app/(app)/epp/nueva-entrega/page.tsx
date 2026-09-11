@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { EppTipo, Empleado } from "@/types";
 import Link from "next/link";
-import SignatureCanvas from "react-signature-canvas";
+import type SignatureCanvas from "react-signature-canvas";
 import { Html5Qrcode } from "html5-qrcode";
 import {
   HardHat,
@@ -18,7 +18,12 @@ import {
 } from "lucide-react";
 import { useEpp } from "@/hooks/useEpp";
 import { useAlert } from "@/context/AlertContext";
+import { EppTipoPicker } from "@/components/EppTipoPicker";
 import { FileImagePicker } from "@/components/FileImagePicker";
+import SignaturePad, { readSignatureOrThrow } from "@/components/SignaturePad";
+import SignatureImageImport from "@/components/SignatureImageImport";
+import UsarMiSelloButton from "@/components/UsarMiSelloButton";
+import { isSignatureEmpty } from "@/lib/signature";
 
 interface ItemEntrega {
   epp_tipo_id: string;
@@ -30,7 +35,7 @@ interface ItemEntrega {
 
 export default function NuevaEntregaEppPage() {
   const router = useRouter();
-  const { empresa } = useAuth();
+  const { user, empresa } = useAuth();
   const { getTiposEpp, crearTipoEpp, crearEntregaEpp, buscarEmpleadoPorQr, getEmpleados } =
     useEpp();
   const { showAlert } = useAlert();
@@ -50,8 +55,8 @@ export default function NuevaEntregaEppPage() {
   const [tipos, setTipos] = useState<EppTipo[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activePad, setActivePad] = useState<"empleado" | "empleador">("empleado");
 
-  // Estados para modal de agregar nuevo EPP
   const [showModalEpp, setShowModalEpp] = useState(false);
   const [nuevoEppNombre, setNuevoEppNombre] = useState("");
   const [nuevoEppDescripcion, setNuevoEppDescripcion] = useState("");
@@ -59,27 +64,36 @@ export default function NuevaEntregaEppPage() {
   const [guardandoNuevoEpp, setGuardandoNuevoEpp] = useState(false);
   const [creandoEppParaIndex, setCreandoEppParaIndex] = useState<number | null>(null);
 
-  const empleadosFiltrados = useMemo(() => {
-    const q = busquedaPadron.trim().toLowerCase();
-    const activos = empleados.filter((e) => e.activo);
-    if (!q) return activos.slice(0, 12);
-    return activos
-      .filter(
-        (e) =>
-          e.nombre.toLowerCase().includes(q) ||
-          e.documento.includes(q.replace(/\D/g, "")),
-      )
-      .slice(0, 12);
-  }, [empleados, busquedaPadron]);
+  const [showQrScanner, setShowQrScanner] = useState(false);
+  const [escaneadoPorQr, setEscaneadoPorQr] = useState(false);
+  const [qrScanningError, setQrScanningError] = useState<string | null>(null);
+  const qrInstanceRef = useRef<Html5Qrcode | null>(null);
+  const sigRef = useRef<SignatureCanvas | null>(null);
+  const sigEmpleadorRef = useRef<SignatureCanvas | null>(null);
+
+  const empleadosFiltrados = useMemo(
+    () => empleados.filter((e) => e.activo).slice(0, 12),
+    [empleados],
+  );
 
   useEffect(() => {
     fetchTipos();
-    if (empresa?.id) {
-      void getEmpleados(empresa.id).then((data) => {
+  }, []);
+
+  useEffect(() => {
+    if (!empresa?.id) return;
+    const q = busquedaPadron.trim();
+    const timer = window.setTimeout(() => {
+      void getEmpleados(empresa.id, {
+        limit: 20,
+        offset: 0,
+        q: q || undefined,
+      }).then((data) => {
         setEmpleados(data.empleados || []);
       });
-    }
-  }, [empresa?.id]);
+    }, q ? 300 : 0);
+    return () => window.clearTimeout(timer);
+  }, [empresa?.id, busquedaPadron, getEmpleados]);
 
   const fetchTipos = async () => {
     try {
@@ -88,14 +102,6 @@ export default function NuevaEntregaEppPage() {
     } catch (err) {
       console.error("Error cargando tipos:", err);
     }
-  };
-
-  const agregarItem = () => {
-    // Un solo ítem por entrega (Res. SRT 299/11)
-  };
-
-  const eliminarItem = (_idx: number) => {
-    // Un solo ítem por entrega
   };
 
   const seleccionarEmpleado = (empleado: Empleado) => {
@@ -114,22 +120,14 @@ export default function NuevaEntregaEppPage() {
     setEscaneadoPorQr(false);
   };
 
-  // Estados para lector QR
-  const [showQrScanner, setShowQrScanner] = useState(false);
-  const [escaneadoPorQr, setEscaneadoPorQr] = useState(false);
-  const [qrScanningError, setQrScanningError] = useState<string | null>(null);
-  const qrInstanceRef = useRef<Html5Qrcode | null>(null);
-  const sigRef = useRef<SignatureCanvas>(null);
-  const sigEmpleadorRef = useRef<SignatureCanvas>(null);
-
   const actualizarItem = (
     idx: number,
     field: keyof ItemEntrega,
-    value: any,
+    value: string | number,
   ) => {
-    const updated = [...items];
-    (updated[idx] as any)[field] = value;
-    setItems(updated);
+    setItems((prev) =>
+      prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item)),
+    );
   };
 
   const handleCrearEpp = async (e: React.FormEvent) => {
@@ -160,6 +158,7 @@ export default function NuevaEntregaEppPage() {
       setNuevoEppFoto(null);
       setShowModalEpp(false);
       setCreandoEppParaIndex(null);
+      showAlert("success", "EPP creado", "Ya quedó seleccionado en la entrega.");
     } catch (err: unknown) {
       const message =
         typeof err === "object" &&
@@ -256,21 +255,17 @@ export default function NuevaEntregaEppPage() {
       return;
     }
 
-    if (!sigRef.current || sigRef.current.isEmpty()) {
+    if (isSignatureEmpty(sigRef.current)) {
       setError("La firma del empleado es obligatoria.");
       return;
     }
 
     setSaving(true);
     try {
-      const firmaBase64 = sigRef.current
-        .getTrimmedCanvas()
-        .toDataURL("image/png");
-
-      const firmaEmpleador =
-        sigEmpleadorRef.current && !sigEmpleadorRef.current.isEmpty()
-          ? sigEmpleadorRef.current.getTrimmedCanvas().toDataURL("image/png")
-          : null;
+      const firmaBase64 = readSignatureOrThrow(sigRef.current);
+      const firmaEmpleador = !isSignatureEmpty(sigEmpleadorRef.current)
+        ? readSignatureOrThrow(sigEmpleadorRef.current)
+        : null;
 
       await crearEntregaEpp({
         empresa_id: empresa!.id,
@@ -386,7 +381,10 @@ export default function NuevaEntregaEppPage() {
                     >
                       <span className="font-semibold text-slate-800">{emp.nombre}</span>
                       <span className="text-slate-500 text-sm ml-2">DNI {emp.documento}</span>
-                      {emp.sector && (
+                      {emp.puesto && (
+                        <span className="text-slate-400 text-xs ml-2">· {emp.puesto}</span>
+                      )}
+                      {!emp.puesto && emp.sector && (
                         <span className="text-slate-400 text-xs ml-2">· {emp.sector}</span>
                       )}
                     </button>
@@ -501,36 +499,15 @@ export default function NuevaEntregaEppPage() {
                   <label className="text-[10px] font-bold text-slate-400 uppercase">
                     Tipo de EPP *
                   </label>
-                  <select
+                  <EppTipoPicker
+                    tipos={tipos}
                     value={item.epp_tipo_id}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val === "crear_nuevo_epp") {
-                        setCreandoEppParaIndex(idx);
-                        setShowModalEpp(true);
-                        // Resetear selección en el dropdown
-                        actualizarItem(idx, "epp_tipo_id", "");
-                      } else {
-                        actualizarItem(idx, "epp_tipo_id", val);
-                      }
+                    onChange={(tipoId) => actualizarItem(idx, "epp_tipo_id", tipoId)}
+                    onCreateNew={() => {
+                      setCreandoEppParaIndex(idx);
+                      setShowModalEpp(true);
                     }}
-                    className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 cursor-pointer"
-                  >
-                    <option value="">Seleccionar EPP...</option>
-                    {tipos.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.foto_url ? "📷 " : ""}
-                        {t.nombre}
-                        {t.descripcion ? ` — ${t.descripcion}` : ""}
-                      </option>
-                    ))}
-                    <option
-                      value="crear_nuevo_epp"
-                      className="font-bold text-blue-600 bg-blue-50"
-                    >
-                      + Agregar nuevo EPP...
-                    </option>
-                  </select>
+                  />
                 </div>
 
                 <div className="space-y-1">
@@ -607,27 +584,29 @@ export default function NuevaEntregaEppPage() {
             Firma del Trabajador *
           </h2>
           <p className="text-xs text-slate-500">
-            El empleado debe firmar en el recuadro para confirmar la recepción.
+            Dibujá, subí una imagen o pegá un recorte (Ctrl+V) para confirmar la
+            recepción.
           </p>
 
-          <div className="border-2 border-dashed border-slate-300 rounded-xl overflow-hidden bg-white">
-            <SignatureCanvas
-              ref={sigRef}
-              penColor="#1e293b"
-              canvasProps={{
-                className: "w-full",
-                style: { width: "100%", height: "180px" },
-              }}
-            />
+          <div onPointerDown={() => setActivePad("empleado")}>
+            <SignaturePad ref={sigRef} heightClassName="h-44" />
           </div>
 
-          <button
-            type="button"
-            onClick={() => sigRef.current?.clear()}
-            className="text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
-          >
-            Borrar firma
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => sigRef.current?.clear()}
+              className="inline-flex items-center justify-center px-3.5 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-bold cursor-pointer"
+            >
+              Limpiar
+            </button>
+            <SignatureImageImport
+              canvasRef={sigRef}
+              enablePaste={activePad === "empleado"}
+              onError={(msg) => showAlert("error", "Imagen de firma", msg)}
+              label="Insertar imagen"
+            />
+          </div>
         </div>
 
         <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
@@ -635,25 +614,32 @@ export default function NuevaEntregaEppPage() {
             Firma del Responsable / Empleador
           </h2>
           <p className="text-xs text-slate-500">
-            Opcional. Queda impresa en la constancia SRT 299/11.
+            Opcional. Usá tu sello precargado, dibujá, subí imagen o pegá un
+            recorte. Queda en la constancia SRT 299/11.
           </p>
-          <div className="border-2 border-dashed border-slate-300 rounded-xl overflow-hidden bg-white">
-            <SignatureCanvas
-              ref={sigEmpleadorRef}
-              penColor="#1e293b"
-              canvasProps={{
-                className: "w-full",
-                style: { width: "100%", height: "140px" },
-              }}
+          <div onPointerDown={() => setActivePad("empleador")}>
+            <SignaturePad ref={sigEmpleadorRef} heightClassName="h-36" />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => sigEmpleadorRef.current?.clear()}
+              className="inline-flex items-center justify-center px-3.5 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-bold cursor-pointer"
+            >
+              Limpiar
+            </button>
+            <UsarMiSelloButton
+              canvasRef={sigEmpleadorRef}
+              selloUrl={user?.sello_url}
+              onError={(msg) => showAlert("error", "Sello", msg)}
+            />
+            <SignatureImageImport
+              canvasRef={sigEmpleadorRef}
+              enablePaste={activePad === "empleador"}
+              onError={(msg) => showAlert("error", "Imagen de firma", msg)}
+              label="Insertar imagen"
             />
           </div>
-          <button
-            type="button"
-            onClick={() => sigEmpleadorRef.current?.clear()}
-            className="text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
-          >
-            Borrar firma
-          </button>
         </div>
 
         {/* Botón guardar */}

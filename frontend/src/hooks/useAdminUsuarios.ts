@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import type { AdminEmpresaOption, AdminUsuario } from "@/types";
+import { perfilSelloService } from "@/utils/services/perfilSello.service";
 
 export type AdminUsuarioFormValues = {
   nombre_completo: string;
@@ -135,6 +136,23 @@ export function useAdminUsuarios() {
     onSuccess: invalidate,
   });
 
+  const subirSelloMutation = useMutation({
+    mutationFn: async ({
+      usuarioId,
+      file,
+    }: {
+      usuarioId: string;
+      file: File;
+    }) => perfilSelloService.subirSelloUsuario(usuarioId, file),
+    onSuccess: invalidate,
+  });
+
+  const eliminarSelloMutation = useMutation({
+    mutationFn: async (usuarioId: string) =>
+      perfilSelloService.eliminarSelloUsuario(usuarioId),
+    onSuccess: invalidate,
+  });
+
   return {
     usuarios: usuariosQuery.data || [],
     empresas: empresasQuery.data || [],
@@ -149,10 +167,14 @@ export function useAdminUsuarios() {
     updateUsuario: updateUsuarioMutation.mutateAsync,
     verificarPasswordUsuario: verificarPasswordUsuarioMutation.mutateAsync,
     toggleUsuarioActivo: toggleUsuarioActivoMutation.mutateAsync,
+    subirSello: subirSelloMutation.mutateAsync,
+    eliminarSello: eliminarSelloMutation.mutateAsync,
     isSaving:
       createUsuarioMutation.isPending ||
       updateUsuarioMutation.isPending ||
       verificarPasswordUsuarioMutation.isPending,
     isToggling: toggleUsuarioActivoMutation.isPending,
+    isSavingSello:
+      subirSelloMutation.isPending || eliminarSelloMutation.isPending,
   };
 }

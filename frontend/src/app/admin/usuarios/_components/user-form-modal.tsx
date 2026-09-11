@@ -7,17 +7,21 @@ import {
   getRoleBadgeClasses,
   getRoleLabel,
 } from "@/lib/adminUsuarios";
-import { Loader2, X, Eye, EyeOff } from "lucide-react";
+import { Loader2, X, Eye, EyeOff, Stamp, Trash2, ImagePlus } from "lucide-react";
 import type { AdminUsuarioFormValues } from "@/hooks/useAdminUsuarios";
 import { useAlert } from "@/context/AlertContext";
+import { SIGNATURE_IMAGE_ACCEPT } from "@/lib/signature";
 
 type UserFormModalProps = {
   isOpen: boolean;
   editingUsuario: AdminUsuario | null;
   empresas: AdminEmpresaOption[];
   isSaving: boolean;
+  isSavingSello?: boolean;
   onClose: () => void;
   onSubmit: (values: AdminUsuarioFormValues) => Promise<void>;
+  onUploadSello?: (usuarioId: string, file: File) => Promise<void>;
+  onDeleteSello?: (usuarioId: string) => Promise<void>;
 };
 
 const initialValues: AdminUsuarioFormValues = {
@@ -36,13 +40,17 @@ export function UserFormModal({
   editingUsuario,
   empresas,
   isSaving,
+  isSavingSello = false,
   onClose,
   onSubmit,
+  onUploadSello,
+  onDeleteSello,
 }: UserFormModalProps) {
   const { showAlert } = useAlert();
   const [values, setValues] = useState<AdminUsuarioFormValues>(initialValues);
   const [showPassword, setShowPassword] = useState(false);
   const [showAdminPassword, setShowAdminPassword] = useState(false);
+  const [selloPreview, setSelloPreview] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -58,12 +66,14 @@ export function UserFormModal({
         empresa_id: editingUsuario.empresa_id || null,
         activo: editingUsuario.activo,
       });
+      setSelloPreview(editingUsuario.sello_url || null);
       setShowPassword(false);
       setShowAdminPassword(false);
       return;
     }
 
     setValues(initialValues);
+    setSelloPreview(null);
     setShowPassword(false);
     setShowAdminPassword(false);
   }, [editingUsuario, isOpen]);
@@ -371,16 +381,112 @@ export function UserFormModal({
               </p>
             </div>
 
-            <div className="rounded-2xl border border-dashed border-blue-200 bg-white p-4">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-700">
-                Distribución
-              </p>
-              <p className="mt-2 text-sm leading-relaxed text-slate-600">
-                El panel lateral agrupa el perfil, la ayuda contextual y la
-                intención del acceso para que el formulario principal respire
-                mejor.
-              </p>
-            </div>
+            {isEditing && editingUsuario && onUploadSello && onDeleteSello ? (
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="flex items-center gap-2">
+                  <Stamp className="h-4 w-4 text-blue-700" />
+                  <span className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+                    Sello / firma precargada
+                  </span>
+                </div>
+                <p className="text-xs font-medium leading-relaxed text-slate-500">
+                  Imagen del sello o firma para usar desde el celular sin dibujar
+                  con el dedo.
+                </p>
+                {selloPreview ? (
+                  <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={selloPreview}
+                      alt="Sello del usuario"
+                      className="mx-auto h-20 object-contain"
+                    />
+                  </div>
+                ) : (
+                  <p className="text-xs font-semibold text-slate-400">
+                    Todavía no hay sello cargado.
+                  </p>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                    <ImagePlus className="h-3.5 w-3.5" />
+                    {isSavingSello ? "Subiendo…" : "Subir sello"}
+                    <input
+                      type="file"
+                      accept={SIGNATURE_IMAGE_ACCEPT}
+                      className="hidden"
+                      disabled={isSavingSello}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        if (!file || !editingUsuario) return;
+                        void (async () => {
+                          try {
+                            await onUploadSello(editingUsuario.id, file);
+                            setSelloPreview(URL.createObjectURL(file));
+                            showAlert(
+                              "success",
+                              "Sello guardado",
+                              "Quedó precargado para firmas desde el celular.",
+                            );
+                          } catch (err: unknown) {
+                            const axiosErr = err as {
+                              response?: { data?: { error?: string } };
+                            };
+                            showAlert(
+                              "error",
+                              "Error",
+                              axiosErr.response?.data?.error ||
+                                "No se pudo subir el sello.",
+                            );
+                          }
+                        })();
+                      }}
+                    />
+                  </label>
+                  {selloPreview && (
+                    <button
+                      type="button"
+                      disabled={isSavingSello}
+                      onClick={() => {
+                        if (!editingUsuario) return;
+                        void (async () => {
+                          try {
+                            await onDeleteSello(editingUsuario.id);
+                            setSelloPreview(null);
+                            showAlert(
+                              "success",
+                              "Sello eliminado",
+                              "El usuario ya no tiene firma precargada.",
+                            );
+                          } catch {
+                            showAlert(
+                              "error",
+                              "Error",
+                              "No se pudo eliminar el sello.",
+                            );
+                          }
+                        })();
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Quitar
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : !isEditing ? (
+              <div className="rounded-2xl border border-dashed border-blue-200 bg-white p-4">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-700">
+                  Sello
+                </p>
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                  Después de crear el usuario, editalo para cargar su sello o
+                  firma precargada.
+                </p>
+              </div>
+            ) : null}
           </aside>
 
           <div className="flex items-center justify-between border-t border-blue-100 pt-2 lg:col-span-2">
