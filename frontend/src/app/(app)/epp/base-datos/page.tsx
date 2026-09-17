@@ -240,13 +240,13 @@ export default function BaseDatosEppPage() {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `Lista_EPP_historico_${empresa.cuit || empresa.id}.pdf`;
+      link.download = `Anexo_I_EPP_historico_${empresa.cuit || empresa.id}.pdf`;
       link.click();
       window.URL.revokeObjectURL(url);
       showAlert(
         "success",
         "PDF listo",
-        "Se descargó el listado completo Anexo I (Res. 299/11) con los filtros aplicados.",
+        "Se descargó el Anexo I oficial (una planilla por trabajador) con los filtros aplicados.",
       );
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: Blob | { error?: string } } };

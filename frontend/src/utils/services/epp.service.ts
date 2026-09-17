@@ -36,15 +36,30 @@ export type LicitacionesListResponse = {
 export type EppEntregaPublicaPayload = {
   nombre_empleado: string;
   dni_empleado: string;
+  puesto: string;
   sector?: string;
-  epp_tipo_id: string;
-  cantidad: number;
-  marca?: string;
-  modelo?: string;
-  certificacion?: string;
+  items: Array<{
+    epp_tipo_id: string;
+    cantidad: number;
+    marca?: string;
+    modelo?: string;
+    certificacion?: string;
+  }>;
   firma: string;
   foto?: File | null;
 };
+
+export type EppEntregaPublicaEmpleadoLookup =
+  | { found: false }
+  | {
+      found: true;
+      nombre: string;
+      documento: string;
+      sector: string | null;
+      puesto: string | null;
+      epp_necesarios: string | null;
+      epp_tipos: Array<{ id: string; nombre: string }>;
+    };
 
 export type EppTipoPayload = {
   nombre: string;
@@ -66,6 +81,7 @@ export type EmpleadoCreatePayload = {
   sector?: string;
   puesto?: string;
   epp_necesarios?: string;
+  aplicar_epp_por_puesto?: boolean;
 };
 
 export type EmpleadoUpdatePayload = {
@@ -75,6 +91,11 @@ export type EmpleadoUpdatePayload = {
   puesto?: string | null;
   epp_necesarios?: string | null;
   activo?: boolean;
+  aplicar_epp_por_puesto?: boolean;
+};
+
+export type EmpleadoMutationResult = Empleado & {
+  epp_aplicados_a?: number;
 };
 
 export type EppEntregaPublicaInfo = {
@@ -162,13 +183,19 @@ export const eppService = {
     return data;
   },
 
-  async crearEmpleado(payload: EmpleadoCreatePayload): Promise<Empleado> {
-    const { data } = await api.post<Empleado>("/epp/empleados", payload);
+  async crearEmpleado(payload: EmpleadoCreatePayload): Promise<EmpleadoMutationResult> {
+    const { data } = await api.post<EmpleadoMutationResult>("/epp/empleados", payload);
     return data;
   },
 
-  async actualizarEmpleado(id: string, payload: EmpleadoUpdatePayload): Promise<Empleado> {
-    const { data } = await api.patch<Empleado>(`/epp/empleados/${id}`, payload);
+  async actualizarEmpleado(
+    id: string,
+    payload: EmpleadoUpdatePayload,
+  ): Promise<EmpleadoMutationResult> {
+    const { data } = await api.patch<EmpleadoMutationResult>(
+      `/epp/empleados/${id}`,
+      payload,
+    );
     return data;
   },
 
@@ -186,16 +213,24 @@ export const eppService = {
     return data;
   },
 
+  async buscarEmpleadoEntregaPublica(
+    token: string,
+    dni: string,
+  ): Promise<EppEntregaPublicaEmpleadoLookup> {
+    const { data } = await api.get<EppEntregaPublicaEmpleadoLookup>(
+      `/epp/entrega-publica/${token}/empleado`,
+      { params: { dni } },
+    );
+    return data;
+  },
+
   async registrarEntregaPublica(token: string, payload: EppEntregaPublicaPayload) {
     const form = new FormData();
     form.append("nombre_empleado", payload.nombre_empleado);
     form.append("dni_empleado", payload.dni_empleado);
+    form.append("puesto", payload.puesto);
     if (payload.sector) form.append("sector", payload.sector);
-    form.append("epp_tipo_id", payload.epp_tipo_id);
-    form.append("cantidad", String(payload.cantidad));
-    if (payload.marca) form.append("marca", payload.marca);
-    if (payload.modelo) form.append("modelo", payload.modelo);
-    if (payload.certificacion) form.append("certificacion", payload.certificacion);
+    form.append("items", JSON.stringify(payload.items));
     form.append("firma", payload.firma);
     if (payload.foto) form.append("foto", payload.foto);
 
@@ -206,6 +241,7 @@ export const eppService = {
     return data as {
       success: boolean;
       entrega: unknown;
+      entregas?: unknown[];
       pdf_generando: boolean;
       mensaje: string;
     };

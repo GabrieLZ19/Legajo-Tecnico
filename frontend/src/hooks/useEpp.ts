@@ -102,6 +102,7 @@ export function useEpp() {
       sector?: string;
       puesto?: string;
       epp_necesarios?: string;
+      aplicar_epp_por_puesto?: boolean;
     }) =>
       run(() => eppService.crearEmpleado(payload), "Error al crear trabajador"),
     [run],
@@ -117,6 +118,7 @@ export function useEpp() {
         puesto?: string | null;
         epp_necesarios?: string | null;
         activo?: boolean;
+        aplicar_epp_por_puesto?: boolean;
       },
     ) =>
       run(() => eppService.actualizarEmpleado(id, payload), "Error al actualizar trabajador"),

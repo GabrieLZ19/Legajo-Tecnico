@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { EppTipo, Empleado } from "@/types";
 import Link from "next/link";
 import type SignatureCanvas from "react-signature-canvas";
-import { Html5Qrcode } from "html5-qrcode";
 import {
   HardHat,
   ArrowLeft,
@@ -36,7 +35,7 @@ interface ItemEntrega {
 export default function NuevaEntregaEppPage() {
   const router = useRouter();
   const { user, empresa } = useAuth();
-  const { getTiposEpp, crearTipoEpp, crearEntregaEpp, buscarEmpleadoPorQr, getEmpleados } =
+  const { getTiposEpp, crearTipoEpp, crearEntregaEpp, getEmpleados } =
     useEpp();
   const { showAlert } = useAlert();
 
@@ -64,10 +63,6 @@ export default function NuevaEntregaEppPage() {
   const [guardandoNuevoEpp, setGuardandoNuevoEpp] = useState(false);
   const [creandoEppParaIndex, setCreandoEppParaIndex] = useState<number | null>(null);
 
-  const [showQrScanner, setShowQrScanner] = useState(false);
-  const [escaneadoPorQr, setEscaneadoPorQr] = useState(false);
-  const [qrScanningError, setQrScanningError] = useState<string | null>(null);
-  const qrInstanceRef = useRef<Html5Qrcode | null>(null);
   const sigRef = useRef<SignatureCanvas | null>(null);
   const sigEmpleadorRef = useRef<SignatureCanvas | null>(null);
 
@@ -109,7 +104,6 @@ export default function NuevaEntregaEppPage() {
     setNombreEmpleado(empleado.nombre);
     setDniEmpleado(empleado.documento);
     setBusquedaPadron(empleado.nombre);
-    setEscaneadoPorQr(false);
   };
 
   const limpiarEmpleado = () => {
@@ -117,7 +111,6 @@ export default function NuevaEntregaEppPage() {
     setNombreEmpleado("");
     setDniEmpleado("");
     setBusquedaPadron("");
-    setEscaneadoPorQr(false);
   };
 
   const actualizarItem = (
@@ -174,73 +167,12 @@ export default function NuevaEntregaEppPage() {
     }
   };
 
-  const startScanner = async () => {
-    try {
-      setQrScanningError(null);
-      setTimeout(async () => {
-        try {
-          const html5QrCode = new Html5Qrcode("qr-reader");
-          qrInstanceRef.current = html5QrCode;
-
-          await html5QrCode.start(
-            { facingMode: "environment" },
-            {
-              fps: 10,
-              qrbox: { width: 250, height: 250 },
-            },
-            (decodedText) => {
-              handleQrScanSuccess(decodedText);
-            },
-            (errorMessage) => {
-              // Ignorar escaneos fallidos continuos
-            },
-          );
-        } catch (err: any) {
-          console.error("Error al iniciar scanner:", err);
-          setQrScanningError(
-            "No se pudo acceder a la cámara. Verifique los permisos.",
-          );
-        }
-      }, 300);
-    } catch (err: any) {
-      setQrScanningError("Error al iniciar el scanner.");
-    }
-  };
-
-  const stopScanner = async () => {
-    if (qrInstanceRef.current && qrInstanceRef.current.isScanning) {
-      try {
-        await qrInstanceRef.current.stop();
-      } catch (err) {
-        console.error("Error al detener scanner:", err);
-      }
-    }
-    qrInstanceRef.current = null;
-  };
-
-  const handleQrScanSuccess = async (decodedText: string) => {
-    try {
-      const lookupToken = decodedText.startsWith("{")
-        ? (JSON.parse(decodedText).token || JSON.parse(decodedText).qr_token || decodedText)
-        : decodedText;
-      const { empleado } = await buscarEmpleadoPorQr(lookupToken);
-      seleccionarEmpleado(empleado as Empleado);
-      setEscaneadoPorQr(true);
-      setShowQrScanner(false);
-      await stopScanner();
-    } catch {
-      setQrScanningError(
-        "QR no reconocido. Seleccioná al trabajador del padrón o escaneá su credencial emitida en Personal / QR.",
-      );
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
     if (!empleadoId) {
-      setError("Seleccioná un trabajador del padrón o escaneá su QR.");
+      setError("Seleccioná un trabajador del padrón.");
       return;
     }
 
@@ -319,40 +251,6 @@ export default function NuevaEntregaEppPage() {
             <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
               Datos del Trabajador
             </h2>
-            <div className="flex items-center gap-2">
-              {escaneadoPorQr && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100 uppercase tracking-wider">
-                  Escaneado por QR
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={() => {
-                  setShowQrScanner(true);
-                  startScanner();
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold rounded-lg text-xs transition-colors cursor-pointer"
-              >
-                <svg
-                  className="h-3.5 w-3.5"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                >
-                  <path
-                    d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <rect x="7" y="7" width="3" height="3" />
-                  <rect x="14" y="7" width="3" height="3" />
-                  <rect x="7" y="14" width="3" height="3" />
-                  <rect x="14" y="14" width="3" height="3" />
-                </svg>
-                Escanear QR
-              </button>
-            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -394,8 +292,8 @@ export default function NuevaEntregaEppPage() {
               {busquedaPadron.trim() && !empleadoId && empleadosFiltrados.length === 0 && (
                 <p className="text-xs text-slate-500">
                   No hay trabajadores que coincidan. Agregalos en{" "}
-                  <Link href="/epp" className="font-bold text-blue-600 underline">
-                    Personal / QR
+                  <Link href="/epp?tab=personal" className="font-bold text-blue-600 underline">
+                    Personal
                   </Link>
                   .
                 </p>
@@ -728,42 +626,6 @@ export default function NuevaEntregaEppPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {showQrScanner && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-slate-100 flex flex-col space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">
-                Escanear QR del Trabajador
-              </h3>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowQrScanner(false);
-                  stopScanner();
-                }}
-                className="text-slate-400 hover:text-slate-600 font-bold text-lg cursor-pointer"
-              >
-                &times;
-              </button>
-            </div>
-
-            <div className="relative bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl overflow-hidden aspect-square flex flex-col items-center justify-center">
-              {qrScanningError ? (
-                <p className="text-xs text-red-600 font-semibold p-4 text-center">
-                  {qrScanningError}
-                </p>
-              ) : (
-                <div id="qr-reader" className="w-full h-full" />
-              )}
-            </div>
-
-            <p className="text-[10px] text-slate-400 text-center">
-              El QR debe ser el emitido desde Personal / QR. Si no lo reconoce, buscá al trabajador en el padrón.
-            </p>
           </div>
         </div>
       )}

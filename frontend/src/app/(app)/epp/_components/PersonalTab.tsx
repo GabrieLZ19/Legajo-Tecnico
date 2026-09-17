@@ -2,9 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  QrCode,
   UserPlus,
-  Download,
   Pencil,
   AlertCircle,
   Check,
@@ -174,11 +172,18 @@ function TrabajadorFormFields({
   form,
   setForm,
   tipos,
+  aplicarEppPorPuesto,
+  onAplicarEppPorPuestoChange,
 }: {
   form: EmpleadoFormState;
   setForm: React.Dispatch<React.SetStateAction<EmpleadoFormState>>;
   tipos: EppTipo[];
+  aplicarEppPorPuesto: boolean;
+  onAplicarEppPorPuestoChange: (value: boolean) => void;
 }) {
+  const puestoTrim = form.puesto.trim();
+  const puedeAplicarPorPuesto = puestoTrim.length > 0;
+
   return (
     <div className="space-y-5">
       <section className="space-y-3">
@@ -245,7 +250,7 @@ function TrabajadorFormFields({
           <textarea
             value={form.puesto}
             onChange={(e) => setForm((f) => ({ ...f, puesto: e.target.value }))}
-            placeholder="Ej. Operario de embolse"
+            placeholder="Ej. Testing, Operario de embolse…"
             maxLength={500}
             rows={2}
             className="w-full px-4 py-3 border border-slate-200 rounded-xl text-base sm:text-sm font-medium resize-none focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500"
@@ -259,6 +264,25 @@ function TrabajadorFormFields({
             onChange={(ids) => setForm((f) => ({ ...f, eppTipoIds: ids }))}
           />
         </div>
+        {puedeAplicarPorPuesto ? (
+          <label className="flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50/70 px-3.5 py-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={aplicarEppPorPuesto}
+              onChange={(e) => onAplicarEppPorPuestoChange(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-700"
+            />
+            <span className="text-sm font-semibold text-slate-700 leading-snug">
+              Aplicar estos EPP a{" "}
+              <span className="text-blue-800">todos</span> los trabajadores con
+              el puesto «{puestoTrim}»
+              <span className="block mt-0.5 text-[11px] font-medium text-slate-500">
+                Evita editar uno por uno: actualiza el padrón completo de ese
+                puesto.
+              </span>
+            </span>
+          </label>
+        ) : null}
       </section>
     </div>
   );
@@ -269,17 +293,17 @@ export function PersonalTab({
   empresaId,
   canEdit,
 }: PersonalTabProps) {
-  const { getEmpleados, crearEmpleado, actualizarEmpleado, generarQrEmpleado } =
+  const { getEmpleados, crearEmpleado, actualizarEmpleado } =
     useEpp();
-  const { showAlert } = useAlert();
+  const { showAlert, showConfirm } = useAlert();
   const [empleados, setEmpleados] = useState<Empleado[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<"create" | "edit" | null>(null);
   const [editing, setEditing] = useState<Empleado | null>(null);
   const [form, setForm] = useState<EmpleadoFormState>(emptyForm);
+  const [aplicarEppPorPuesto, setAplicarEppPorPuesto] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [qrPreview, setQrPreview] = useState<{ nombre: string; qr: string } | null>(null);
   const [busqueda, setBusqueda] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
   const [page, setPage] = useState(0);
@@ -332,11 +356,13 @@ export function PersonalTab({
     setModal(null);
     setEditing(null);
     setForm(emptyForm());
+    setAplicarEppPorPuesto(true);
   };
 
   const openCreate = () => {
     setEditing(null);
     setForm(emptyForm());
+    setAplicarEppPorPuesto(true);
     setModal("create");
   };
 
@@ -349,43 +375,68 @@ export function PersonalTab({
       puesto: emp.puesto || "",
       eppTipoIds: parseEppNecesariosToIds(emp.epp_necesarios, tiposActivos),
     });
+    setAplicarEppPorPuesto(Boolean(emp.puesto?.trim()));
     setModal("edit");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const eppNecesarios = serializeEppNecesarios(tiposActivos, form.eppTipoIds);
+    const puestoTrim = form.puesto.trim();
+    const aplicarMasivo =
+      Boolean(aplicarEppPorPuesto && puestoTrim);
+
+    if (aplicarMasivo) {
+      const ok = await showConfirm(
+        "Aplicar EPP al puesto",
+        `Se van a actualizar los EPP necesarios de todos los trabajadores con el puesto «${puestoTrim}». ¿Continuar?`,
+        {
+          type: "warning",
+          confirmLabel: "Aplicar a todos",
+          cancelLabel: "Cancelar",
+        },
+      );
+      if (!ok) return;
+    }
+
     setSaving(true);
     try {
-      const eppNecesarios = serializeEppNecesarios(tiposActivos, form.eppTipoIds);
-
       if (modal === "edit" && editing) {
-        await actualizarEmpleado(editing.id, {
+        const result = await actualizarEmpleado(editing.id, {
           nombre: form.nombre,
           documento: form.documento,
           sector: form.sector || null,
           puesto: form.puesto || null,
           epp_necesarios: eppNecesarios ?? null,
+          aplicar_epp_por_puesto: aplicarMasivo,
         });
+        const n = result.epp_aplicados_a ?? 1;
         showAlert(
           "success",
           "Trabajador actualizado",
-          "Los datos de Anexo I se usan al generar la planilla oficial.",
+          aplicarMasivo && n > 1
+            ? `EPP del puesto «${puestoTrim}» aplicados a ${n} trabajadores.`
+            : "Los datos de Anexo I se usan al generar la planilla oficial.",
         );
       } else {
-        await crearEmpleado({
+        const result = await crearEmpleado({
           empresa_id: empresaId,
           nombre: form.nombre,
           documento: form.documento,
           sector: form.sector || undefined,
           puesto: form.puesto || undefined,
           epp_necesarios: eppNecesarios,
+          aplicar_epp_por_puesto: aplicarMasivo,
         });
+        const n = result.epp_aplicados_a ?? 1;
         showAlert(
           "success",
           "Trabajador dado de alta",
-          form.puesto && eppNecesarios
-            ? "Al entregar EPP, el puesto y los EPP necesarios se completan solos en la planilla."
-            : "Completá puesto y EPP necesarios para que salgan en la planilla oficial.",
+          aplicarMasivo && n > 1
+            ? `Alta OK. EPP del puesto «${puestoTrim}» aplicados a ${n} trabajadores.`
+            : form.puesto && eppNecesarios
+              ? "Al entregar EPP, el puesto y los EPP necesarios se completan solos en la planilla."
+              : "Completá puesto y EPP necesarios para que salgan en la planilla oficial.",
         );
       }
 
@@ -407,23 +458,6 @@ export function PersonalTab({
     }
   };
 
-  const handleQr = async (empleado: Empleado) => {
-    try {
-      const data = await generarQrEmpleado(empleado.id);
-      setQrPreview({ nombre: empleado.nombre, qr: data.qr });
-    } catch {
-      showAlert("error", "Error", "No se pudo generar el QR.");
-    }
-  };
-
-  const downloadQr = () => {
-    if (!qrPreview) return;
-    const link = document.createElement("a");
-    link.href = qrPreview.qr;
-    link.download = `QR_${qrPreview.nombre.replace(/\s+/g, "_")}.png`;
-    link.click();
-  };
-
   const editOrphanText =
     modal === "edit" &&
     editing?.epp_necesarios?.trim() &&
@@ -440,7 +474,7 @@ export function PersonalTab({
           </h2>
           <p className="mt-1 text-xs font-medium text-slate-500 max-w-xl leading-relaxed">
             Cada trabajador tiene su puesto y EPP del catálogo para completar solos la
-            planilla Res. 299/11.
+            planilla Res. 299/11 al escanear el QR del armario.
           </p>
           {!loading && total > 0 && (
             <p className="mt-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
@@ -497,7 +531,8 @@ export function PersonalTab({
             <Users className="h-9 w-9 text-slate-300 mx-auto mb-3" />
             <p className="text-sm font-bold text-slate-600">Todavía no hay trabajadores</p>
             <p className="mt-1 text-xs font-medium text-slate-400 max-w-sm mx-auto">
-              Dalos de alta acá para emitir QR y completar el Anexo I en las entregas.
+              Dalos de alta acá con puesto y EPP necesarios para completar el Anexo I
+              al escanear el QR genérico.
             </p>
             {canEdit && (
               <button
@@ -584,14 +619,6 @@ export function PersonalTab({
                           Editar
                         </button>
                       )}
-                      <button
-                        type="button"
-                        onClick={() => handleQr(emp)}
-                        className="inline-flex items-center justify-center gap-1.5 min-h-11 px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-sm font-bold rounded-xl cursor-pointer"
-                      >
-                        <QrCode className="h-4 w-4" />
-                        QR
-                      </button>
                     </div>
                   </li>
                 );
@@ -636,7 +663,13 @@ export function PersonalTab({
             </div>
 
             <div className="px-6 py-5">
-              <TrabajadorFormFields form={form} setForm={setForm} tipos={tiposActivos} />
+              <TrabajadorFormFields
+                form={form}
+                setForm={setForm}
+                tipos={tiposActivos}
+                aplicarEppPorPuesto={aplicarEppPorPuesto}
+                onAplicarEppPorPuestoChange={setAplicarEppPorPuesto}
+              />
               {editOrphanText && form.eppTipoIds.length === 0 && (
                 <p className="mt-3 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
                   Había un texto libre (“{editOrphanText}”) que no coincide con el catálogo.
@@ -662,38 +695,6 @@ export function PersonalTab({
               </button>
             </div>
           </form>
-        </div>
-      )}
-
-      {qrPreview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-sm text-center space-y-4">
-            <h3 className="text-sm font-black uppercase tracking-wider text-slate-800">
-              QR de {qrPreview.nombre}
-            </h3>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={qrPreview.qr} alt="QR trabajador" className="mx-auto w-56 h-56" />
-            <p className="text-[11px] text-slate-400">
-              Imprimí o mostrá este código para registrar entregas en campo.
-            </p>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setQrPreview(null)}
-                className="flex-1 min-h-12 py-3 border rounded-xl text-sm font-bold cursor-pointer"
-              >
-                Cerrar
-              </button>
-              <button
-                type="button"
-                onClick={downloadQr}
-                className="flex-1 min-h-12 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold inline-flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <Download className="h-4 w-4" />
-                Descargar
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </div>
