@@ -283,6 +283,53 @@ async function getComisionPorcentaje(consultoraId: string): Promise<number> {
   return Number.isFinite(value) ? value : 0;
 }
 
+function normalizeEppNombre(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function escapeIlikeExact(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+}
+
+/**
+ * Copia epp_necesarios a todos los empleados activos de la empresa con el mismo puesto
+ * (comparación case-insensitive, sin wildcards).
+ */
+async function aplicarEppNecesariosPorPuesto(
+  empresaId: string,
+  puesto: string,
+  eppNecesarios: string | null,
+): Promise<number> {
+  const puestoNorm = puesto.trim();
+  if (!puestoNorm) return 0;
+
+  const { data, error } = await supabaseAdmin
+    .from("empleados")
+    .update({ epp_necesarios: eppNecesarios?.trim() || null })
+    .eq("empresa_id", empresaId)
+    .eq("activo", true)
+    .ilike("puesto", escapeIlikeExact(puestoNorm))
+    .select("id");
+
+  if (error) throw error;
+  return data?.length ?? 0;
+}
+
+function mapEppNecesariosToTipos(
+  eppNecesarios: string | null | undefined,
+  tipos: Array<{ id: string; nombre: string }>,
+): Array<{ id: string; nombre: string }> {
+  if (!eppNecesarios?.trim()) return [];
+  const parts = eppNecesarios
+    .split(",")
+    .map((part) => normalizeEppNombre(part))
+    .filter(Boolean);
+  if (parts.length === 0) return [];
+  return tipos
+    .filter((tipo) => parts.includes(normalizeEppNombre(tipo.nombre)))
+    .map((tipo) => ({ id: tipo.id, nombre: tipo.nombre }));
+}
+
 export const eppService = {
   async listarTipos(consultoraId: string, incluirInactivos = false) {
     let query = supabaseAdmin
@@ -415,7 +462,11 @@ export const eppService = {
     sector?: string | null;
     puesto?: string | null;
     epp_necesarios?: string | null;
+    aplicar_epp_por_puesto?: boolean;
   }) {
+    const puesto = payload.puesto?.trim() || null;
+    const eppNecesarios = payload.epp_necesarios?.trim() || null;
+
     const { data, error } = await supabaseAdmin
       .from("empleados")
       .insert({
@@ -423,8 +474,8 @@ export const eppService = {
         nombre: payload.nombre.trim(),
         documento: payload.documento,
         sector: payload.sector?.trim() || null,
-        puesto: payload.puesto?.trim() || null,
-        epp_necesarios: payload.epp_necesarios?.trim() || null,
+        puesto,
+        epp_necesarios: eppNecesarios,
         activo: true,
       })
       .select()
@@ -436,7 +487,17 @@ export const eppService = {
       }
       throw error;
     }
-    return data;
+
+    let eppAplicadosA = 1;
+    if (payload.aplicar_epp_por_puesto && puesto) {
+      eppAplicadosA = await aplicarEppNecesariosPorPuesto(
+        payload.empresa_id,
+        puesto,
+        eppNecesarios,
+      );
+    }
+
+    return { ...data, epp_aplicados_a: eppAplicadosA };
   },
 
   async actualizarEmpleado(
@@ -448,6 +509,7 @@ export const eppService = {
       puesto?: string | null;
       epp_necesarios?: string | null;
       activo?: boolean;
+      aplicar_epp_por_puesto?: boolean;
     },
   ) {
     const updates: Record<string, unknown> = {};
@@ -468,7 +530,22 @@ export const eppService = {
       .single();
     if (error) throw error;
     if (!data) throw new HttpError(404, "Empleado no encontrado");
-    return data;
+
+    let eppAplicadosA = 1;
+    const puestoFinal = (data.puesto as string | null)?.trim() || null;
+    if (payload.aplicar_epp_por_puesto && puestoFinal) {
+      const eppFinal =
+        payload.epp_necesarios !== undefined
+          ? payload.epp_necesarios?.trim() || null
+          : (data.epp_necesarios as string | null)?.trim() || null;
+      eppAplicadosA = await aplicarEppNecesariosPorPuesto(
+        data.empresa_id as string,
+        puestoFinal,
+        eppFinal,
+      );
+    }
+
+    return { ...data, epp_aplicados_a: eppAplicadosA };
   },
 
   async buscarEmpleadoPorQr(rawToken: string) {
@@ -688,43 +765,47 @@ export const eppService = {
     if (empresaError) throw empresaError;
     const empresa = normalizarEmpresaParaPlanilla(empresaRaw);
 
-    let empleadoPuesto: string | null = null;
-    let empleadoEppNecesarios: string | null = null;
-    if (entrega.empleado_id) {
-      const { data: empleado } = await supabaseAdmin
-        .from("empleados")
-        .select("puesto, epp_necesarios, sector")
-        .eq("id", entrega.empleado_id)
-        .maybeSingle();
-      // Fallback a sector solo para puesto (dato histórico pre-migración)
-      empleadoPuesto = empleado?.puesto?.trim() || empleado?.sector?.trim() || null;
-      empleadoEppNecesarios = empleado?.epp_necesarios?.trim() || null;
-    }
-
     const firmaBuffer = await storageService.downloadBuffer(
       entrega.firma_empleado_url,
     );
 
-    const pdfBuffer = await eppPdfService.generarPlanillaAnexoI({
+    let consultora: { nombre?: string | null; logo_url?: string | null } | null =
+      null;
+    if (empresaRaw?.consultora_id) {
+      const { data: cons } = await supabaseAdmin
+        .from("consultoras")
+        .select("nombre, logo_url")
+        .eq("id", empresaRaw.consultora_id)
+        .maybeSingle();
+      consultora = cons;
+    }
+
+    let empleadoSector: string | null = null;
+    if (entrega.empleado_id) {
+      const { data: empleado } = await supabaseAdmin
+        .from("empleados")
+        .select("sector")
+        .eq("id", entrega.empleado_id)
+        .maybeSingle();
+      empleadoSector = empleado?.sector?.trim() || null;
+    }
+
+    const pdfBuffer = await eppPdfService.generarConstanciaInterna({
       empresa: {
         razon_social: empresa.razon_social,
         cuit: empresa.cuit,
-        domicilio: empresa.domicilio,
-        localidad: empresa.localidad,
-        codigo_postal: empresa.codigo_postal,
-        provincia: empresa.provincia,
         actividad: empresa.actividad,
         logo_url: empresa.logo_url,
       },
+      consultora,
       empleado: {
         nombre: entrega.empleado_nombre,
         dni: entrega.empleado_documento,
-        puesto: empleadoPuesto,
-        epp_necesarios: empleadoEppNecesarios,
+        sector: empleadoSector,
       },
       items: [
         {
-          epp_tipos: entrega.epp_tipos,
+          epp_tipos: firstRelation(entrega.epp_tipos) ?? entrega.epp_tipos,
           cantidad: entrega.cantidad,
           marca: entrega.marca,
           modelo: entrega.modelo,
@@ -734,6 +815,9 @@ export const eppService = {
           firmaBuffer,
         },
       ],
+      fecha: entrega.entregado_at,
+      firmaUrl: entrega.firma_empleado_url,
+      firmaBuffer,
     });
 
     const pdfPath = `epp/pdf/${entrega.empresa_id}/${entrega.empleado_documento}_${entrega.id}.pdf`;
@@ -759,6 +843,99 @@ export const eppService = {
       .from("epp_entregas")
       .update({ url_registro_oficial: pdfUrl })
       .eq("id", entrega.id);
+
+    return pdfUrl;
+  },
+
+  /**
+   * Una planilla Anexo I con varios renglones; misma URL en todas las filas del lote.
+   */
+  async generarYGuardarPdfLote(entregas: EntregaRow[]): Promise<string> {
+    if (entregas.length === 0) {
+      throw new HttpError(400, "No hay entregas para generar el PDF");
+    }
+    const primera = entregas[0];
+
+    const { data: empresaRaw, error: empresaError } = await supabaseAdmin
+      .from("empresas")
+      .select(
+        "razon_social, cuit, actividad, logo_url, domicilio, localidad, codigo_postal, provincia, consultora_id",
+      )
+      .eq("id", primera.empresa_id)
+      .single();
+    if (empresaError) throw empresaError;
+    const empresa = normalizarEmpresaParaPlanilla(empresaRaw);
+
+    let empleadoPuesto: string | null = null;
+    let empleadoEppNecesarios: string | null = null;
+    if (primera.empleado_id) {
+      const { data: empleado } = await supabaseAdmin
+        .from("empleados")
+        .select("puesto, epp_necesarios, sector")
+        .eq("id", primera.empleado_id)
+        .maybeSingle();
+      empleadoPuesto = empleado?.puesto?.trim() || empleado?.sector?.trim() || null;
+      empleadoEppNecesarios = empleado?.epp_necesarios?.trim() || null;
+    }
+
+    const firmaBuffer = primera.firma_empleado_url
+      ? await storageService.downloadBuffer(primera.firma_empleado_url)
+      : null;
+
+    const pdfBuffer = await eppPdfService.generarPlanillaAnexoI({
+      empresa: {
+        razon_social: empresa.razon_social,
+        cuit: empresa.cuit,
+        domicilio: empresa.domicilio,
+        localidad: empresa.localidad,
+        codigo_postal: empresa.codigo_postal,
+        provincia: empresa.provincia,
+        actividad: empresa.actividad,
+        logo_url: empresa.logo_url,
+      },
+      empleado: {
+        nombre: primera.empleado_nombre,
+        dni: primera.empleado_documento,
+        puesto: empleadoPuesto,
+        epp_necesarios: empleadoEppNecesarios,
+      },
+      items: entregas.map((entrega) => ({
+        epp_tipos: firstRelation(entrega.epp_tipos) ?? entrega.epp_tipos ?? null,
+        cantidad: entrega.cantidad,
+        marca: entrega.marca,
+        modelo: entrega.modelo,
+        certificacion: entrega.certificacion,
+        fecha_entrega: entrega.entregado_at,
+        firmaUrl: entrega.firma_empleado_url,
+        firmaBuffer,
+      })),
+    });
+
+    const loteId = entregas.map((e) => e.id).sort().join("_").slice(0, 80);
+    const pdfPath = `epp/pdf/${primera.empresa_id}/${primera.empleado_documento}_lote_${loteId}.pdf`;
+    const { error: pdfUploadError } = await supabaseAdmin.storage
+      .from("informes_pdf")
+      .upload(pdfPath, pdfBuffer, {
+        contentType: "application/pdf",
+        upsert: true,
+      });
+
+    if (pdfUploadError) {
+      throw new HttpError(
+        500,
+        `La entrega se registró pero falló el PDF: ${pdfUploadError.message}`,
+      );
+    }
+
+    const pdfUrl = supabaseAdmin.storage
+      .from("informes_pdf")
+      .getPublicUrl(pdfPath).data.publicUrl;
+
+    const ids = entregas.map((e) => e.id);
+    await supabaseAdmin
+      .from("epp_entregas")
+      .update({ url_registro_oficial: pdfUrl })
+      .in("id", ids);
 
     return pdfUrl;
   },
@@ -797,14 +974,11 @@ export const eppService = {
       ),
     };
 
-    let pdfUrl = entregaRow.url_registro_oficial;
-    if (!pdfUrl) {
-      // Generación lazy: el PDF async pudo fallar o cortarse (p. ej. reinicio del server).
-      pdfUrl = await this.generarYGuardarPdf(
-        { id: "sistema", rol: "preventor" },
-        entregaRow,
-      );
-    }
+    // Siempre regenerar: evita servir constancias cacheadas con firma de empleador.
+    const pdfUrl = await this.generarYGuardarPdf(
+      { id: "sistema", rol: "preventor" },
+      entregaRow,
+    );
 
     const bucketName = "informes_pdf";
     const parts = pdfUrl.split(`/public/${bucketName}/`);
@@ -816,32 +990,13 @@ export const eppService = {
       .from(bucketName)
       .download(parts[1]);
     if (downloadError || !fileData) {
-      // Si el path quedó huérfano en DB, regeneramos una vez.
-      pdfUrl = await this.generarYGuardarPdf(
-        { id: "sistema", rol: "preventor" },
-        entregaRow,
-      );
-      const retryParts = pdfUrl.split(`/public/${bucketName}/`);
-      if (retryParts.length < 2) {
-        throw new HttpError(500, "No se pudo regenerar el archivo PDF");
-      }
-      const { data: retryData, error: retryError } = await supabaseAdmin.storage
-        .from(bucketName)
-        .download(retryParts[1]);
-      if (retryError || !retryData) {
-        throw new HttpError(500, "No se pudo obtener el archivo del storage");
-      }
-      const buffer = Buffer.from(await retryData.arrayBuffer());
-      return {
-        buffer,
-        filename: `Constancia_SRT_299_${entregaRow.empleado_documento}.pdf`,
-      };
+      throw new HttpError(500, "No se pudo obtener el archivo del storage");
     }
 
     const buffer = Buffer.from(await fileData.arrayBuffer());
     return {
       buffer,
-      filename: `Constancia_SRT_299_${entregaRow.empleado_documento}.pdf`,
+      filename: `Constancia_EPP_${entregaRow.empleado_documento}.pdf`,
     };
   },
 
@@ -1622,7 +1777,8 @@ export const eppService = {
   },
 
   /**
-   * PDF consolidado: listado completo (Res. 299/11) en una sola tabla continua.
+   * PDF histórico oficial Anexo I: una planilla por trabajador
+   * (empresa + padrón puesto/EPP + actos de entrega).
    */
   async exportarHistoricoPdf(empresaId: string, opts: EppHistoricoFiltros = {}) {
     const fetched = await this.cargarEntregasHistoricoExport(
@@ -1648,56 +1804,158 @@ export const eppService = {
       .filter(Boolean)
       .join(" · ");
 
-    const items = await Promise.all(
-      entregas.map(async (entrega) => {
-        const tipo = firstRelation(entrega.epp_tipos);
-        const firmaBuffer = entrega.firma_empleado_url
-          ? await storageService.downloadBuffer(entrega.firma_empleado_url)
-          : null;
+    type GroupKey = string;
+    const groups = new Map<
+      GroupKey,
+      {
+        empleadoId: string | null;
+        nombre: string;
+        dni: string;
+        entregas: typeof entregas;
+      }
+    >();
+
+    for (const entrega of entregas) {
+      const dni = (entrega.empleado_documento || "").trim();
+      const key: GroupKey = entrega.empleado_id
+        ? `id:${entrega.empleado_id}`
+        : `dni:${dni || entrega.id}`;
+      const existing = groups.get(key);
+      if (existing) {
+        existing.entregas.push(entrega);
+      } else {
+        groups.set(key, {
+          empleadoId: entrega.empleado_id,
+          nombre: entrega.empleado_nombre || "Sin nombre",
+          dni,
+          entregas: [entrega],
+        });
+      }
+    }
+
+    const empleadoIds = [
+      ...new Set(
+        [...groups.values()]
+          .map((g) => g.empleadoId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+
+    const padronById = new Map<
+      string,
+      { puesto: string | null; epp_necesarios: string | null; sector: string | null }
+    >();
+    if (empleadoIds.length > 0) {
+      const { data: empleadosRows, error: empError } = await supabaseAdmin
+        .from("empleados")
+        .select("id, puesto, epp_necesarios, sector")
+        .in("id", empleadoIds);
+      if (empError) throw empError;
+      for (const row of empleadosRows ?? []) {
+        padronById.set(row.id, {
+          puesto: row.puesto?.trim() || null,
+          epp_necesarios: row.epp_necesarios?.trim() || null,
+          sector: row.sector?.trim() || null,
+        });
+      }
+    }
+
+    // Fallback por DNI si no hay empleado_id
+    const dnisSinId = [
+      ...new Set(
+        [...groups.values()]
+          .filter((g) => !g.empleadoId && g.dni)
+          .map((g) => g.dni),
+      ),
+    ];
+    const padronByDni = new Map<
+      string,
+      { puesto: string | null; epp_necesarios: string | null; sector: string | null }
+    >();
+    if (dnisSinId.length > 0) {
+      const { data: byDni, error: dniError } = await supabaseAdmin
+        .from("empleados")
+        .select("documento, puesto, epp_necesarios, sector")
+        .eq("empresa_id", empresaId)
+        .in("documento", dnisSinId);
+      if (dniError) throw dniError;
+      for (const row of byDni ?? []) {
+        padronByDni.set(row.documento, {
+          puesto: row.puesto?.trim() || null,
+          epp_necesarios: row.epp_necesarios?.trim() || null,
+          sector: row.sector?.trim() || null,
+        });
+      }
+    }
+
+    const planillas = await Promise.all(
+      [...groups.values()].map(async (group) => {
+        const padron =
+          (group.empleadoId ? padronById.get(group.empleadoId) : null) ||
+          (group.dni ? padronByDni.get(group.dni) : null) ||
+          null;
+
+        const items = await Promise.all(
+          group.entregas.map(async (entrega) => {
+            const tipo = firstRelation(entrega.epp_tipos);
+            const firmaBuffer = entrega.firma_empleado_url
+              ? await storageService.downloadBuffer(entrega.firma_empleado_url)
+              : null;
+            return {
+              epp_tipos: tipo,
+              cantidad: entrega.cantidad || 1,
+              marca: entrega.marca,
+              modelo: entrega.modelo,
+              certificacion: entrega.certificacion,
+              fecha_entrega: entrega.entregado_at || "",
+              firmaUrl: entrega.firma_empleado_url,
+              firmaBuffer,
+            };
+          }),
+        );
+
         return {
-          trabajador: entrega.empleado_nombre || "Sin nombre",
-          dni: entrega.empleado_documento || "",
-          producto: tipo?.nombre || "—",
-          modelo: entrega.modelo,
-          marca: entrega.marca,
-          certificacion: entrega.certificacion,
-          cantidad: entrega.cantidad || 1,
-          fecha_entrega: entrega.entregado_at || "",
-          firmaUrl: entrega.firma_empleado_url,
-          firmaBuffer,
+          empresa: {
+            razon_social: empresa.razon_social,
+            cuit: empresa.cuit,
+            domicilio: empresa.domicilio,
+            localidad: empresa.localidad,
+            codigo_postal: empresa.codigo_postal,
+            provincia: empresa.provincia,
+            actividad: empresa.actividad,
+            logo_url: empresa.logo_url,
+          },
+          empleado: {
+            nombre: group.nombre,
+            dni: group.dni,
+            puesto: padron?.puesto || padron?.sector || null,
+            epp_necesarios: padron?.epp_necesarios || null,
+          },
+          items,
+          informacion_adicional: [
+            `Registro histórico — ${items.length} entrega(s)`,
+            filtrosResumen ? `Filtros: ${filtrosResumen}` : null,
+          ]
+            .filter(Boolean)
+            .join(" · "),
         };
       }),
     );
 
-    const buffer = await eppPdfService.generarListaHistorico({
-      empresa: {
-        razon_social: empresa.razon_social,
-        cuit: empresa.cuit,
-        domicilio: empresa.domicilio,
-        localidad: empresa.localidad,
-        codigo_postal: empresa.codigo_postal,
-        provincia: empresa.provincia,
-        actividad: empresa.actividad,
-        logo_url: empresa.logo_url,
-      },
-      items,
-      informacion_adicional: [
-        `Listado consolidado — ${items.length} entrega(s)`,
-        filtrosResumen ? `Filtros: ${filtrosResumen}` : null,
-      ]
-        .filter(Boolean)
-        .join(" · "),
-    });
+    // Orden alfabético por trabajador
+    planillas.sort((a, b) =>
+      a.empleado.nombre.localeCompare(b.empleado.nombre, "es", {
+        sensitivity: "base",
+      }),
+    );
 
-    const trabajadores = new Set(
-      items.map((i) => `${i.dni}|${i.trabajador.toLowerCase()}`),
-    ).size;
+    const buffer = await eppPdfService.generarPlanillasAnexoI(planillas);
 
     return {
       buffer,
-      filename: `Lista_EPP_historico_${empresa.cuit || empresaId.slice(0, 8)}.pdf`,
-      trabajadores,
-      entregas: items.length,
+      filename: `Anexo_I_EPP_historico_${empresa.cuit || empresaId.slice(0, 8)}.pdf`,
+      trabajadores: planillas.length,
+      entregas: entregas.length,
     };
   },
 
@@ -1949,23 +2207,88 @@ export const eppService = {
     };
   },
 
+  async buscarEmpleadoEntregaPublica(token: string, dniRaw: string) {
+    const dni = dniRaw.replace(/\D/g, "");
+    if (!/^\d{7,8}$/.test(dni)) {
+      throw new HttpError(400, "El DNI debe tener 7 u 8 números");
+    }
+
+    const { data: empresa, error } = await supabaseAdmin
+      .from("empresas")
+      .select("id, consultora_id, estado")
+      .eq("token_entrega_epp", token)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!empresa) throw new HttpError(404, "QR de entrega inválido o vencido");
+    if (empresa.estado && empresa.estado !== "activa") {
+      throw new HttpError(400, "La empresa no acepta entregas en este momento");
+    }
+
+    const { data: empleado, error: empError } = await supabaseAdmin
+      .from("empleados")
+      .select("id, nombre, documento, sector, puesto, epp_necesarios, activo")
+      .eq("empresa_id", empresa.id)
+      .eq("documento", dni)
+      .maybeSingle();
+
+    if (empError) throw empError;
+    if (!empleado || !empleado.activo) {
+      return { found: false as const };
+    }
+
+    const { data: tipos, error: tiposError } = await supabaseAdmin
+      .from("epp_tipos")
+      .select("id, nombre")
+      .eq("consultora_id", empresa.consultora_id)
+      .eq("activo", true);
+
+    if (tiposError) throw tiposError;
+
+    const eppTipos = mapEppNecesariosToTipos(
+      empleado.epp_necesarios,
+      tipos ?? [],
+    );
+
+    return {
+      found: true as const,
+      nombre: empleado.nombre,
+      documento: empleado.documento,
+      sector: empleado.sector ?? null,
+      puesto: empleado.puesto?.trim() || empleado.sector?.trim() || null,
+      epp_necesarios: empleado.epp_necesarios?.trim() || null,
+      epp_tipos: eppTipos,
+    };
+  },
+
   async registrarEntregaPublica(
     token: string,
     payload: {
       nombre_empleado: string;
       dni_empleado: string;
+      puesto: string;
       sector?: string | null;
-      epp_tipo_id: string;
-      cantidad: number;
-      marca?: string | null;
-      modelo?: string | null;
-      certificacion?: string | null;
+      items: Array<{
+        epp_tipo_id: string;
+        cantidad: number;
+        marca?: string | null;
+        modelo?: string | null;
+        certificacion?: string | null;
+      }>;
       firma: string;
     },
     foto?: Express.Multer.File,
   ) {
     if (!payload.firma.startsWith("data:image/")) {
       throw new HttpError(400, "La firma es inválida");
+    }
+    if (!payload.items?.length) {
+      throw new HttpError(400, "Seleccioná al menos un EPP");
+    }
+
+    const puesto = payload.puesto?.trim() || "";
+    if (puesto.length < 2) {
+      throw new HttpError(400, "El puesto de trabajo es obligatorio (Anexo I)");
     }
 
     const { data: empresa, error: empresaError } = await supabaseAdmin
@@ -1982,15 +2305,19 @@ export const eppService = {
       throw new HttpError(400, "La empresa no acepta entregas en este momento");
     }
 
-    const { data: tipo, error: tipoError } = await supabaseAdmin
+    const tipoIds = [...new Set(payload.items.map((item) => item.epp_tipo_id))];
+    const { data: tiposRows, error: tiposError } = await supabaseAdmin
       .from("epp_tipos")
       .select("id, nombre, activo, consultora_id, foto_url")
-      .eq("id", payload.epp_tipo_id)
-      .maybeSingle();
+      .in("id", tipoIds);
 
-    if (tipoError) throw tipoError;
-    if (!tipo || !tipo.activo || tipo.consultora_id !== empresa.consultora_id) {
-      throw new HttpError(400, "El tipo de EPP no es válido para esta empresa");
+    if (tiposError) throw tiposError;
+    const tiposById = new Map((tiposRows ?? []).map((t) => [t.id, t]));
+    for (const tipoId of tipoIds) {
+      const tipo = tiposById.get(tipoId);
+      if (!tipo || !tipo.activo || tipo.consultora_id !== empresa.consultora_id) {
+        throw new HttpError(400, "El tipo de EPP no es válido para esta empresa");
+      }
     }
 
     const dni = payload.dni_empleado.replace(/\D/g, "");
@@ -1999,7 +2326,7 @@ export const eppService = {
 
     let { data: empleado, error: empLookupError } = await supabaseAdmin
       .from("empleados")
-      .select("id, nombre, documento, activo, sector")
+      .select("id, nombre, documento, activo, sector, puesto, epp_necesarios")
       .eq("empresa_id", empresa.id)
       .eq("documento", dni)
       .maybeSingle();
@@ -2018,16 +2345,17 @@ export const eppService = {
           nombre,
           documento: dni,
           sector,
+          puesto,
           activo: true,
         })
-        .select("id, nombre, documento, activo, sector")
+        .select("id, nombre, documento, activo, sector, puesto, epp_necesarios")
         .single();
 
       if (createError) {
         if (createError.code === "23505") {
           const { data: retry } = await supabaseAdmin
             .from("empleados")
-            .select("id, nombre, documento, activo, sector")
+            .select("id, nombre, documento, activo, sector, puesto, epp_necesarios")
             .eq("empresa_id", empresa.id)
             .eq("documento", dni)
             .maybeSingle();
@@ -2041,26 +2369,35 @@ export const eppService = {
       } else {
         empleado = creado;
       }
-    } else if (sector && !empleado.sector) {
-      await supabaseAdmin
-        .from("empleados")
-        .update({ sector })
-        .eq("id", empleado.id);
     }
 
     if (!empleado) {
       throw new HttpError(500, "No se pudo resolver el trabajador");
     }
 
-    let fotoUrl: string | null = null;
+    // Siempre sincronizar datos del formulario al padrón (Anexo I: puesto obligatorio).
+    const empleadoUpdates: {
+      nombre: string;
+      puesto: string;
+      sector: string | null;
+    } = {
+      nombre: nombre.length >= 3 ? nombre : empleado.nombre,
+      puesto,
+      sector: sector ?? empleado.sector ?? null,
+    };
+    const { error: syncError } = await supabaseAdmin
+      .from("empleados")
+      .update(empleadoUpdates)
+      .eq("id", empleado.id);
+    if (syncError) throw syncError;
+    empleado = { ...empleado, ...empleadoUpdates };
+
+    let fotoUploadUrl: string | null = null;
     if (foto) {
       const ext = safeExtensionFromUpload(foto);
       const fotoPath = `evidencias/${empresa.id}/${dni}_${Date.now()}.${ext}`;
       await storageService.subirArchivo("epp_fotos", fotoPath, foto);
-      fotoUrl = storageService.obtenerUrlPublica("epp_fotos", fotoPath);
-    } else if (tipo.foto_url) {
-      // Usar la foto del catálogo si existe; no se pide subir en la entrega
-      fotoUrl = tipo.foto_url;
+      fotoUploadUrl = storageService.obtenerUrlPublica("epp_fotos", fotoPath);
     }
 
     const firmaUrl = await uploadBase64Png(
@@ -2069,42 +2406,54 @@ export const eppService = {
       payload.firma,
     );
 
-    const { data: entrega, error: entregaError } = await supabaseAdmin
-      .from("epp_entregas")
-      .insert({
+    const entregadoAt = new Date().toISOString();
+    const entregasData = payload.items.map((item, index) => {
+      const tipo = tiposById.get(item.epp_tipo_id)!;
+      return {
         empresa_id: empresa.id,
         preventor_id: null,
-        epp_tipo_id: payload.epp_tipo_id,
-        empleado_id: empleado.id,
-        empleado_nombre: empleado.nombre || nombre,
-        empleado_documento: empleado.documento || dni,
-        cantidad: payload.cantidad || 1,
-        marca: payload.marca || null,
-        modelo: payload.modelo || null,
-        certificacion: payload.certificacion || null,
-        entregado_at: new Date().toISOString(),
+        epp_tipo_id: item.epp_tipo_id,
+        empleado_id: empleado!.id,
+        empleado_nombre: nombre || empleado!.nombre,
+        empleado_documento: dni || empleado!.documento,
+        cantidad: item.cantidad || 1,
+        marca: item.marca || null,
+        modelo: item.modelo || null,
+        certificacion: item.certificacion || null,
+        entregado_at: entregadoAt,
         firma_empleado_url: firmaUrl,
         firma_empleador_url: null,
-        foto_evidencia_url: fotoUrl,
+        foto_evidencia_url:
+          index === 0 && fotoUploadUrl
+            ? fotoUploadUrl
+            : tipo.foto_url || null,
         estado: "firmada",
         origen: "qr_publico",
-      })
-      .select(`*, epp_tipos(id, nombre, descripcion, foto_url)`)
-      .single();
+      };
+    });
+
+    const { data: entregas, error: entregaError } = await supabaseAdmin
+      .from("epp_entregas")
+      .insert(entregasData)
+      .select(`*, epp_tipos(id, nombre, descripcion, foto_url)`);
 
     if (entregaError) throw entregaError;
-    const row = entrega as EntregaRow;
+    const rows = (entregas ?? []) as EntregaRow[];
+    if (rows.length === 0) {
+      throw new HttpError(500, "No se pudieron registrar las entregas");
+    }
 
-    void this.generarYGuardarPdf(
-      { id: "qr_publico", rol: "preventor" },
-      row,
-    ).catch((err) => {
-      console.error(`Error generando PDF de entrega pública EPP ${row.id}:`, err);
+    void this.generarYGuardarPdfLote(rows).catch((err) => {
+      console.error(
+        `Error generando PDF de entrega pública EPP lote ${rows.map((r) => r.id).join(",")}:`,
+        err,
+      );
     });
 
     return {
       success: true,
-      entrega: mapEntrega(row),
+      entregas: rows.map((row) => mapEntrega(row)),
+      entrega: mapEntrega(rows[0]),
       pdf_generando: true,
       mensaje:
         "Entrega registrada. El registro oficial SRT 299/11 se está generando.",

@@ -72,6 +72,8 @@ export const crearEmpleadoSchema = z.object({
     puesto: z.string().max(500).optional().nullable(),
     /** EPP necesarios según el puesto (Anexo I 299/11). */
     epp_necesarios: z.string().max(1000).optional().nullable(),
+    /** Si true, copia epp_necesarios a todos los de la empresa con el mismo puesto. */
+    aplicar_epp_por_puesto: z.boolean().optional().default(false),
   }),
 });
 
@@ -87,6 +89,7 @@ export const actualizarEmpleadoSchema = z.object({
     puesto: z.string().max(500).optional().nullable(),
     epp_necesarios: z.string().max(1000).optional().nullable(),
     activo: z.boolean().optional(),
+    aplicar_epp_por_puesto: z.boolean().optional().default(false),
   }),
 });
 
@@ -279,6 +282,23 @@ export const empresaIdQuerySchema = z.object({
   }),
 });
 
+export const buscarEmpleadoEntregaPublicaSchema = z.object({
+  params: z.object({ token: z.string().uuid() }),
+  query: z.object({
+    dni: z
+      .string()
+      .regex(/^\d{7,8}$/, "El DNI debe tener 7 u 8 números"),
+  }),
+});
+
+const entregaPublicaItemSchema = z.object({
+  epp_tipo_id: uuid,
+  cantidad: z.coerce.number().int().positive().default(1),
+  marca: z.string().optional().nullable(),
+  modelo: z.string().optional().nullable(),
+  certificacion: z.string().optional().nullable(),
+});
+
 export const registrarEntregaPublicaSchema = z.object({
   params: z.object({ token: z.string().uuid() }),
   body: z.object({
@@ -286,12 +306,25 @@ export const registrarEntregaPublicaSchema = z.object({
     dni_empleado: z
       .string()
       .regex(/^\d{7,8}$/, "El DNI debe tener 7 u 8 números"),
+    puesto: z
+      .string()
+      .trim()
+      .min(2, "El puesto de trabajo es obligatorio (Anexo I)")
+      .max(500),
     sector: z.string().optional().nullable(),
-    epp_tipo_id: uuid,
-    cantidad: z.coerce.number().int().positive().default(1),
-    marca: z.string().optional().nullable(),
-    modelo: z.string().optional().nullable(),
-    certificacion: z.string().optional().nullable(),
+    items: z.preprocess((value) => {
+      if (typeof value === "string") {
+        try {
+          return JSON.parse(value) as unknown;
+        } catch {
+          return value;
+        }
+      }
+      return value;
+    }, z
+      .array(entregaPublicaItemSchema)
+      .min(1, "Seleccioná al menos un EPP")
+      .max(20, "Máximo 20 ítems por entrega")),
     firma: z.string().min(1, "La firma del trabajador es requerida"),
   }),
 });

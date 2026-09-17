@@ -6,6 +6,7 @@ import {
   actualizarProveedorSchema,
   actualizarTipoSchema,
   agregarProveedorLicitacionSchema,
+  buscarEmpleadoEntregaPublicaSchema,
   cotizarPublicoSchema,
   crearEmpleadoSchema,
   crearLicitacionSchema,
@@ -511,6 +512,26 @@ export const eppController = {
         throw new HttpError(400, "Token inválido");
       }
       const data = await eppService.obtenerEntregaPublica(token);
+      res.json(data);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async buscarEmpleadoEntregaPublica(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) {
+    try {
+      const parsed = buscarEmpleadoEntregaPublicaSchema.parse({
+        params: { token: param(req.params.token) },
+        query: { dni: String(req.query.dni || "") },
+      });
+      const data = await eppService.buscarEmpleadoEntregaPublica(
+        parsed.params.token,
+        parsed.query.dni,
+      );
       res.json(data);
     } catch (error) {
       next(error);

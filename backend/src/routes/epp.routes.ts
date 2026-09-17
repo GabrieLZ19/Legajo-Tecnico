@@ -101,6 +101,11 @@ router.get(
   eppEntregaPublicReadLimiter,
   eppController.obtenerEntregaPublica,
 );
+router.get(
+  "/entrega-publica/:token/empleado",
+  eppEntregaPublicReadLimiter,
+  eppController.buscarEmpleadoEntregaPublica,
+);
 router.post(
   "/entrega-publica/:token",
   eppEntregaPublicSubmitLimiter,
