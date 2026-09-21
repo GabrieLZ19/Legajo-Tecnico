@@ -77,7 +77,7 @@ export default function EppPage() {
     setLoadingShared(true);
     try {
       const [tiposRes, proveedoresRes] = await Promise.all([
-        getTiposEpp(true),
+        getTiposEpp(empresa.id, true),
         getProveedores(),
       ]);
       setTipos(tiposRes.tipos || []);
@@ -215,9 +215,10 @@ export default function EppPage() {
         />
       )}
 
-      {tab === "catalogo" && (
+      {tab === "catalogo" && empresa && (
         <CatalogoTab
           tipos={tipos}
+          empresaId={empresa.id}
           canEdit={canCreate}
           onChanged={fetchShared}
         />

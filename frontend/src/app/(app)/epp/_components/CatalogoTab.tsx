@@ -9,6 +9,7 @@ import { FileImagePicker } from "@/components/FileImagePicker";
 
 type CatalogoTabProps = {
   tipos: EppTipo[];
+  empresaId: string;
   canEdit: boolean;
   onChanged: () => Promise<void>;
 };
@@ -27,7 +28,7 @@ function apiErrorMessage(err: unknown, fallback: string): string {
   return fallback;
 }
 
-export function CatalogoTab({ tipos, canEdit, onChanged }: CatalogoTabProps) {
+export function CatalogoTab({ tipos, empresaId, canEdit, onChanged }: CatalogoTabProps) {
   const { crearTipoEpp, actualizarTipoEpp } = useEpp();
   const { showAlert } = useAlert();
   const [open, setOpen] = useState(false);
@@ -35,6 +36,9 @@ export function CatalogoTab({ tipos, canEdit, onChanged }: CatalogoTabProps) {
   const [pendingDelete, setPendingDelete] = useState<EppTipo | null>(null);
   const [nombre, setNombre] = useState("");
   const [descripcion, setDescripcion] = useState("");
+  const [marca, setMarca] = useState("");
+  const [modelo, setModelo] = useState("");
+  const [certificacion, setCertificacion] = useState("");
   const [foto, setFoto] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [busqueda, setBusqueda] = useState("");
@@ -53,7 +57,10 @@ export function CatalogoTab({ tipos, canEdit, onChanged }: CatalogoTabProps) {
     return visibles.filter(
       (tipo) =>
         tipo.nombre.toLowerCase().includes(q) ||
-        (tipo.descripcion || "").toLowerCase().includes(q),
+        (tipo.descripcion || "").toLowerCase().includes(q) ||
+        (tipo.marca || "").toLowerCase().includes(q) ||
+        (tipo.modelo || "").toLowerCase().includes(q) ||
+        (tipo.certificacion || "").toLowerCase().includes(q),
     );
   }, [visibles, busqueda]);
 
@@ -64,6 +71,9 @@ export function CatalogoTab({ tipos, canEdit, onChanged }: CatalogoTabProps) {
     setEditing(null);
     setNombre("");
     setDescripcion("");
+    setMarca("");
+    setModelo("");
+    setCertificacion("");
     setFoto(null);
   };
 
@@ -71,6 +81,9 @@ export function CatalogoTab({ tipos, canEdit, onChanged }: CatalogoTabProps) {
     setEditing(null);
     setNombre("");
     setDescripcion("");
+    setMarca("");
+    setModelo("");
+    setCertificacion("");
     setFoto(null);
     setOpen(true);
   };
@@ -79,6 +92,9 @@ export function CatalogoTab({ tipos, canEdit, onChanged }: CatalogoTabProps) {
     setEditing(tipo);
     setNombre(tipo.nombre);
     setDescripcion(tipo.descripcion || "");
+    setMarca(tipo.marca || "");
+    setModelo(tipo.modelo || "");
+    setCertificacion(tipo.certificacion || "");
     setFoto(null);
     setOpen(true);
   };
@@ -89,13 +105,25 @@ export function CatalogoTab({ tipos, canEdit, onChanged }: CatalogoTabProps) {
     try {
       if (editing) {
         await actualizarTipoEpp(editing.id, {
+          empresa_id: empresaId,
           nombre,
           descripcion,
+          marca,
+          modelo,
+          certificacion,
           foto: foto ?? undefined,
         });
         showAlert("success", "Catálogo actualizado", "Los cambios del EPP ya están guardados.");
       } else {
-        await crearTipoEpp({ nombre, descripcion, foto: foto ?? undefined });
+        await crearTipoEpp({
+          empresa_id: empresaId,
+          nombre,
+          descripcion,
+          marca,
+          modelo,
+          certificacion,
+          foto: foto ?? undefined,
+        });
         showAlert("success", "EPP creado", "Ya aparece en el catálogo y en las entregas.");
       }
       await onChanged();
@@ -111,7 +139,10 @@ export function CatalogoTab({ tipos, canEdit, onChanged }: CatalogoTabProps) {
     if (!pendingDelete) return;
     setSaving(true);
     try {
-      await actualizarTipoEpp(pendingDelete.id, { activo: false });
+      await actualizarTipoEpp(pendingDelete.id, {
+        empresa_id: empresaId,
+        activo: false,
+      });
       showAlert(
         "success",
         "EPP eliminado",
@@ -231,6 +262,11 @@ export function CatalogoTab({ tipos, canEdit, onChanged }: CatalogoTabProps) {
                   <h3 className="text-xs sm:text-sm font-bold text-slate-800 leading-snug line-clamp-2">
                     {tipo.nombre}
                   </h3>
+                  {(tipo.marca || tipo.modelo) && (
+                    <p className="text-[10px] sm:text-[11px] text-slate-500 font-semibold mt-0.5 line-clamp-1">
+                      {[tipo.marca, tipo.modelo].filter(Boolean).join(" · ")}
+                    </p>
+                  )}
                   {tipo.descripcion ? (
                     <p className="text-[10px] sm:text-[11px] text-slate-400 font-medium mt-0.5 line-clamp-1 leading-relaxed">
                       {tipo.descripcion}
@@ -275,7 +311,7 @@ export function CatalogoTab({ tipos, canEdit, onChanged }: CatalogoTabProps) {
                   {editing ? "Editar EPP" : "Nuevo EPP"}
                 </h3>
                 <p className="mt-0.5 text-xs font-medium text-slate-400">
-                  Nombre, descripción y foto para el catálogo.
+                  Nombre, marca, modelo, certificación y foto para el catálogo.
                 </p>
               </div>
               <button
@@ -308,9 +344,44 @@ export function CatalogoTab({ tipos, canEdit, onChanged }: CatalogoTabProps) {
                 <textarea
                   value={descripcion}
                   onChange={(e) => setDescripcion(e.target.value)}
-                  placeholder="Detalle, norma o uso (opcional)"
-                  rows={3}
+                  placeholder="Detalle o uso (opcional)"
+                  rows={2}
                   className="w-full px-4 py-3 border border-slate-200 rounded-xl text-base sm:text-sm font-medium resize-none focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500"
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Marca
+                  </label>
+                  <input
+                    value={marca}
+                    onChange={(e) => setMarca(e.target.value)}
+                    placeholder="Ej: Libus"
+                    className="w-full min-h-12 px-4 py-3 border border-slate-200 rounded-xl text-base sm:text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Modelo
+                  </label>
+                  <input
+                    value={modelo}
+                    onChange={(e) => setModelo(e.target.value)}
+                    placeholder="Ej: Argon"
+                    className="w-full min-h-12 px-4 py-3 border border-slate-200 rounded-xl text-base sm:text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Certificación / Norma
+                </label>
+                <input
+                  value={certificacion}
+                  onChange={(e) => setCertificacion(e.target.value)}
+                  placeholder="Ej: IRAM 3610"
+                  className="w-full min-h-12 px-4 py-3 border border-slate-200 rounded-xl text-base sm:text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500"
                 />
               </div>
               <FileImagePicker

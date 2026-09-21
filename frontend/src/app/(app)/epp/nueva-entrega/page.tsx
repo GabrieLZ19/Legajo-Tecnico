@@ -59,6 +59,9 @@ export default function NuevaEntregaEppPage() {
   const [showModalEpp, setShowModalEpp] = useState(false);
   const [nuevoEppNombre, setNuevoEppNombre] = useState("");
   const [nuevoEppDescripcion, setNuevoEppDescripcion] = useState("");
+  const [nuevoEppMarca, setNuevoEppMarca] = useState("");
+  const [nuevoEppModelo, setNuevoEppModelo] = useState("");
+  const [nuevoEppCertificacion, setNuevoEppCertificacion] = useState("");
   const [nuevoEppFoto, setNuevoEppFoto] = useState<File | null>(null);
   const [guardandoNuevoEpp, setGuardandoNuevoEpp] = useState(false);
   const [creandoEppParaIndex, setCreandoEppParaIndex] = useState<number | null>(null);
@@ -91,8 +94,9 @@ export default function NuevaEntregaEppPage() {
   }, [empresa?.id, busquedaPadron, getEmpleados]);
 
   const fetchTipos = async () => {
+    if (!empresa?.id) return;
     try {
-      const data = await getTiposEpp();
+      const data = await getTiposEpp(empresa.id);
       setTipos(data.tipos || []);
     } catch (err) {
       console.error("Error cargando tipos:", err);
@@ -123,15 +127,36 @@ export default function NuevaEntregaEppPage() {
     );
   };
 
+  const seleccionarTipo = (idx: number, tipoId: string) => {
+    const tipo = tipos.find((t) => t.id === tipoId);
+    setItems((prev) =>
+      prev.map((item, i) =>
+        i === idx
+          ? {
+              ...item,
+              epp_tipo_id: tipoId,
+              marca: tipo?.marca?.trim() || "",
+              modelo: tipo?.modelo?.trim() || "",
+              certificacion: tipo?.certificacion?.trim() || "",
+            }
+          : item,
+      ),
+    );
+  };
+
   const handleCrearEpp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nuevoEppNombre.trim()) return;
+    if (!nuevoEppNombre.trim() || !empresa?.id) return;
 
     setGuardandoNuevoEpp(true);
     try {
       const data = await crearTipoEpp({
+        empresa_id: empresa.id,
         nombre: nuevoEppNombre,
         descripcion: nuevoEppDescripcion,
+        marca: nuevoEppMarca,
+        modelo: nuevoEppModelo,
+        certificacion: nuevoEppCertificacion,
         foto: nuevoEppFoto ?? undefined,
       });
 
@@ -141,13 +166,29 @@ export default function NuevaEntregaEppPage() {
       );
 
       if (creandoEppParaIndex !== null) {
-        const updated = [...items];
-        updated[creandoEppParaIndex].epp_tipo_id = nuevoTipo.id;
-        setItems(updated);
+        setItems((prev) =>
+          prev.map((item, i) =>
+            i === creandoEppParaIndex
+              ? {
+                  ...item,
+                  epp_tipo_id: nuevoTipo.id,
+                  marca: nuevoTipo.marca?.trim() || nuevoEppMarca.trim() || "",
+                  modelo: nuevoTipo.modelo?.trim() || nuevoEppModelo.trim() || "",
+                  certificacion:
+                    nuevoTipo.certificacion?.trim() ||
+                    nuevoEppCertificacion.trim() ||
+                    "",
+                }
+              : item,
+          ),
+        );
       }
 
       setNuevoEppNombre("");
       setNuevoEppDescripcion("");
+      setNuevoEppMarca("");
+      setNuevoEppModelo("");
+      setNuevoEppCertificacion("");
       setNuevoEppFoto(null);
       setShowModalEpp(false);
       setCreandoEppParaIndex(null);
@@ -400,7 +441,7 @@ export default function NuevaEntregaEppPage() {
                   <EppTipoPicker
                     tipos={tipos}
                     value={item.epp_tipo_id}
-                    onChange={(tipoId) => actualizarItem(idx, "epp_tipo_id", tipoId)}
+                    onChange={(tipoId) => seleccionarTipo(idx, tipoId)}
                     onCreateNew={() => {
                       setCreandoEppParaIndex(idx);
                       setShowModalEpp(true);
@@ -595,11 +636,52 @@ export default function NuevaEntregaEppPage() {
                 <textarea
                   value={nuevoEppDescripcion}
                   onChange={(e) => setNuevoEppDescripcion(e.target.value)}
-                  placeholder="Detalle o norma de certificación (opcional)..."
-                  rows={3}
+                  placeholder="Detalle o uso (opcional)..."
+                  rows={2}
                   className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 resize-none"
                 />
               </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    Marca
+                  </label>
+                  <input
+                    type="text"
+                    value={nuevoEppMarca}
+                    onChange={(e) => setNuevoEppMarca(e.target.value)}
+                    placeholder="Ej: Libus"
+                    className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    Modelo
+                  </label>
+                  <input
+                    type="text"
+                    value={nuevoEppModelo}
+                    onChange={(e) => setNuevoEppModelo(e.target.value)}
+                    placeholder="Ej: Argon"
+                    className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  Certificación / Norma
+                </label>
+                <input
+                  type="text"
+                  value={nuevoEppCertificacion}
+                  onChange={(e) => setNuevoEppCertificacion(e.target.value)}
+                  placeholder="Ej: IRAM 3610"
+                  className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500"
+                />
+              </div>
+
               <FileImagePicker
                 file={nuevoEppFoto}
                 onChange={setNuevoEppFoto}

@@ -57,7 +57,10 @@ export function EppTipoPicker({
     return activos.filter(
       (tipo) =>
         tipo.nombre.toLowerCase().includes(q) ||
-        (tipo.descripcion || "").toLowerCase().includes(q),
+        (tipo.descripcion || "").toLowerCase().includes(q) ||
+        (tipo.marca || "").toLowerCase().includes(q) ||
+        (tipo.modelo || "").toLowerCase().includes(q) ||
+        (tipo.certificacion || "").toLowerCase().includes(q),
     );
   }, [tipos, query]);
 

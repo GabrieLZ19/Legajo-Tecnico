@@ -62,14 +62,22 @@ export type EppEntregaPublicaEmpleadoLookup =
     };
 
 export type EppTipoPayload = {
+  empresa_id: string;
   nombre: string;
   descripcion?: string;
+  marca?: string;
+  modelo?: string;
+  certificacion?: string;
   foto?: File;
 };
 
 export type EppTipoUpdatePayload = {
+  empresa_id: string;
   nombre?: string;
   descripcion?: string;
+  marca?: string;
+  modelo?: string;
+  certificacion?: string;
   activo?: boolean;
   foto?: File;
 };
@@ -162,8 +170,14 @@ export const eppService = {
 
   async crearTipo(payload: EppTipoPayload): Promise<EppTipo> {
     const form = new FormData();
+    form.append("empresa_id", payload.empresa_id);
     form.append("nombre", payload.nombre);
     if (payload.descripcion) form.append("descripcion", payload.descripcion);
+    if (payload.marca !== undefined) form.append("marca", payload.marca);
+    if (payload.modelo !== undefined) form.append("modelo", payload.modelo);
+    if (payload.certificacion !== undefined) {
+      form.append("certificacion", payload.certificacion);
+    }
     if (payload.foto) form.append("foto", payload.foto);
     const { data } = await api.post<EppTipo>("/epp/tipos", form, {
       timeout: 60000,
@@ -173,8 +187,14 @@ export const eppService = {
 
   async actualizarTipo(id: string, payload: EppTipoUpdatePayload): Promise<EppTipo> {
     const form = new FormData();
+    form.append("empresa_id", payload.empresa_id);
     if (payload.nombre !== undefined) form.append("nombre", payload.nombre);
     if (payload.descripcion !== undefined) form.append("descripcion", payload.descripcion);
+    if (payload.marca !== undefined) form.append("marca", payload.marca);
+    if (payload.modelo !== undefined) form.append("modelo", payload.modelo);
+    if (payload.certificacion !== undefined) {
+      form.append("certificacion", payload.certificacion);
+    }
     if (payload.activo !== undefined) form.append("activo", String(payload.activo));
     if (payload.foto) form.append("foto", payload.foto);
     const { data } = await api.patch<EppTipo>(`/epp/tipos/${id}`, form, {
@@ -195,6 +215,13 @@ export const eppService = {
     const { data } = await api.patch<EmpleadoMutationResult>(
       `/epp/empleados/${id}`,
       payload,
+    );
+    return data;
+  },
+
+  async eliminarEntrega(id: string): Promise<{ success: boolean; id: string }> {
+    const { data } = await api.delete<{ success: boolean; id: string }>(
+      `/epp/entregas/${id}`,
     );
     return data;
   },

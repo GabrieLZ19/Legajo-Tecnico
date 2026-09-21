@@ -286,8 +286,12 @@ export type EstadoEntregaEpp = 'registrada' | 'firmada' | 'anulada';
 
 export interface EppTipo {
   id: string;
+  empresa_id?: string;
   nombre: string;
   descripcion?: string;
+  marca?: string | null;
+  modelo?: string | null;
+  certificacion?: string | null;
   foto_url?: string | null;
   activo: boolean;
 }

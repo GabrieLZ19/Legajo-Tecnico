@@ -107,11 +107,12 @@ export default function NuevaLicitacionPage() {
       return;
     }
     const load = async () => {
+      if (!empresa?.id) return;
       setLoading(true);
       try {
         const [provRes, tiposRes] = await Promise.all([
           getProveedores(),
-          getTiposEpp(false),
+          getTiposEpp(empresa.id, false),
         ]);
         setProveedores(provRes.proveedores || []);
         setTipos((tiposRes.tipos || []).filter((t: EppTipo) => t.activo));

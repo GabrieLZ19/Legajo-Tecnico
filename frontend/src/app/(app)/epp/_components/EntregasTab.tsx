@@ -9,11 +9,13 @@ import {
   Search,
   X,
   QrCode,
+  Trash2,
 } from "lucide-react";
 import type { EppEntrega, Perfil } from "@/types";
 import { VisibleEnteToggle } from "@/components/VisibleEnteToggle";
 import { PaginationBar } from "@/components/PaginationBar";
 import { useEpp } from "@/hooks/useEpp";
+import { useAlert } from "@/context/AlertContext";
 
 const PAGE_SIZE = 10;
 
@@ -63,10 +65,12 @@ export function EntregasTab({
   onDownloadPdf,
   onVisibilidadChange,
 }: EntregasTabProps) {
-  const { getEntregas } = useEpp();
+  const { getEntregas, eliminarEntregaEpp } = useEpp();
+  const { showAlert, showConfirm } = useAlert();
   const [entregas, setEntregas] = useState<EppEntrega[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [busqueda, setBusqueda] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
   const [page, setPage] = useState(0);
@@ -115,6 +119,37 @@ export function EntregasTab({
         e.id === id ? { ...e, visible_ente_regulador: visible } : e,
       ),
     );
+  };
+
+  const handleEliminar = async (entrega: EppEntrega) => {
+    const eppNombre = entrega.epp_tipos?.nombre || "EPP";
+    const ok = await showConfirm(
+      "Eliminar entrega",
+      `¿Eliminar la constancia de ${entrega.nombre_empleado} (${eppNombre})? Esta acción no se puede deshacer.`,
+      {
+        type: "error",
+        confirmLabel: "Eliminar",
+        cancelLabel: "Cancelar",
+      },
+    );
+    if (!ok) return;
+
+    const prevEntregas = entregas;
+    const prevTotal = total;
+    setEntregas((prev) => prev.filter((e) => e.id !== entrega.id));
+    setTotal((t) => Math.max(0, t - 1));
+    setDeletingId(entrega.id);
+
+    try {
+      await eliminarEntregaEpp(entrega.id);
+      showAlert("success", "Entrega eliminada", "La constancia ya no figura en el listado.");
+    } catch {
+      setEntregas(prevEntregas);
+      setTotal(prevTotal);
+      showAlert("error", "Error", "No se pudo eliminar la entrega.");
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   return (
@@ -268,13 +303,25 @@ export function EntregasTab({
                             <button
                               type="button"
                               onClick={() => onDownloadPdf(e.id, e.dni_empleado)}
-                              disabled={downloadingId === e.id}
+                              disabled={downloadingId === e.id || deletingId === e.id}
                               className="inline-flex items-center justify-center gap-1.5 shrink-0 min-h-9 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg cursor-pointer disabled:opacity-50"
                               title="Descargar PDF SRT 299/11"
                             >
                               <Download className="h-3.5 w-3.5" />
                               {downloadingId === e.id ? "…" : "PDF"}
                             </button>
+                            {canEdit && (
+                              <button
+                                type="button"
+                                onClick={() => void handleEliminar(e)}
+                                disabled={deletingId === e.id || downloadingId === e.id}
+                                className="inline-flex items-center justify-center shrink-0 min-h-9 min-w-9 px-2 py-1.5 bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold rounded-lg cursor-pointer disabled:opacity-50"
+                                title="Eliminar entrega"
+                                aria-label="Eliminar entrega"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -346,15 +393,29 @@ export function EntregasTab({
                           label="Visible ente"
                         />
                       )}
-                      <button
-                        type="button"
-                        onClick={() => onDownloadPdf(e.id, e.dni_empleado)}
-                        disabled={downloadingId === e.id}
-                        className="inline-flex items-center justify-center gap-1.5 shrink-0 min-h-10 px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl cursor-pointer disabled:opacity-50"
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                        {downloadingId === e.id ? "…" : "PDF"}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onDownloadPdf(e.id, e.dni_empleado)}
+                          disabled={downloadingId === e.id || deletingId === e.id}
+                          className="inline-flex items-center justify-center gap-1.5 shrink-0 min-h-10 px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl cursor-pointer disabled:opacity-50"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                          {downloadingId === e.id ? "…" : "PDF"}
+                        </button>
+                        {canEdit && (
+                          <button
+                            type="button"
+                            onClick={() => void handleEliminar(e)}
+                            disabled={deletingId === e.id || downloadingId === e.id}
+                            className="inline-flex items-center justify-center shrink-0 min-h-10 min-w-10 px-2.5 py-2 bg-white border border-rose-200 text-rose-600 rounded-xl cursor-pointer disabled:opacity-50"
+                            title="Eliminar entrega"
+                            aria-label="Eliminar entrega"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </li>
                 );

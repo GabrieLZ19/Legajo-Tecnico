@@ -42,10 +42,13 @@ export function useEpp() {
   );
 
   const getTiposEpp = useCallback(
-    (incluirInactivos = false) =>
+    (empresaId: string, incluirInactivos = false) =>
       run(async () => {
         const { data } = await api.get("/epp/tipos", {
-          params: incluirInactivos ? { incluir_inactivos: true } : undefined,
+          params: {
+            empresa_id: empresaId,
+            ...(incluirInactivos ? { incluir_inactivos: true } : {}),
+          },
         });
         return data;
       }, "Error al obtener tipos de EPP"),
@@ -62,14 +65,32 @@ export function useEpp() {
   );
 
   const crearTipoEpp = useCallback(
-    (payload: { nombre: string; descripcion?: string; foto?: File }) =>
-      run(() => eppService.crearTipo(payload), "Error al crear tipo de EPP"),
+    (payload: {
+      empresa_id: string;
+      nombre: string;
+      descripcion?: string;
+      marca?: string;
+      modelo?: string;
+      certificacion?: string;
+      foto?: File;
+    }) => run(() => eppService.crearTipo(payload), "Error al crear tipo de EPP"),
     [run],
   );
 
   const actualizarTipoEpp = useCallback(
-    (id: string, payload: { nombre?: string; descripcion?: string; activo?: boolean; foto?: File }) =>
-      run(() => eppService.actualizarTipo(id, payload), "Error al actualizar tipo de EPP"),
+    (
+      id: string,
+      payload: {
+        empresa_id: string;
+        nombre?: string;
+        descripcion?: string;
+        marca?: string;
+        modelo?: string;
+        certificacion?: string;
+        activo?: boolean;
+        foto?: File;
+      },
+    ) => run(() => eppService.actualizarTipo(id, payload), "Error al actualizar tipo de EPP"),
     [run],
   );
 
@@ -79,6 +100,12 @@ export function useEpp() {
         const { data } = await api.post("/epp/entregas", payload);
         return data;
       }, "Error al registrar entrega de EPP"),
+    [run],
+  );
+
+  const eliminarEntregaEpp = useCallback(
+    (id: string) =>
+      run(() => eppService.eliminarEntrega(id), "Error al eliminar entrega de EPP"),
     [run],
   );
 
@@ -327,6 +354,7 @@ export function useEpp() {
     crearTipoEpp,
     actualizarTipoEpp,
     crearEntregaEpp,
+    eliminarEntregaEpp,
     getEmpleados,
     crearEmpleado,
     actualizarEmpleado,

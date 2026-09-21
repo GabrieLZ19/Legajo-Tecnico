@@ -56,13 +56,13 @@ function clearPersisted(token: string) {
   localStorage.removeItem(`${STORAGE_PREFIX}${token}`);
 }
 
-function emptyLinea(tipoId = ""): LineaItem {
+function emptyLinea(tipoId = "", tipo?: EppTipo | null): LineaItem {
   return {
     epp_tipo_id: tipoId,
     cantidad: 1,
-    marca: "",
-    modelo: "",
-    certificacion: "",
+    marca: tipo?.marca?.trim() || "",
+    modelo: tipo?.modelo?.trim() || "",
+    certificacion: tipo?.certificacion?.trim() || "",
   };
 }
 
@@ -175,7 +175,14 @@ export default function EntregaEppPublicaPage() {
           setEppNecesarios(data.epp_necesarios || "");
           const ids = data.epp_tipos.map((t) => t.id);
           setSugeridosIds(ids);
-          setItems(ids.length === 0 ? [] : ids.map((id) => emptyLinea(id)));
+          setItems(
+            ids.length === 0
+              ? []
+              : ids.map((id) => {
+                  const tipo = tipos.find((t) => t.id === id) ?? null;
+                  return emptyLinea(id, tipo);
+                }),
+          );
         } catch (err: unknown) {
           const axiosErr = err as {
             response?: { status?: number; data?: { error?: string } };
@@ -193,13 +200,36 @@ export default function EntregaEppPublicaPage() {
     return () => window.clearTimeout(handle);
   }, [token, dni]);
 
+  // Completa marca/modelo/certificación cuando el catálogo ya está disponible.
+  useEffect(() => {
+    if (tipos.length === 0) return;
+    setItems((prev) => {
+      let changed = false;
+      const next = prev.map((item) => {
+        if (!item.epp_tipo_id) return item;
+        if (item.marca || item.modelo || item.certificacion) return item;
+        const tipo = tipos.find((t) => t.id === item.epp_tipo_id);
+        if (!tipo) return item;
+        changed = true;
+        return {
+          ...item,
+          marca: tipo.marca?.trim() || "",
+          modelo: tipo.modelo?.trim() || "",
+          certificacion: tipo.certificacion?.trim() || "",
+        };
+      });
+      return changed ? next : prev;
+    });
+  }, [tipos]);
+
   const toggleSugerido = (tipoId: string) => {
     setItems((prev) => {
       const exists = prev.find((item) => item.epp_tipo_id === tipoId);
       if (exists) {
         return prev.filter((item) => item.epp_tipo_id !== tipoId);
       }
-      return [...prev, emptyLinea(tipoId)];
+      const tipo = tipos.find((t) => t.id === tipoId) ?? null;
+      return [...prev, emptyLinea(tipoId, tipo)];
     });
   };
 
@@ -213,7 +243,7 @@ export default function EntregaEppPublicaPage() {
     const unused = tipos.find(
       (t) => !items.some((item) => item.epp_tipo_id === t.id),
     );
-    setItems((prev) => [...prev, emptyLinea(unused?.id || "")]);
+    setItems((prev) => [...prev, emptyLinea(unused?.id || "", unused ?? null)]);
   };
 
   const removeItem = (index: number) => {
@@ -520,11 +550,18 @@ export default function EntregaEppPublicaPage() {
                                   <select
                                     required
                                     value={item.epp_tipo_id}
-                                    onChange={(e) =>
+                                    onChange={(e) => {
+                                      const tipoId = e.target.value;
+                                      const tipo =
+                                        tipos.find((t) => t.id === tipoId) ?? null;
                                       updateItem(index, {
-                                        epp_tipo_id: e.target.value,
-                                      })
-                                    }
+                                        epp_tipo_id: tipoId,
+                                        marca: tipo?.marca?.trim() || "",
+                                        modelo: tipo?.modelo?.trim() || "",
+                                        certificacion:
+                                          tipo?.certificacion?.trim() || "",
+                                      });
+                                    }}
                                     className={`${fieldClass} bg-white`}
                                   >
                                     <option value="">Seleccionar…</option>
