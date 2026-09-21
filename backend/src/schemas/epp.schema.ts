@@ -103,18 +103,35 @@ export const idParamSchema = z.object({
   params: z.object({ id: uuid }),
 });
 
+export const listarTiposQuerySchema = z.object({
+  query: z.object({
+    empresa_id: uuid,
+    incluir_inactivos: z
+      .preprocess((value) => value === "true" || value === "1" || value === true, z.boolean())
+      .optional(),
+  }),
+});
+
 export const crearTipoBodySchema = z.object({
   body: z.object({
+    empresa_id: uuid,
     nombre: z.string().min(1, "El nombre del EPP es requerido"),
     descripcion: z.string().optional().nullable(),
+    marca: z.string().optional().nullable(),
+    modelo: z.string().optional().nullable(),
+    certificacion: z.string().optional().nullable(),
   }),
 });
 
 export const actualizarTipoSchema = z.object({
   params: z.object({ id: uuid }),
   body: z.object({
+    empresa_id: uuid,
     nombre: z.string().min(1).optional(),
     descripcion: z.string().optional().nullable(),
+    marca: z.string().optional().nullable(),
+    modelo: z.string().optional().nullable(),
+    certificacion: z.string().optional().nullable(),
     activo: z.preprocess(
       (value) => {
         if (value === "true" || value === "1") return true;

@@ -14,6 +14,7 @@ import {
   crearTipoBodySchema,
   empresaIdQuerySchema,
   idParamSchema,
+  listarTiposQuerySchema,
   registrarEntregaPublicaSchema,
   registrarEntregaSchema,
   tokenParamSchema,
@@ -59,13 +60,12 @@ function requireUser(req: Request) {
 export const eppController = {
   async listarTipos(req: Request, res: Response, next: NextFunction) {
     try {
-      const user = requireUser(req);
-      const incluirInactivos = req.query.incluir_inactivos === "true";
-      const consultoraId = user.consultora_id;
-      if (!consultoraId) {
-        throw new HttpError(400, "El usuario no tiene consultora asignada");
-      }
-      const data = await eppService.listarTipos(consultoraId, incluirInactivos);
+      const parsed = listarTiposQuerySchema.parse({ query: req.query });
+      await assertEmpresaAccess(requireUser(req), parsed.query.empresa_id);
+      const data = await eppService.listarTipos(
+        parsed.query.empresa_id,
+        Boolean(parsed.query.incluir_inactivos),
+      );
       res.json(data);
     } catch (error) {
       next(error);
@@ -75,6 +75,7 @@ export const eppController = {
   async crearTipo(req: Request, res: Response, next: NextFunction) {
     try {
       const parsed = crearTipoBodySchema.parse({ body: req.body });
+      await assertEmpresaAccess(requireUser(req), parsed.body.empresa_id);
       const data = await eppService.crearTipo(requireUser(req), parsed.body, req.file);
       res.status(201).json(data);
     } catch (error) {
@@ -88,6 +89,7 @@ export const eppController = {
         params: { id: param(req.params.id) },
         body: req.body,
       });
+      await assertEmpresaAccess(requireUser(req), parsed.body.empresa_id);
       const data = await eppService.actualizarTipo(
         requireUser(req),
         parsed.params.id,
@@ -212,6 +214,17 @@ export const eppController = {
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename="${file.filename}"`);
       res.send(file.buffer);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async eliminarEntrega(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parsed = idParamSchema.parse({ params: { id: param(req.params.id) } });
+      await assertEntregaAccess(requireUser(req), parsed.params.id);
+      const data = await eppService.eliminarEntrega(parsed.params.id);
+      res.json(data);
     } catch (error) {
       next(error);
     }

@@ -271,6 +271,59 @@ async function signedEppFoto(fotoUrl: string | null | undefined): Promise<string
   return data?.signedUrl ?? fotoUrl;
 }
 
+async function cleanupEntregaStorageFiles(urls: {
+  firma_empleado_url?: string | null;
+  firma_empleador_url?: string | null;
+  url_registro_oficial?: string | null;
+  foto_evidencia_url?: string | null;
+}) {
+  const unique = [
+    ...new Set(
+      [
+        urls.firma_empleado_url,
+        urls.firma_empleador_url,
+        urls.url_registro_oficial,
+        urls.foto_evidencia_url,
+      ].filter((url): url is string => Boolean(url)),
+    ),
+  ];
+  if (unique.length === 0) return;
+
+  const cols = [
+    "firma_empleado_url",
+    "firma_empleador_url",
+    "url_registro_oficial",
+    "foto_evidencia_url",
+  ] as const;
+
+  await Promise.all(
+    unique.map(async (url) => {
+      try {
+        const checks = await Promise.all(
+          cols.map((col) =>
+            supabaseAdmin
+              .from("epp_entregas")
+              .select("id", { count: "exact", head: true })
+              .eq(col, url),
+          ),
+        );
+        if (checks.some((r) => r.error)) {
+          const firstErr = checks.find((r) => r.error)?.error;
+          console.error("No se pudo verificar referencias de archivo EPP:", firstErr);
+          return;
+        }
+        if (checks.some((r) => (r.count ?? 0) > 0)) return;
+
+        const parsed = storageService.parseStorageUrl(url);
+        if (!parsed) return;
+        await storageService.eliminarArchivo(parsed.bucket, parsed.path);
+      } catch (err) {
+        console.error("Error limpiando archivo de entrega EPP:", err);
+      }
+    }),
+  );
+}
+
 async function getComisionPorcentaje(consultoraId: string): Promise<number> {
   const { data, error } = await supabaseAdmin
     .from("consultoras")
@@ -331,11 +384,11 @@ function mapEppNecesariosToTipos(
 }
 
 export const eppService = {
-  async listarTipos(consultoraId: string, incluirInactivos = false) {
+  async listarTipos(empresaId: string, incluirInactivos = false) {
     let query = supabaseAdmin
       .from("epp_tipos")
       .select("*")
-      .eq("consultora_id", consultoraId)
+      .eq("empresa_id", empresaId)
       .order("nombre");
 
     if (!incluirInactivos) {
@@ -354,16 +407,31 @@ export const eppService = {
   },
 
   async crearTipo(
-    user: AuthUser,
-    payload: { nombre: string; descripcion?: string | null },
+    _user: AuthUser,
+    payload: {
+      empresa_id: string;
+      nombre: string;
+      descripcion?: string | null;
+      marca?: string | null;
+      modelo?: string | null;
+      certificacion?: string | null;
+    },
     file?: Express.Multer.File,
   ) {
-    const consultoraId = requireConsultoraId(user);
-    let fotoUrl: string | null = null;
+    const { data: empresa, error: empresaError } = await supabaseAdmin
+      .from("empresas")
+      .select("id, consultora_id")
+      .eq("id", payload.empresa_id)
+      .single();
+    if (empresaError) throw empresaError;
+    if (!empresa?.consultora_id) {
+      throw new HttpError(400, "La empresa no tiene consultora asignada");
+    }
 
+    let fotoUrl: string | null = null;
     if (file) {
       const ext = safeExtensionFromUpload(file);
-      const path = `${consultoraId}/${randomUUID()}.${ext}`;
+      const path = `${payload.empresa_id}/${randomUUID()}.${ext}`;
       await storageService.subirArchivo("epp_fotos", path, file);
       fotoUrl = storageService.obtenerUrlPublica("epp_fotos", path);
     }
@@ -371,34 +439,57 @@ export const eppService = {
     const { data, error } = await supabaseAdmin
       .from("epp_tipos")
       .insert({
-        consultora_id: consultoraId,
+        consultora_id: empresa.consultora_id,
+        empresa_id: payload.empresa_id,
         nombre: payload.nombre.trim(),
         descripcion: payload.descripcion?.trim() || null,
+        marca: payload.marca?.trim() || null,
+        modelo: payload.modelo?.trim() || null,
+        certificacion: payload.certificacion?.trim() || null,
         foto_url: fotoUrl,
         activo: true,
       })
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      if (error.code === "23505") {
+        throw new HttpError(409, "Ya existe un EPP activo con ese nombre en esta empresa");
+      }
+      throw error;
+    }
     return { ...data, foto_url: await signedEppFoto(data.foto_url) };
   },
 
   async actualizarTipo(
-    user: AuthUser,
+    _user: AuthUser,
     id: string,
-    payload: { nombre?: string; descripcion?: string | null; activo?: boolean },
+    payload: {
+      empresa_id: string;
+      nombre?: string;
+      descripcion?: string | null;
+      marca?: string | null;
+      modelo?: string | null;
+      certificacion?: string | null;
+      activo?: boolean;
+    },
     file?: Express.Multer.File,
   ) {
-    const consultoraId = requireConsultoraId(user);
     const updates: Record<string, unknown> = {};
     if (payload.nombre !== undefined) updates.nombre = payload.nombre.trim();
-    if (payload.descripcion !== undefined) updates.descripcion = payload.descripcion;
+    if (payload.descripcion !== undefined) {
+      updates.descripcion = payload.descripcion?.trim() || null;
+    }
+    if (payload.marca !== undefined) updates.marca = payload.marca?.trim() || null;
+    if (payload.modelo !== undefined) updates.modelo = payload.modelo?.trim() || null;
+    if (payload.certificacion !== undefined) {
+      updates.certificacion = payload.certificacion?.trim() || null;
+    }
     if (payload.activo !== undefined) updates.activo = payload.activo;
 
     if (file) {
       const ext = safeExtensionFromUpload(file);
-      const path = `${consultoraId}/${id}.${ext}`;
+      const path = `${payload.empresa_id}/${id}.${ext}`;
       await storageService.subirArchivo("epp_fotos", path, file);
       updates.foto_url = storageService.obtenerUrlPublica("epp_fotos", path);
     }
@@ -407,11 +498,16 @@ export const eppService = {
       .from("epp_tipos")
       .update(updates)
       .eq("id", id)
-      .eq("consultora_id", consultoraId)
+      .eq("empresa_id", payload.empresa_id)
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      if (error.code === "23505") {
+        throw new HttpError(409, "Ya existe un EPP activo con ese nombre en esta empresa");
+      }
+      throw error;
+    }
     if (!data) throw new HttpError(404, "Tipo de EPP no encontrado");
     return { ...data, foto_url: await signedEppFoto(data.foto_url) };
   },
@@ -675,6 +771,21 @@ export const eppService = {
     }
     if (!empleado.activo) {
       throw new HttpError(400, "El trabajador no está activo en el padrón");
+    }
+
+    const tipoIds = [...new Set(payload.items.map((item) => item.epp_tipo_id))];
+    if (tipoIds.length === 0) {
+      throw new HttpError(400, "Seleccioná al menos un EPP del catálogo");
+    }
+    const { data: tiposRows, error: tiposError } = await supabaseAdmin
+      .from("epp_tipos")
+      .select("id, activo, empresa_id")
+      .in("id", tipoIds)
+      .eq("empresa_id", payload.empresa_id)
+      .eq("activo", true);
+    if (tiposError) throw tiposError;
+    if ((tiposRows ?? []).length !== tipoIds.length) {
+      throw new HttpError(400, "El tipo de EPP no es válido para esta empresa");
     }
 
     const nombreEmpleado = empleado.nombre;
@@ -1000,6 +1111,36 @@ export const eppService = {
     };
   },
 
+  async eliminarEntrega(entregaId: string) {
+    const { data: entrega, error } = await supabaseAdmin
+      .from("epp_entregas")
+      .select(
+        "id, firma_empleado_url, firma_empleador_url, url_registro_oficial, foto_evidencia_url",
+      )
+      .eq("id", entregaId)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!entrega) throw new HttpError(404, "Entrega de EPP no encontrada");
+
+    const { error: deleteError } = await supabaseAdmin
+      .from("epp_entregas")
+      .delete()
+      .eq("id", entregaId);
+
+    if (deleteError) throw deleteError;
+
+    // Cleanup de storage en segundo plano: no bloquea la respuesta al cliente.
+    void cleanupEntregaStorageFiles({
+      firma_empleado_url: entrega.firma_empleado_url,
+      firma_empleador_url: entrega.firma_empleador_url,
+      url_registro_oficial: entrega.url_registro_oficial,
+      foto_evidencia_url: entrega.foto_evidencia_url,
+    });
+
+    return { success: true as const, id: entregaId };
+  },
+
   async listarProveedores(consultoraId: string) {
     const { data, error } = await supabaseAdmin
       .from("epp_proveedores")
@@ -1170,6 +1311,26 @@ export const eppService = {
   ) {
     const consultoraId = requireConsultoraId(user);
     const comision = await getComisionPorcentaje(consultoraId);
+
+    const catalogTipoIds = [
+      ...new Set(
+        payload.items
+          .filter((item) => !item.nombre_manual?.trim() && item.epp_tipo_id)
+          .map((item) => item.epp_tipo_id as string),
+      ),
+    ];
+    if (catalogTipoIds.length > 0) {
+      const { data: tiposOk, error: tiposErr } = await supabaseAdmin
+        .from("epp_tipos")
+        .select("id")
+        .in("id", catalogTipoIds)
+        .eq("empresa_id", payload.empresa_id)
+        .eq("activo", true);
+      if (tiposErr) throw tiposErr;
+      if ((tiposOk ?? []).length !== catalogTipoIds.length) {
+        throw new HttpError(400, "El tipo de EPP no es válido para esta empresa");
+      }
+    }
 
     const { data: maxRow, error: maxError } = await supabaseAdmin
       .from("epp_licitaciones")
@@ -2183,8 +2344,8 @@ export const eppService = {
 
     const { data: tipos, error: tiposError } = await supabaseAdmin
       .from("epp_tipos")
-      .select("id, nombre, descripcion, foto_url, activo")
-      .eq("consultora_id", empresa.consultora_id)
+      .select("id, nombre, descripcion, foto_url, activo, marca, modelo, certificacion")
+      .eq("empresa_id", empresa.id)
       .eq("activo", true)
       .order("nombre");
 
@@ -2240,7 +2401,7 @@ export const eppService = {
     const { data: tipos, error: tiposError } = await supabaseAdmin
       .from("epp_tipos")
       .select("id, nombre")
-      .eq("consultora_id", empresa.consultora_id)
+      .eq("empresa_id", empresa.id)
       .eq("activo", true);
 
     if (tiposError) throw tiposError;
@@ -2308,14 +2469,14 @@ export const eppService = {
     const tipoIds = [...new Set(payload.items.map((item) => item.epp_tipo_id))];
     const { data: tiposRows, error: tiposError } = await supabaseAdmin
       .from("epp_tipos")
-      .select("id, nombre, activo, consultora_id, foto_url")
+      .select("id, nombre, activo, empresa_id, foto_url")
       .in("id", tipoIds);
 
     if (tiposError) throw tiposError;
     const tiposById = new Map((tiposRows ?? []).map((t) => [t.id, t]));
     for (const tipoId of tipoIds) {
       const tipo = tiposById.get(tipoId);
-      if (!tipo || !tipo.activo || tipo.consultora_id !== empresa.consultora_id) {
+      if (!tipo || !tipo.activo || tipo.empresa_id !== empresa.id) {
         throw new HttpError(400, "El tipo de EPP no es válido para esta empresa");
       }
     }

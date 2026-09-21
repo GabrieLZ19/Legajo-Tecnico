@@ -82,6 +82,12 @@ router.post(
   eppController.regenerarPdf,
 );
 router.get("/entregas/:id/pdf", requireAuth, eppController.descargarPdf);
+router.delete(
+  "/entregas/:id",
+  requireAuth,
+  puedeEscribirEpp,
+  eppController.eliminarEntrega,
+);
 router.patch(
   "/entregas/:id/visibilidad-ente",
   requireAuth,
