@@ -33,7 +33,7 @@ export function FileImagePicker({
   file,
   onChange,
   label = "Foto",
-  hint = "JPG, PNG o WEBP, hasta 5 MB · Ctrl+V para pegar un recorte",
+  hint = "JPG, PNG, WEBP, GIF o HEIC, hasta 5 MB · Ctrl+V para pegar un recorte",
   previewUrl,
   capture,
   enablePaste = true,
@@ -70,7 +70,7 @@ export function FileImagePicker({
       showAlertRef.current(
         "warning",
         "Formato no válido",
-        "Usá una imagen JPG, PNG o WEBP.",
+        "Usá JPG, PNG, WEBP, GIF o HEIC (o pegá un recorte con Ctrl+V).",
       );
       return;
     }
@@ -218,7 +218,7 @@ export function FileImagePicker({
         <input
           ref={inputRef}
           type="file"
-          accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif"
+          accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/heic,image/heif,image/*,.jpg,.jpeg,.png,.webp,.gif,.bmp,.heic,.heif,.jfif"
           capture={captureAttr}
           disabled={processing}
           className="sr-only"

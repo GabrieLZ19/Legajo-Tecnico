@@ -7,10 +7,10 @@ import {
   getRoleBadgeClasses,
   getRoleLabel,
 } from "@/lib/adminUsuarios";
-import { Loader2, X, Eye, EyeOff, Stamp, Trash2, ImagePlus } from "lucide-react";
+import { Loader2, X, Eye, EyeOff, Stamp, Trash2 } from "lucide-react";
 import type { AdminUsuarioFormValues } from "@/hooks/useAdminUsuarios";
 import { useAlert } from "@/context/AlertContext";
-import { SIGNATURE_IMAGE_ACCEPT } from "@/lib/signature";
+import { FileImagePicker } from "@/components/FileImagePicker";
 
 type UserFormModalProps = {
   isOpen: boolean;
@@ -51,6 +51,7 @@ export function UserFormModal({
   const [showPassword, setShowPassword] = useState(false);
   const [showAdminPassword, setShowAdminPassword] = useState(false);
   const [selloPreview, setSelloPreview] = useState<string | null>(null);
+  const [selloFile, setSelloFile] = useState<File | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -67,6 +68,7 @@ export function UserFormModal({
         activo: editingUsuario.activo,
       });
       setSelloPreview(editingUsuario.sello_url || null);
+      setSelloFile(null);
       setShowPassword(false);
       setShowAdminPassword(false);
       return;
@@ -74,9 +76,40 @@ export function UserFormModal({
 
     setValues(initialValues);
     setSelloPreview(null);
+    setSelloFile(null);
     setShowPassword(false);
     setShowAdminPassword(false);
   }, [editingUsuario, isOpen]);
+
+  const handleSelloFile = async (file: File | null) => {
+    if (!file) {
+      setSelloFile(null);
+      return;
+    }
+    if (!editingUsuario || !onUploadSello || isSavingSello) return;
+
+    setSelloFile(file);
+    try {
+      await onUploadSello(editingUsuario.id, file);
+      setSelloPreview(URL.createObjectURL(file));
+      setSelloFile(null);
+      showAlert(
+        "success",
+        "Sello guardado",
+        "Quedó precargado para firmas desde el celular.",
+      );
+    } catch (err: unknown) {
+      setSelloFile(null);
+      const axiosErr = err as {
+        response?: { data?: { error?: string } };
+      };
+      showAlert(
+        "error",
+        "Error",
+        axiosErr.response?.data?.error || "No se pudo subir el sello.",
+      );
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -391,90 +424,62 @@ export function UserFormModal({
                 </div>
                 <p className="text-xs font-medium leading-relaxed text-slate-500">
                   Imagen del sello o firma para usar desde el celular sin dibujar
-                  con el dedo.
+                  con el dedo. Podés subir archivo, arrastrar o pegar un recorte
+                  (Ctrl+V).
                 </p>
-                {selloPreview ? (
-                  <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={selloPreview}
-                      alt="Sello del usuario"
-                      className="mx-auto h-20 object-contain"
-                    />
-                  </div>
-                ) : (
-                  <p className="text-xs font-semibold text-slate-400">
-                    Todavía no hay sello cargado.
-                  </p>
-                )}
-                <div className="flex flex-wrap gap-2">
-                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
-                    <ImagePlus className="h-3.5 w-3.5" />
-                    {isSavingSello ? "Subiendo…" : "Subir sello"}
-                    <input
-                      type="file"
-                      accept={SIGNATURE_IMAGE_ACCEPT}
-                      className="hidden"
-                      disabled={isSavingSello}
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        e.target.value = "";
-                        if (!file || !editingUsuario) return;
-                        void (async () => {
-                          try {
-                            await onUploadSello(editingUsuario.id, file);
-                            setSelloPreview(URL.createObjectURL(file));
-                            showAlert(
-                              "success",
-                              "Sello guardado",
-                              "Quedó precargado para firmas desde el celular.",
-                            );
-                          } catch (err: unknown) {
-                            const axiosErr = err as {
-                              response?: { data?: { error?: string } };
-                            };
-                            showAlert(
-                              "error",
-                              "Error",
-                              axiosErr.response?.data?.error ||
-                                "No se pudo subir el sello.",
-                            );
-                          }
-                        })();
-                      }}
-                    />
-                  </label>
-                  {selloPreview && (
-                    <button
-                      type="button"
-                      disabled={isSavingSello}
-                      onClick={() => {
-                        if (!editingUsuario) return;
-                        void (async () => {
-                          try {
-                            await onDeleteSello(editingUsuario.id);
-                            setSelloPreview(null);
-                            showAlert(
-                              "success",
-                              "Sello eliminado",
-                              "El usuario ya no tiene firma precargada.",
-                            );
-                          } catch {
-                            showAlert(
-                              "error",
-                              "Error",
-                              "No se pudo eliminar el sello.",
-                            );
-                          }
-                        })();
-                      }}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      Quitar
-                    </button>
-                  )}
+                <div
+                  className={
+                    isSavingSello ? "pointer-events-none opacity-70" : undefined
+                  }
+                >
+                  <FileImagePicker
+                    file={selloFile}
+                    onChange={(file) => {
+                      void handleSelloFile(file);
+                    }}
+                    label="Sello"
+                    hint="JPG, PNG, WEBP, GIF, HEIC · Ctrl+V para pegar un recorte"
+                    previewUrl={selloPreview}
+                    enablePaste={isOpen}
+                  />
                 </div>
+                {isSavingSello ? (
+                  <p className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Subiendo sello…
+                  </p>
+                ) : null}
+                {selloPreview ? (
+                  <button
+                    type="button"
+                    disabled={isSavingSello}
+                    onClick={() => {
+                      if (!editingUsuario) return;
+                      void (async () => {
+                        try {
+                          await onDeleteSello(editingUsuario.id);
+                          setSelloPreview(null);
+                          setSelloFile(null);
+                          showAlert(
+                            "success",
+                            "Sello eliminado",
+                            "El usuario ya no tiene firma precargada.",
+                          );
+                        } catch {
+                          showAlert(
+                            "error",
+                            "Error",
+                            "No se pudo eliminar el sello.",
+                          );
+                        }
+                      })();
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Quitar sello guardado
+                  </button>
+                ) : null}
               </div>
             ) : !isEditing ? (
               <div className="rounded-2xl border border-dashed border-blue-200 bg-white p-4">
