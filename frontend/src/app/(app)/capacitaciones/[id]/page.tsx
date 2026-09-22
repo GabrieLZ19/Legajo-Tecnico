@@ -99,6 +99,10 @@ export default function DetalleCapacitacionPage() {
 
   const canManage = canWriteAppModule(user, "capacitaciones");
   const canDelete = canManage;
+  // Firma empresa: el dueño firma conformidad aunque Capacitaciones esté en solo lectura
+  // (mismo criterio que la firma de informes). Admin siempre puede.
+  const canSignEmpresa =
+    canManage || user?.rol === "dueno" || user?.rol === "admin";
 
   // Compartir
   const [showShareModal, setShowShareModal] = useState(false);
@@ -1219,6 +1223,7 @@ export default function DetalleCapacitacionPage() {
       <CapacitacionRegistroFirmas
         cap={cap}
         canEdit={canManage}
+        canSignEmpresa={canSignEmpresa}
         onSaved={setCap}
         onSave={async (payload) => {
           const updated = await actualizarRegistroCapacitacion(id, payload);

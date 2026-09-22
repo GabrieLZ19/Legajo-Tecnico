@@ -21,7 +21,13 @@ import {
 
 interface Props {
   cap: Capacitacion;
+  /** Editar instructor/agenda y firmar como HYS (acceso total al módulo). */
   canEdit: boolean;
+  /**
+   * Firmar como responsable de la empresa.
+   * El dueño debe poder hacerlo aunque Capacitaciones esté en solo lectura.
+   */
+  canSignEmpresa: boolean;
   onSaved: (updated: Capacitacion) => void;
   onSave: (payload: {
     instructor?: string;
@@ -43,6 +49,7 @@ interface Props {
 export default function CapacitacionRegistroFirmas({
   cap,
   canEdit,
+  canSignEmpresa,
   onSaved,
   onSave,
   onAlert,
@@ -300,7 +307,7 @@ export default function CapacitacionRegistroFirmas({
                 Aclaración: {cap.aclaracion_empresa || "—"}
               </p>
             </div>
-          ) : canEdit ? (
+          ) : canSignEmpresa ? (
             <>
               <div onPointerDown={() => setActivePad("empresa")}>
                 <SignaturePad ref={sigEmpRef} heightClassName="h-36" />

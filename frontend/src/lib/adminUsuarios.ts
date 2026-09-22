@@ -91,7 +91,7 @@ export const MODULE_PERMISSIONS: Record<RolUsuario, RoleModulePermission[]> = {
     {
       module: "Capacitaciones",
       access: "lectura",
-      description: "Visualiza capacitaciones y asistencia.",
+      description: "Consulta capacitaciones y firma como responsable de la empresa.",
     },
     {
       module: "Métricas y reportes",
