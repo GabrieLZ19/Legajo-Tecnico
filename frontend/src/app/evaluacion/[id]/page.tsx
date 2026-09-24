@@ -101,7 +101,8 @@ interface CapData {
 }
 
 export default function EvaluacionPublicaPage() {
-  const { id } = useParams<{ id: string }>();
+  const { id: idParam } = useParams<{ id: string }>();
+  const id = idParam ?? "";
   const sigRef = useRef<SignatureCanvas>(null);
   const {
     getCapacitacionPublica,
@@ -381,8 +382,11 @@ export default function EvaluacionPublicaPage() {
   };
 
   const totalPreguntas = cap?.capacitacion_preguntas?.length || 0;
+  const preguntasOrdenadas = (cap?.capacitacion_preguntas || [])
+    .slice()
+    .sort((a, b) => a.orden - b.orden);
   const preguntasRespondidas =
-    cap?.capacitacion_preguntas?.filter((p) => {
+    preguntasOrdenadas.filter((p) => {
       const ans = respuestas[p.id];
       return ans !== undefined && (!Array.isArray(ans) || ans.length > 0);
     }).length || 0;
@@ -390,6 +394,8 @@ export default function EvaluacionPublicaPage() {
     totalPreguntas > 0
       ? Math.round((preguntasRespondidas / totalPreguntas) * 100)
       : 0;
+  const preguntaActual = preguntasOrdenadas[currentPreguntaIndex] ?? null;
+  const isMultActual = preguntaActual ? esMultiple(preguntaActual) : false;
 
   if (apiLoading && !cap) {
     return (
@@ -533,107 +539,105 @@ export default function EvaluacionPublicaPage() {
                   Saltar a Pregunta
                 </p>
                 <div className="flex flex-wrap gap-1.5 justify-center">
-                  {cap.capacitacion_preguntas
-                    .sort((a, b) => a.orden - b.orden)
-                    .map((p, idx) => {
-                      const isCurrent = idx === currentPreguntaIndex;
-                      const isAnswered =
-                        respuestas[p.id] !== undefined &&
-                        (!Array.isArray(respuestas[p.id]) ||
-                          (respuestas[p.id] as number[]).length > 0);
-                      return (
-                        <button
-                          key={p.id}
-                          onClick={() => {
-                            setError(null);
-                            setCurrentPreguntaIndex(idx);
-                          }}
-                          className={`h-9 w-9 rounded-xl text-xs font-bold transition-all flex items-center justify-center cursor-pointer border ${
-                            isCurrent
-                              ? "bg-blue-600 border-blue-600 text-white shadow-md scale-105"
-                              : isAnswered
-                                ? "bg-emerald-500 border-emerald-500 text-white"
-                                : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                          }`}
-                        >
-                          {idx + 1}
-                        </button>
-                      );
-                    })}
+                  {preguntasOrdenadas.map((p, idx) => {
+                    const isCurrent = idx === currentPreguntaIndex;
+                    const isAnswered =
+                      respuestas[p.id] !== undefined &&
+                      (!Array.isArray(respuestas[p.id]) ||
+                        (respuestas[p.id] as number[]).length > 0);
+                    return (
+                      <button
+                        type="button"
+                        key={p.id}
+                        onClick={() => {
+                          setError(null);
+                          setCurrentPreguntaIndex(idx);
+                        }}
+                        className={`h-9 w-9 rounded-xl text-xs font-bold transition-all flex items-center justify-center cursor-pointer border ${
+                          isCurrent
+                            ? "bg-blue-600 border-blue-600 text-white shadow-md scale-105"
+                            : isAnswered
+                              ? "bg-emerald-500 border-emerald-500 text-white"
+                              : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                        }`}
+                      >
+                        {idx + 1}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>
 
-            {(() => {
-              const p = cap.capacitacion_preguntas.sort(
-                (a, b) => a.orden - b.orden,
-              )[currentPreguntaIndex];
-              if (!p) return null;
-              const isMult = esMultiple(p);
-              return (
-                <div className="space-y-4 animate-in fade-in duration-300">
-                  <div className="bg-slate-50 rounded-2xl border border-slate-100 p-5 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest bg-blue-100/60 px-2 py-0.5 rounded-md">
-                        Pregunta {currentPreguntaIndex + 1}
+            {preguntaActual && (
+              <div className="space-y-4 animate-in fade-in duration-300">
+                <div className="bg-slate-50 rounded-2xl border border-slate-100 p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest bg-blue-100/60 px-2 py-0.5 rounded-md">
+                      Pregunta {currentPreguntaIndex + 1}
+                    </span>
+                    {isMultActual && (
+                      <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-purple-100 text-purple-700 uppercase">
+                        Respuestas Múltiples
                       </span>
-                      {isMult && (
-                        <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-purple-100 text-purple-700 uppercase">
-                          Respuestas Múltiples
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-base sm:text-lg font-bold text-slate-800 leading-snug">
-                      {p.pregunta}
-                    </p>
-                    {isMult && (
-                      <p className="text-sm font-semibold text-purple-700">
-                        (elija las respuestas correctas)
-                      </p>
                     )}
                   </div>
-
-                  <div className="space-y-2.5">
-                    {p.opciones.map((opt, optIdx) => {
-                      const isSelected = isMult
-                        ? Array.isArray(respuestas[p.id]) &&
-                          (respuestas[p.id] as number[]).includes(optIdx)
-                        : respuestas[p.id] === optIdx;
-
-                      return (
-                        <button
-                          type="button"
-                          key={optIdx}
-                          onClick={() =>
-                            seleccionarRespuesta(p.id, optIdx, isMult)
-                          }
-                          className={`w-full text-left px-5 py-4 rounded-2xl text-sm font-semibold transition-all cursor-pointer border flex items-center justify-between gap-3 ${
-                            isSelected
-                              ? "bg-blue-50 border-blue-400 text-blue-900"
-                              : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
-                          }`}
-                        >
-                          <div className="flex items-start min-w-0">
-                            <span className="font-black mr-3 text-slate-400">
-                              {String.fromCharCode(65 + optIdx)}.
-                            </span>
-                            <span className="text-slate-800 leading-normal">
-                              {opt}
-                            </span>
-                          </div>
-                          {isMult &&
-                            (isSelected ? (
-                              <CheckSquare className="h-5 w-5 text-blue-600 shrink-0" />
-                            ) : (
-                              <Square className="h-5 w-5 text-slate-300 shrink-0" />
-                            ))}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <p className="text-base sm:text-lg font-bold text-slate-800 leading-snug">
+                    {preguntaActual.pregunta}
+                  </p>
+                  {isMultActual && (
+                    <p className="text-sm font-semibold text-purple-700">
+                      Marcá todas las correctas y después tocá Siguiente.
+                    </p>
+                  )}
                 </div>
-              );
-            })()}
+
+                <div className="space-y-2.5">
+                  {preguntaActual.opciones.map((opt, optIdx) => {
+                    const isSelected = isMultActual
+                      ? Array.isArray(respuestas[preguntaActual.id]) &&
+                        (
+                          respuestas[preguntaActual.id] as number[]
+                        ).includes(optIdx)
+                      : respuestas[preguntaActual.id] === optIdx;
+
+                    return (
+                      <button
+                        type="button"
+                        key={optIdx}
+                        onClick={() =>
+                          seleccionarRespuesta(
+                            preguntaActual.id,
+                            optIdx,
+                            isMultActual,
+                          )
+                        }
+                        className={`w-full text-left px-5 py-4 rounded-2xl text-sm font-semibold transition-all cursor-pointer border flex items-center justify-between gap-3 ${
+                          isSelected
+                            ? "bg-blue-50 border-blue-400 text-blue-900"
+                            : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        <div className="flex items-start min-w-0">
+                          <span className="font-black mr-3 text-slate-400">
+                            {String.fromCharCode(65 + optIdx)}.
+                          </span>
+                          <span className="text-slate-800 leading-normal">
+                            {opt}
+                          </span>
+                        </div>
+                        {isMultActual &&
+                          (isSelected ? (
+                            <CheckSquare className="h-5 w-5 text-blue-600 shrink-0" />
+                          ) : (
+                            <Square className="h-5 w-5 text-slate-300 shrink-0" />
+                          ))}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <div className="flex items-center justify-between gap-3 pt-5 border-t border-slate-100">
               <button
