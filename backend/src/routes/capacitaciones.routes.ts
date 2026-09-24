@@ -3,7 +3,7 @@ import { requireAuth, requireRole } from "../middlewares/auth";
 import { capacitacionesController } from "../controllers/capacitaciones.controller";
 import { planAnualController } from "../controllers/planAnual.controller";
 import { uploadExcel } from "../config/multerExcel";
-import { uploadRegistroManual } from "../config/multer";
+import { upload, uploadRegistroManual } from "../config/multer";
 import {
   capacitacionPublicReadLimiter,
   capacitacionPublicSubmitLimiter,
@@ -22,6 +22,26 @@ router.post(
   requireAuth,
   puedeEscribirCapacitacion,
   capacitacionesController.crear,
+);
+
+// Imágenes de diapositivas (ANTES de /:id)
+router.post(
+  "/media",
+  requireAuth,
+  puedeEscribirCapacitacion,
+  (req, res, next) => {
+    upload.single("imagen")(req, res, (err) => {
+      if (err) {
+        return res.status(400).json({
+          error:
+            err.message ||
+            "No se pudo subir la imagen (JPG, PNG o WEBP, máx. 5 MB)",
+        });
+      }
+      next();
+    });
+  },
+  capacitacionesController.subirMedia,
 );
 
 // Plan anual (ANTES de /:id para no capturar "plan-anual" como id)

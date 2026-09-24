@@ -4,8 +4,10 @@ import { randomUUID } from "crypto";
 import ExcelJS from "exceljs";
 import {
   CapacitacionDiapositiva,
+  assertDiapositivasPayloadOk,
   ensureDiapositivas,
   resolveDiapositivasAndTemario,
+  signDiapositivasImages,
 } from "../utils/cap-diapositivas";
 import {
   buildRegistroExcel,
@@ -236,8 +238,19 @@ async function firmarUrlsCapacitacion<T extends Record<string, any>>(
     })),
   );
 
+  const diapositivasRaw = Array.isArray(cap.diapositivas)
+    ? (cap.diapositivas as CapacitacionDiapositiva[])
+    : [];
+  const diapositivas = await signDiapositivasImages(diapositivasRaw);
+  const temarioFirmado =
+    diapositivas.length > 0
+      ? diapositivas.map((d) => d.contenido || "").join("")
+      : cap.temario;
+
   return {
     ...cap,
+    diapositivas,
+    temario: temarioFirmado,
     capacitacion_asistencias: asistencias,
     firma_capacitador_url: await storageService.signUrl(
       cap.firma_capacitador_url,
@@ -435,6 +448,7 @@ export const capacitacionesService = {
         : diapositivasClonadas,
       temario: params.temario,
     });
+    assertDiapositivasPayloadOk(diapositivas);
 
     // Insertar en la tabla 'capacitaciones' sin columnas inexistentes
     const { data: cap, error: capError } = await supabaseAdmin
@@ -1036,6 +1050,7 @@ export const capacitacionesService = {
         diapositivas,
         temario,
       });
+      assertDiapositivasPayloadOk(resolved.diapositivas);
       updatePayload.temario = resolved.temario;
       updatePayload.diapositivas = resolved.diapositivas;
     }

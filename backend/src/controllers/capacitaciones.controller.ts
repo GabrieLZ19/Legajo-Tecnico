@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { randomUUID } from "crypto";
 import {
   capacitacionesService,
   parseParticipantesManuales,
@@ -8,6 +9,9 @@ import { actualizarVisibilidadEnte } from "../services/visibilidadEnte.service";
 import { HttpError } from "../utils/httpError";
 import { clampInt, parseDateFilter, parseHistoricoResultado } from "../utils/searchSanitize";
 import type { HistoricoFiltros } from "../services/capacitaciones.service";
+import { safeExtensionFromUpload } from "../config/multer";
+import { storageService } from "../services/storage.service";
+import { CAP_MEDIA_BUCKET } from "../utils/cap-diapositivas";
 
 function parseHistoricoQuery(req: Request): HistoricoFiltros {
   return {
@@ -57,6 +61,49 @@ export const capacitacionesController = {
         preventor_id: preventorId,
       });
       res.status(201).json(cap);
+    } catch (error) {
+      if (error instanceof HttpError) {
+        return res.status(error.statusCode).json({ error: error.message });
+      }
+      next(error);
+    }
+  },
+
+  /**
+   * Sube una imagen de diapositiva a Storage (evita base64 en el JSON).
+   */
+  async subirMedia(req: Request, res: Response, next: NextFunction) {
+    try {
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({
+          error: "Debés adjuntar una imagen (JPG, PNG o WEBP)",
+        });
+      }
+
+      const mime = (file.mimetype || "").toLowerCase();
+      if (!mime.startsWith("image/") || mime.includes("svg")) {
+        return res.status(400).json({
+          error: "Solo se permiten imágenes JPG, PNG o WEBP",
+        });
+      }
+
+      const ext = safeExtensionFromUpload(file);
+      if (ext === "pdf" || ext === "bin") {
+        return res.status(400).json({
+          error: "Solo se permiten imágenes JPG, PNG o WEBP",
+        });
+      }
+
+      const path = `${req.user!.id}/${randomUUID()}.${ext}`;
+      await storageService.subirArchivo(CAP_MEDIA_BUCKET, path, file);
+      // Bucket privado: devolver signed URL para que el editor pueda mostrar la imagen.
+      // Al guardar, resolveDiapositivasAndTemario canonicaliza a la URL pública.
+      const canonical = storageService.obtenerUrlPublica(CAP_MEDIA_BUCKET, path);
+      const url =
+        (await storageService.signUrl(canonical, 60 * 60 * 24)) || canonical;
+
+      res.status(201).json({ url, path });
     } catch (error) {
       next(error);
     }
@@ -390,6 +437,21 @@ export const capacitacionesController = {
     try {
       const id = String(req.params.id);
       await assertCapacitacionAccess(req.user!, id);
+
+      const rol = req.user!.rol;
+      if (req.body?.firma_empresa && rol === "preventor") {
+        return res.status(403).json({
+          error:
+            "Solo el dueño / responsable de la empresa puede firmar ese campo.",
+        });
+      }
+      if (req.body?.firma_capacitador && rol === "dueno") {
+        return res.status(403).json({
+          error:
+            "Solo el preventor / profesional de HYS puede firmar ese campo.",
+        });
+      }
+
       const result = await capacitacionesService.actualizarRegistro(
         id,
         req.body,

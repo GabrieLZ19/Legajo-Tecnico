@@ -1,8 +1,10 @@
 import { supabaseAdmin } from "../config/supabase";
 import {
   CapacitacionDiapositiva,
+  assertDiapositivasPayloadOk,
   ensureDiapositivas,
   resolveDiapositivasAndTemario,
+  signDiapositivasImages,
 } from "../utils/cap-diapositivas";
 
 export type AmbitoPlantilla = "empresa" | "global";
@@ -135,7 +137,9 @@ export const capacitacionPlantillasService = {
 
     return {
       ...data,
-      diapositivas: ensureDiapositivas(data.diapositivas, data.temario),
+      diapositivas: await signDiapositivasImages(
+        ensureDiapositivas(data.diapositivas, data.temario),
+      ),
       capacitacion_plantilla_preguntas: preguntas,
       total_preguntas: preguntas.length,
       autor_nombre:
@@ -165,6 +169,7 @@ export const capacitacionPlantillasService = {
       diapositivas: params.diapositivas,
       temario: params.temario,
     });
+    assertDiapositivasPayloadOk(diapositivas);
 
     const estadoPublicacion =
       params.ambito === "global"
@@ -221,6 +226,7 @@ export const capacitacionPlantillasService = {
         diapositivas: params.diapositivas,
         temario: params.temario,
       });
+      assertDiapositivasPayloadOk(resolved.diapositivas);
       updatePayload.temario = resolved.temario;
       updatePayload.diapositivas = resolved.diapositivas;
     }
