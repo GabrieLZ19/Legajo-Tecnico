@@ -170,22 +170,6 @@ export default function EvaluacionPublicaPage() {
   }, [id, nombre, dni, sector, respuestas, currentPreguntaIndex, step]);
 
   useEffect(() => {
-    if (!cap || step !== "test") return;
-    const preguntas = cap.capacitacion_preguntas || [];
-    const requiereTest =
-      cap.con_evaluacion !== false && preguntas.length > 0;
-    if (!requiereTest) return;
-
-    if (!respuestasCompletas(preguntas, respuestas)) {
-      const firstEmpty = preguntas.findIndex((p) => {
-        const ans = respuestas[p.id];
-        return ans === undefined || (Array.isArray(ans) && ans.length === 0);
-      });
-      if (firstEmpty >= 0) setCurrentPreguntaIndex(firstEmpty);
-    }
-  }, [cap, step, respuestas]);
-
-  useEffect(() => {
     if (id) {
       getCapacitacionPublica(id)
         .then((data) => {
@@ -208,11 +192,17 @@ export default function EvaluacionPublicaPage() {
     return String(raw).trim().startsWith("[");
   };
 
+  const preguntaRespondida = (p: Pregunta) => {
+    const ans = respuestas[p.id];
+    return ans !== undefined && (!Array.isArray(ans) || ans.length > 0);
+  };
+
   const seleccionarRespuesta = (
     preguntaId: string,
     opcionIdx: number,
     isMult: boolean,
   ) => {
+    setError(null);
     setRespuestas((prev) => {
       if (isMult) {
         const current = Array.isArray(prev[preguntaId])
@@ -292,6 +282,31 @@ export default function EvaluacionPublicaPage() {
       }
       setError(null);
       setStep("firma");
+    }
+  };
+
+  /** Avanza de pregunta solo con confirmación explícita (no auto-avance). */
+  const avanzarPregunta = () => {
+    const preguntas = (cap?.capacitacion_preguntas || [])
+      .slice()
+      .sort((a, b) => a.orden - b.orden);
+    const actual = preguntas[currentPreguntaIndex];
+    if (!actual) return;
+
+    if (!preguntaRespondida(actual)) {
+      setError(
+        esMultiple(actual)
+          ? "Marcá todas las opciones que correspondan y después tocá Siguiente."
+          : "Seleccioná una opción para continuar.",
+      );
+      return;
+    }
+
+    setError(null);
+    if (currentPreguntaIndex < preguntas.length - 1) {
+      setCurrentPreguntaIndex((prev) => prev + 1);
+    } else {
+      void handleSiguiente();
     }
   };
 
@@ -622,6 +637,7 @@ export default function EvaluacionPublicaPage() {
 
             <div className="flex items-center justify-between gap-3 pt-5 border-t border-slate-100">
               <button
+                type="button"
                 onClick={() => {
                   setError(null);
                   setCurrentPreguntaIndex((prev) => Math.max(0, prev - 1));
@@ -633,17 +649,16 @@ export default function EvaluacionPublicaPage() {
               </button>
               {currentPreguntaIndex < totalPreguntas - 1 ? (
                 <button
-                  onClick={() => {
-                    setError(null);
-                    setCurrentPreguntaIndex((prev) => prev + 1);
-                  }}
+                  type="button"
+                  onClick={avanzarPregunta}
                   className="flex-1 py-3.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-1.5"
                 >
                   Siguiente <ChevronRight className="h-4 w-4" />
                 </button>
               ) : (
                 <button
-                  onClick={handleSiguiente}
+                  type="button"
+                  onClick={avanzarPregunta}
                   className="flex-1 py-3.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-1.5"
                 >
                   Finalizar Test

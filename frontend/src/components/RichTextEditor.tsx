@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import ResizeImage from "tiptap-extension-resize-image";
@@ -18,9 +18,12 @@ import {
   Heading2,
   Trash2,
   Undo2,
+  Loader2,
 } from "lucide-react";
 import { useAlert } from "@/context/AlertContext";
 import { sanitizeRichHtml } from "@/lib/sanitizeHtml";
+import { compressImage } from "@/lib/compressImage";
+import { capacitacionesService } from "@/utils/services/capacitaciones.service";
 
 /** Conserva fondo y alineación al pegar tablas desde Word. */
 const CapTableCell = TableCell.extend({
@@ -91,44 +94,41 @@ interface RichTextEditorProps {
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") resolve(reader.result);
-      else reject(new Error("No se pudo leer la imagen"));
-    };
-    reader.onerror = () => reject(new Error("No se pudo leer la imagen"));
-    reader.readAsDataURL(file);
-  });
+const SLIDE_COMPRESS_OPTS = {
+  maxWidth: 1280,
+  maxHeight: 1280,
+  quality: 0.8,
+} as const;
+
+async function uploadSlideImage(file: File): Promise<string> {
+  const compressed = await compressImage(file, SLIDE_COMPRESS_OPTS);
+  return capacitacionesService.subirMediaDiapositiva(compressed);
 }
 
-async function sourceToDataUrl(src: string): Promise<string | null> {
-  if (src.startsWith("data:image/")) return src;
-
-  if (src.startsWith("blob:") || /^https?:\/\//i.test(src)) {
-    try {
-      const response = await fetch(src);
-      if (!response.ok) return null;
-      const blob = await response.blob();
-      if (!blob.type.startsWith("image/")) return null;
-      if (blob.size > MAX_IMAGE_BYTES) return null;
-      return await fileToDataUrl(
-        new File([blob], "pasted-image", { type: blob.type || "image/png" }),
-      );
-    } catch {
-      return null;
-    }
+async function fileFromImageSrc(src: string): Promise<File | null> {
+  if (!src.startsWith("data:image/") && !src.startsWith("blob:")) {
+    return null;
   }
-
-  return null;
+  try {
+    const response = await fetch(src);
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    if (!blob.type.startsWith("image/")) return null;
+    if (blob.size > MAX_IMAGE_BYTES) return null;
+    return new File([blob], "pasted-image", {
+      type: blob.type || "image/png",
+    });
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Convierte imgs del HTML pegado a data URLs embebidas.
- * Para src rotos (file://, cid:, etc.) usa las imágenes del portapapeles en orden.
+ * Resuelve imgs del HTML pegado subiendo a Storage (nunca base64).
+ * Para src rotos (file://, cid:) usa las imágenes del portapapeles en orden.
+ * URLs http(s) existentes se conservan.
  */
-async function embedClipboardImagesInHtml(
+async function resolveClipboardImagesInHtml(
   html: string,
   clipboardImages: File[],
 ): Promise<{ html: string; recovered: number; dropped: number }> {
@@ -141,24 +141,33 @@ async function embedClipboardImagesInHtml(
 
   for (const img of imgs) {
     const src = img.getAttribute("src")?.trim() || "";
-    let dataUrl = await sourceToDataUrl(src);
 
-    if (!dataUrl && fileIndex < clipboardImages.length) {
-      const file = clipboardImages[fileIndex++];
-      if (file.size <= MAX_IMAGE_BYTES) {
-        try {
-          dataUrl = await fileToDataUrl(file);
-        } catch {
-          dataUrl = null;
-        }
+    if (/^https?:\/\//i.test(src)) {
+      recovered += 1;
+      continue;
+    }
+
+    let file = await fileFromImageSrc(src);
+
+    if (!file && fileIndex < clipboardImages.length) {
+      const candidate = clipboardImages[fileIndex++];
+      if (candidate.size <= MAX_IMAGE_BYTES) {
+        file = candidate;
       }
     }
 
-    if (dataUrl) {
-      img.setAttribute("src", dataUrl);
+    if (!file) {
+      img.remove();
+      dropped += 1;
+      continue;
+    }
+
+    try {
+      const url = await uploadSlideImage(file);
+      img.setAttribute("src", url);
       img.removeAttribute("srcset");
       recovered += 1;
-    } else {
+    } catch {
       img.remove();
       dropped += 1;
     }
@@ -210,6 +219,16 @@ function collectClipboardImages(clipboardData: DataTransfer): File[] {
   );
 }
 
+function uploadErrorMessage(err: unknown): string {
+  if (err && typeof err === "object" && "response" in err) {
+    const data = (err as { response?: { data?: { error?: string } } }).response
+      ?.data;
+    if (data?.error) return data.error;
+  }
+  if (err instanceof Error && err.message) return err.message;
+  return "No se pudo subir la imagen. Probá de nuevo o usá una más liviana.";
+}
+
 export default function RichTextEditor({
   value,
   onChange,
@@ -220,15 +239,20 @@ export default function RichTextEditor({
   const editorRef = useRef<Editor | null>(null);
   const showAlertRef = useRef(showAlert);
   showAlertRef.current = showAlert;
+  const [uploading, setUploading] = useState(false);
+  const uploadingRef = useRef(false);
 
-  const processImageFile = (file: File, editorInstance: Editor) => {
+  const processImageFile = async (
+    file: File,
+    editorInstance: Editor,
+  ): Promise<boolean> => {
     if (!file.type.startsWith("image/")) {
       showAlertRef.current(
         "error",
         "Archivo no válido",
         "Por favor, selecciona una imagen en formato PNG, JPG o WEBP.",
       );
-      return;
+      return false;
     }
 
     if (file.size > MAX_IMAGE_BYTES) {
@@ -237,16 +261,32 @@ export default function RichTextEditor({
         "Imagen muy pesada",
         "La imagen no debe superar los 5MB.",
       );
-      return;
+      return false;
     }
 
-    void fileToDataUrl(file)
-      .then((dataUrl) => {
-        editorInstance.chain().focus().setImage({ src: dataUrl }).run();
-      })
-      .catch(() => {
-        showAlertRef.current("error", "Error", "No se pudo procesar la imagen.");
-      });
+    if (uploadingRef.current) {
+      showAlertRef.current(
+        "info",
+        "Subiendo imagen",
+        "Esperá a que termine la carga actual.",
+      );
+      return false;
+    }
+
+    uploadingRef.current = true;
+    setUploading(true);
+
+    try {
+      const url = await uploadSlideImage(file);
+      editorInstance.chain().focus().setImage({ src: url }).run();
+      return true;
+    } catch (err) {
+      showAlertRef.current("error", "Error al subir", uploadErrorMessage(err));
+      return false;
+    } finally {
+      uploadingRef.current = false;
+      setUploading(false);
+    }
   };
 
   const editor = useEditor({
@@ -266,6 +306,7 @@ export default function RichTextEditor({
       CapTableCell,
       ResizeImage.configure({
         inline: false,
+        // Contenidos viejos pueden tener base64; los nuevos usan URL de Storage.
         allowBase64: true,
       }),
     ],
@@ -285,14 +326,14 @@ export default function RichTextEditor({
           "prose prose-sm max-w-none p-4 min-h-[220px] focus:outline-hidden bg-white rounded-b-xl border-t border-slate-100 text-slate-800 leading-relaxed",
       },
       transformPastedHTML: (html) => sanitizePastedHtml(html),
-      handleDrop: (view, event, _slice, moved) => {
+      handleDrop: (_view, event, _slice, moved) => {
         if (!moved && event.dataTransfer?.files?.length) {
           const ed = editorRef.current;
           if (!ed) return false;
           const file = event.dataTransfer.files[0];
           if (file.type.startsWith("image/")) {
             event.preventDefault();
-            processImageFile(file, ed);
+            void processImageFile(file, ed);
             return true;
           }
         }
@@ -316,22 +357,37 @@ export default function RichTextEditor({
             let dropped = 0;
 
             if (hasHtmlImages) {
-              const result = await embedClipboardImagesInHtml(
-                processed,
-                clipboardImages,
-              );
-              processed = result.html;
-              dropped = result.dropped;
+              if (uploadingRef.current) {
+                showAlertRef.current(
+                  "info",
+                  "Subiendo imagen",
+                  "Esperá a que termine la carga actual.",
+                );
+                return;
+              }
+              uploadingRef.current = true;
+              setUploading(true);
+              try {
+                const result = await resolveClipboardImagesInHtml(
+                  processed,
+                  clipboardImages,
+                );
+                processed = result.html;
+                dropped = result.dropped;
+              } finally {
+                uploadingRef.current = false;
+                setUploading(false);
+              }
             }
 
             if (processed.trim()) {
               ed.chain().focus().insertContent(processed).run();
             }
 
-            if (dropped > 0 && clipboardImages.length === 0) {
+            if (dropped > 0) {
               showAlertRef.current(
                 "warning",
-                "Algunas imágenes no se pudieron pegar",
+                "Algunas imágenes no se pudieron subir",
                 "Usá el botón «Insertar Imagen» o copiá la imagen sola (no desde Word/PowerPoint) y pegala con Ctrl+V.",
               );
             }
@@ -339,10 +395,14 @@ export default function RichTextEditor({
           return true;
         }
 
-        // Pegado directo de imagen / captura de pantalla
+        // Pegado directo de imagen / captura de pantalla (secuencial)
         if (clipboardImages.length > 0) {
           event.preventDefault();
-          clipboardImages.forEach((file) => processImageFile(file, ed));
+          void (async () => {
+            for (const file of clipboardImages) {
+              await processImageFile(file, ed);
+            }
+          })();
           return true;
         }
 
@@ -366,7 +426,7 @@ export default function RichTextEditor({
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) processImageFile(file, editor);
+    if (file) void processImageFile(file, editor);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -379,7 +439,7 @@ export default function RichTextEditor({
   };
 
   return (
-    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs focus-within:ring-2 focus-within:ring-blue-500/25 focus-within:border-blue-500 transition-all">
+    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs focus-within:ring-2 focus-within:ring-blue-500/25 focus-within:border-blue-500 transition-all relative">
       <input
         type="file"
         ref={fileInputRef}
@@ -464,11 +524,16 @@ export default function RichTextEditor({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-700 transition-colors flex items-center gap-1.5 text-xs font-bold cursor-pointer bg-white border border-slate-200 shadow-2xs"
+            disabled={uploading}
+            className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-700 transition-colors flex items-center gap-1.5 text-xs font-bold cursor-pointer bg-white border border-slate-200 shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
             title="Cargar imagen desde equipo"
           >
-            <ImageIcon className="h-4 w-4 text-blue-600" />
-            <span>Insertar Imagen</span>
+            {uploading ? (
+              <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />
+            ) : (
+              <ImageIcon className="h-4 w-4 text-blue-600" />
+            )}
+            <span>{uploading ? "Subiendo…" : "Insertar Imagen"}</span>
           </button>
 
           <button
@@ -498,6 +563,14 @@ export default function RichTextEditor({
 
       <div className="relative">
         <EditorContent editor={editor} placeholder={placeholder} />
+        {uploading && (
+          <div className="absolute inset-0 bg-white/60 flex items-center justify-center pointer-events-none z-10">
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg px-3 py-2 shadow-sm">
+              <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+              Subiendo imagen…
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -99,10 +99,11 @@ export default function DetalleCapacitacionPage() {
 
   const canManage = canWriteAppModule(user, "capacitaciones");
   const canDelete = canManage;
-  // Firma empresa: el dueño firma conformidad aunque Capacitaciones esté en solo lectura
-  // (mismo criterio que la firma de informes). Admin siempre puede.
-  const canSignEmpresa =
-    canManage || user?.rol === "dueno" || user?.rol === "admin";
+  // Firma HYS: preventor/admin con escritura en el módulo.
+  // Firma empresa: solo dueño (o admin de soporte). El preventor NO firma por la empresa.
+  const canSignEmpresa = user?.rol === "dueno" || user?.rol === "admin";
+  const canSignHys =
+    canManage && (user?.rol === "preventor" || user?.rol === "admin");
 
   // Compartir
   const [showShareModal, setShowShareModal] = useState(false);
@@ -1223,6 +1224,7 @@ export default function DetalleCapacitacionPage() {
       <CapacitacionRegistroFirmas
         cap={cap}
         canEdit={canManage}
+        canSignHys={canSignHys}
         canSignEmpresa={canSignEmpresa}
         onSaved={setCap}
         onSave={async (payload) => {

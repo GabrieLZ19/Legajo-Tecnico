@@ -21,11 +21,13 @@ import {
 
 interface Props {
   cap: Capacitacion;
-  /** Editar instructor/agenda y firmar como HYS (acceso total al módulo). */
+  /** Editar instructor/agenda (acceso de escritura al módulo). */
   canEdit: boolean;
+  /** Firmar como profesional de HYS / capacitador (preventor o admin). */
+  canSignHys: boolean;
   /**
    * Firmar como responsable de la empresa.
-   * El dueño debe poder hacerlo aunque Capacitaciones esté en solo lectura.
+   * Solo dueño (o admin). El preventor no debe poder firmar este campo.
    */
   canSignEmpresa: boolean;
   onSaved: (updated: Capacitacion) => void;
@@ -49,12 +51,13 @@ interface Props {
 export default function CapacitacionRegistroFirmas({
   cap,
   canEdit,
+  canSignHys,
   canSignEmpresa,
   onSaved,
   onSave,
   onAlert,
 }: Props) {
-  const { user } = useAuth();
+  const { user, empresa } = useAuth();
   const [instructor, setInstructor] = useState(cap.instructor || "");
   const [agenda, setAgenda] = useState<CapAgendaValue>(() =>
     agendaFromStored({
@@ -223,9 +226,15 @@ export default function CapacitacionRegistroFirmas({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2 border-t border-slate-100">
         <div className="space-y-3">
-          <p className="text-xs font-black text-slate-800 uppercase tracking-wider">
-            Firma del responsable de HYS
-          </p>
+          <div>
+            <p className="text-xs font-black text-slate-800 uppercase tracking-wider">
+              Firma del profesional de HYS
+            </p>
+            <p className="text-[11px] text-slate-500 font-semibold mt-0.5">
+              Capacitador / preventor de la consultora
+              {user?.nombre_completo ? ` · ${user.nombre_completo}` : ""}
+            </p>
+          </div>
           {cap.firma_capacitador_url ? (
             <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3">
               <img
@@ -237,7 +246,7 @@ export default function CapacitacionRegistroFirmas({
                 Aclaración: {cap.aclaracion_capacitador || "—"}
               </p>
             </div>
-          ) : canEdit ? (
+          ) : canSignHys ? (
             <>
               <div onPointerDown={() => setActivePad("capacitador")}>
                 <SignaturePad ref={sigCapRef} heightClassName="h-36" />
@@ -287,15 +296,22 @@ export default function CapacitacionRegistroFirmas({
             </>
           ) : (
             <p className="text-xs text-slate-400 font-semibold">
-              Pendiente de firma
+              Pendiente de firma del preventor / HYS
             </p>
           )}
         </div>
 
         <div className="space-y-3">
-          <p className="text-xs font-black text-slate-800 uppercase tracking-wider">
-            Responsable por la empresa
-          </p>
+          <div>
+            <p className="text-xs font-black text-slate-800 uppercase tracking-wider">
+              Responsable por la empresa
+            </p>
+            <p className="text-[11px] text-slate-500 font-semibold mt-0.5">
+              {empresa?.razon_social
+                ? empresa.razon_social
+                : "Dueño / representante del establecimiento"}
+            </p>
+          </div>
           {cap.firma_empresa_url ? (
             <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3">
               <img
@@ -313,7 +329,9 @@ export default function CapacitacionRegistroFirmas({
                 <SignaturePad ref={sigEmpRef} heightClassName="h-36" />
               </div>
               <p className="text-[11px] text-slate-400 font-semibold">
-                También podés subir una imagen o pegar un recorte (Ctrl+V).
+                {user?.sello_url
+                  ? "Podés usar tu sello precargado, subir una imagen o pegar un recorte (Ctrl+V)."
+                  : "También podés subir una imagen o pegar un recorte (Ctrl+V)."}
               </p>
               <input
                 type="text"
@@ -330,6 +348,12 @@ export default function CapacitacionRegistroFirmas({
                 >
                   Limpiar
                 </button>
+                <UsarMiSelloButton
+                  canvasRef={sigEmpRef}
+                  selloUrl={user?.sello_url}
+                  onError={(msg) => onAlert("error", "Sello", msg)}
+                  className="flex-1 min-w-[120px] inline-flex items-center justify-center gap-1.5 py-2 border border-blue-200 bg-blue-50 text-blue-800 rounded-xl text-xs font-bold hover:bg-blue-100 disabled:opacity-50"
+                />
                 <SignatureImageImport
                   canvasRef={sigEmpRef}
                   enablePaste={activePad === "empresa"}
@@ -349,7 +373,7 @@ export default function CapacitacionRegistroFirmas({
             </>
           ) : (
             <p className="text-xs text-slate-400 font-semibold">
-              Pendiente de firma
+              Pendiente de firma del dueño / responsable de la empresa
             </p>
           )}
         </div>

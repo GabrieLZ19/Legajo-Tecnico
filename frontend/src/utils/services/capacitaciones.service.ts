@@ -29,4 +29,22 @@ export const capacitacionesService = {
     });
     return data;
   },
+
+  /**
+   * Sube una imagen de diapositiva a Storage y devuelve la URL canónica.
+   * Evita embebir base64 en el HTML (causa cuelgues al guardar).
+   */
+  async subirMediaDiapositiva(file: File): Promise<string> {
+    const form = new FormData();
+    form.append("imagen", file);
+    const { data } = await api.post<{ url: string }>(
+      "/capacitaciones/media",
+      form,
+      { timeout: 60_000 },
+    );
+    if (!data?.url) {
+      throw new Error("El servidor no devolvió la URL de la imagen");
+    }
+    return data.url;
+  },
 };
