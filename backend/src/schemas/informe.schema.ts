@@ -5,6 +5,12 @@ export const crearInformeSchema = z.object({
     empresa_id: z.string().uuid('ID de empresa inválido'),
     actividad: z.string().optional(),
     fecha_hora_visita: z.string().datetime({ message: 'Fecha inválida. Debe ser ISO 8601' }),
+    fecha_hora_fin: z
+      .string()
+      .datetime({ message: 'Hora de fin inválida. Debe ser ISO 8601' })
+      .nullable()
+      .optional(),
+    cantidad_horas: z.string().max(20).nullable().optional(),
     lugar_visita: z.string().optional(),
     contacto_visita: z.string().optional(),
     declaracion_legal: z.string().optional(),
@@ -36,6 +42,12 @@ export const editarInformeSchema = z.object({
   body: z.object({
     actividad: z.string().optional(),
     fecha_hora_visita: z.string().optional(),
+    fecha_hora_fin: z
+      .string()
+      .datetime({ message: 'Hora de fin inválida. Debe ser ISO 8601' })
+      .nullable()
+      .optional(),
+    cantidad_horas: z.string().max(20).nullable().optional(),
     lugar_visita: z.string().optional(),
     contacto_visita: z.string().optional(),
     declaracion_legal: z.string().optional(),

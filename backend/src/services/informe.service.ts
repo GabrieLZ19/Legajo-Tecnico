@@ -50,6 +50,8 @@ export const informeService = {
       empresa_id: string;
       actividad?: string;
       fecha_hora_visita: string;
+      fecha_hora_fin?: string | null;
+      cantidad_horas?: string | null;
       lugar_visita?: string;
       contacto_visita?: string;
       declaracion_legal?: string;
@@ -112,6 +114,8 @@ export const informeService = {
         numero_informe,
         actividad: data.actividad,
         fecha_hora_visita: data.fecha_hora_visita,
+        fecha_hora_fin: data.fecha_hora_fin ?? null,
+        cantidad_horas: data.cantidad_horas?.trim() || null,
         lugar_visita: data.lugar_visita,
         contacto_visita: data.contacto_visita,
         declaracion_legal: data.declaracion_legal

@@ -71,6 +71,10 @@ export interface InformeVisita {
   numero_informe: number;
   actividad?: string;
   fecha_hora_visita: string;
+  /** Fin de la visita (inicio = fecha_hora_visita). */
+  fecha_hora_fin?: string | null;
+  /** Duración en horas (texto editable, como en capacitaciones). */
+  cantidad_horas?: string | null;
   lugar_visita?: string;
   contacto_visita?: string;
   declaracion_legal?: string;

@@ -73,7 +73,7 @@ function limpiarHtmlParaPdf(html: string): string {
 }
 
 /** Versión del layout/contenido del PDF. Subir al cambiar secciones (ej. evidencias de visita). */
-const PDF_TEMPLATE_VERSION = 2;
+const PDF_TEMPLATE_VERSION = 3;
 
 /** Extrae el Date.now() embebido en `informe_{n}_{timestamp}.pdf` o `..._{timestamp}_v2.pdf`. */
 function extractPdfGeneratedAtMs(url: string | null | undefined): number | null {
@@ -380,7 +380,7 @@ export const pdfService = {
         doc.text("CLIENTE", 60, yPos + 5);
         doc.text("N° DE INFORME", 307.5, yPos + 5);
         doc.text("ACTIVIDAD", 60, yPos + 30);
-        doc.text("FECHA Y HORA DE VISITA", 307.5, yPos + 30);
+        doc.text("FECHA Y HORARIO DE VISITA", 307.5, yPos + 30);
         doc.text("LUGAR DE VISITA", 60, yPos + 55);
         doc.text("CONTACTO DE LA VISITA", 307.5, yPos + 55);
 
@@ -396,9 +396,31 @@ export const pdfService = {
           ellipsis: true,
         });
         doc.text(
-          new Date(informe.fecha_hora_visita).toLocaleString("es-AR"),
+          (() => {
+            const inicio = new Date(informe.fecha_hora_visita);
+            const fechaTxt = inicio.toLocaleDateString("es-AR");
+            const desdeTxt = inicio.toLocaleTimeString("es-AR", {
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+            if (!informe.fecha_hora_fin) {
+              return `${fechaTxt} ${desdeTxt}`;
+            }
+            const fin = new Date(informe.fecha_hora_fin);
+            const hastaTxt = fin.toLocaleTimeString("es-AR", {
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+            const horas =
+              typeof informe.cantidad_horas === "string" &&
+              informe.cantidad_horas.trim()
+                ? ` (${informe.cantidad_horas.trim()} h)`
+                : "";
+            return `${fechaTxt} ${desdeTxt} a ${hastaTxt}${horas}`;
+          })(),
           307.5,
           yPos + 39,
+          { width: 220 },
         );
         doc.text(informe.lugar_visita || "N/A", 60, yPos + 64, {
           width: 220,
