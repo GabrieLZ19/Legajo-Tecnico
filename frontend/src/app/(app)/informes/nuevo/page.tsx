@@ -38,6 +38,27 @@ import {
   ImagenVisitaLocal,
   imagenesFromUrls,
 } from "@/components/ImagenesVisitaSection";
+import { calcHorasFromRange } from "@/lib/cap-agenda";
+
+function padTime(d: Date): string {
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+function defaultHoraDesde(): string {
+  return padTime(new Date());
+}
+
+function defaultHoraHasta(desde?: string): string {
+  if (desde && /^\d{2}:\d{2}$/.test(desde)) {
+    const [h, m] = desde.split(":").map(Number);
+    const d = new Date();
+    d.setHours(h + 1, m, 0, 0);
+    return padTime(d);
+  }
+  const d = new Date();
+  d.setHours(d.getHours() + 1);
+  return padTime(d);
+}
 import { mapPool } from "@/lib/mapPool";
 import { draftHasContent } from "@/lib/informeDraft";
 
@@ -65,12 +86,18 @@ export default function NuevoInformePage() {
   const [fecha, setFecha] = useState(() =>
     new Date().toISOString().split("T")[0],
   );
-  const [hora, setHora] = useState(() => {
-    const now = new Date();
-    return `${String(now.getHours()).padStart(2, "0")}:${String(
-      now.getMinutes(),
-    ).padStart(2, "0")}`;
-  });
+  const [hora, setHora] = useState(() => defaultHoraDesde());
+  const [horaHasta, setHoraHasta] = useState(() => defaultHoraHasta());
+  const [cantidadHoras, setCantidadHoras] = useState(() =>
+    calcHorasFromRange(defaultHoraDesde(), defaultHoraHasta()) || "1",
+  );
+
+  const syncHorasVisita = (desde: string, hasta: string) => {
+    setHora(desde);
+    setHoraHasta(hasta);
+    const auto = calcHorasFromRange(desde, hasta);
+    if (auto) setCantidadHoras(auto);
+  };
 
   interface AccionLocal {
     id?: string;
@@ -210,11 +237,23 @@ export default function NuevoInformePage() {
       actividad,
       fecha,
       hora,
+      horaHasta,
+      cantidadHoras,
       declaracion_legal: editorRef.current?.innerHTML || "",
       observaciones: observacionesCargadas,
       imagenes_visita: imagenesVisita,
     }),
-    [lugar, actividad, fecha, hora, observacionesCargadas, imagenesVisita, editorTick],
+    [
+      lugar,
+      actividad,
+      fecha,
+      hora,
+      horaHasta,
+      cantidadHoras,
+      observacionesCargadas,
+      imagenesVisita,
+      editorTick,
+    ],
   );
 
   const {
@@ -233,7 +272,17 @@ export default function NuevoInformePage() {
     informeId: draftInformeId,
     enabled: !!empresa?.id && draftReady,
     pause: loading,
-    watch: [lugar, actividad, fecha, hora, observacionesCargadas, imagenesVisita, editorTick],
+    watch: [
+      lugar,
+      actividad,
+      fecha,
+      hora,
+      horaHasta,
+      cantidadHoras,
+      observacionesCargadas,
+      imagenesVisita,
+      editorTick,
+    ],
     getSnapshot: getAutosaveSnapshot,
     crearInforme: crearInforme as any,
     editarInforme: editarInforme as any,
@@ -281,10 +330,15 @@ export default function NuevoInformePage() {
     void fetchEmpresa();
 
     const nowDefaults = () => {
-      const now = new Date();
-      const fechaDefault = now.toISOString().split("T")[0];
-      const horaDefault = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-      return { fechaDefault, horaDefault };
+      const horaDefault = defaultHoraDesde();
+      const horaHastaDefault = defaultHoraHasta(horaDefault);
+      return {
+        fechaDefault: new Date().toISOString().split("T")[0],
+        horaDefault,
+        horaHastaDefault,
+        cantidadDefault:
+          calcHorasFromRange(horaDefault, horaHastaDefault) || "1",
+      };
     };
 
     const hydrate = async () => {
@@ -292,13 +346,27 @@ export default function NuevoInformePage() {
         const { draft, photos } = await loadLocalDraftWithPhotos();
         if (cancelled) return;
 
-        const { fechaDefault, horaDefault } = nowDefaults();
+        const {
+          fechaDefault,
+          horaDefault,
+          horaHastaDefault,
+          cantidadDefault,
+        } = nowDefaults();
 
         if (draft && draft.empresaId === empresaId) {
           setLugar(draft.lugar || "Planta 1");
           setActividad(draft.actividad || "");
           setFecha(draft.fecha || fechaDefault);
-          setHora(draft.hora || horaDefault);
+          const desde = draft.hora || horaDefault;
+          const hasta =
+            draft.horaHasta || defaultHoraHasta(desde) || horaHastaDefault;
+          setHora(desde);
+          setHoraHasta(hasta);
+          setCantidadHoras(
+            draft.cantidadHoras ||
+              calcHorasFromRange(desde, hasta) ||
+              cantidadDefault,
+          );
           if (draft.informeId) setDraftInformeId(draft.informeId);
           setObservacionesCargadas(
             (draft.observaciones || []).map((obs) => {
@@ -487,8 +555,35 @@ export default function NuevoInformePage() {
     let createdId: string | null = draftInformeId || null;
 
     try {
-      // 1. Combinar fecha y hora
+      // 1. Combinar fecha + desde/hasta
       const dateObj = new Date(`${fecha}T${hora}:00`);
+      if (!horaHasta) {
+        showAlert(
+          "warning",
+          "Falta la hora de fin",
+          "Indicá hasta qué hora duró la visita.",
+        );
+        setLoading(false);
+        return;
+      }
+      const dateFinObj = new Date(`${fecha}T${horaHasta}:00`);
+      if (
+        Number.isNaN(dateObj.getTime()) ||
+        Number.isNaN(dateFinObj.getTime())
+      ) {
+        showAlert("error", "Horario inválido", "Revisá la fecha y el horario.");
+        setLoading(false);
+        return;
+      }
+      if (dateFinObj.getTime() <= dateObj.getTime()) {
+        showAlert(
+          "warning",
+          "Horario inválido",
+          "La hora Hasta debe ser posterior a Desde.",
+        );
+        setLoading(false);
+        return;
+      }
 
       // Obtener el texto editado de la declaración legal
       const finalDeclaracion = editorRef.current?.innerHTML || "";
@@ -513,6 +608,8 @@ export default function NuevoInformePage() {
           data: {
             actividad,
             fecha_hora_visita: dateObj.toISOString(),
+            fecha_hora_fin: dateFinObj.toISOString(),
+            cantidad_horas: cantidadHoras.trim() || null,
             lugar_visita: lugar,
             declaracion_legal: finalDeclaracion,
             observaciones: "",
@@ -524,6 +621,8 @@ export default function NuevoInformePage() {
           empresa_id: empresa.id,
           actividad,
           fecha_hora_visita: dateObj.toISOString(),
+          fecha_hora_fin: dateFinObj.toISOString(),
+          cantidad_horas: cantidadHoras.trim() || null,
           lugar_visita: lugar,
           contacto_visita: "Responsable de Planta",
           declaracion_legal: finalDeclaracion,
@@ -634,11 +733,12 @@ export default function NuevoInformePage() {
       setImagenesVisita([]);
       setLugar("Planta 1");
       setActividad("");
-      const now = new Date();
-      setFecha(now.toISOString().split("T")[0]);
-      const hours = String(now.getHours()).padStart(2, "0");
-      const minutes = String(now.getMinutes()).padStart(2, "0");
-      setHora(`${hours}:${minutes}`);
+      setFecha(new Date().toISOString().split("T")[0]);
+      const desde = defaultHoraDesde();
+      const hasta = defaultHoraHasta(desde);
+      setHora(desde);
+      setHoraHasta(hasta);
+      setCantidadHoras(calcHorasFromRange(desde, hasta) || "1");
       if (editorRef.current) editorRef.current.innerHTML = "";
       setEditorTick((n) => n + 1);
       baselineFromCurrent();
@@ -742,10 +842,10 @@ export default function NuevoInformePage() {
             </div>
           </div>
 
-          {/* Actividad + Fecha + Hora */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* Actividad + Fecha + Desde/Hasta/Horas */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Actividad / Tipo de Visita */}
-            <div className="space-y-2">
+            <div className="space-y-2 sm:col-span-2 lg:col-span-4">
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                 Actividad / Tipo de Visita
               </label>
@@ -792,10 +892,10 @@ export default function NuevoInformePage() {
               </div>
             </div>
 
-            {/* Hora */}
+            {/* Desde */}
             <div className="space-y-2">
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                Hora
+                Desde
               </label>
               <div
                 onClick={(e) => {
@@ -813,7 +913,7 @@ export default function NuevoInformePage() {
                   type="time"
                   required
                   value={hora}
-                  onChange={(e) => setHora(e.target.value)}
+                  onChange={(e) => syncHorasVisita(e.target.value, horaHasta)}
                   onClick={(e) => {
                     e.stopPropagation();
                     try {
@@ -823,6 +923,60 @@ export default function NuevoInformePage() {
                   className="block flex-1 bg-transparent border-0 p-0 text-slate-700 focus:ring-0 focus:outline-hidden text-sm font-bold cursor-pointer"
                 />
               </div>
+            </div>
+
+            {/* Hasta */}
+            <div className="space-y-2">
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                Hasta
+              </label>
+              <div
+                onClick={(e) => {
+                  const input = e.currentTarget.querySelector("input");
+                  if (input) {
+                    try {
+                      input.showPicker();
+                    } catch (err) {}
+                  }
+                }}
+                className="flex items-center gap-2 pl-3.5 pr-3 py-3 border border-slate-200 rounded-xl bg-brand-input-bg text-slate-755 focus-within:ring-2 focus-within:ring-blue-600/25 focus-within:border-blue-600 transition-all cursor-pointer select-none"
+              >
+                <Clock className="h-5 w-5 text-blue-600 shrink-0" />
+                <input
+                  type="time"
+                  required
+                  value={horaHasta}
+                  onChange={(e) => syncHorasVisita(hora, e.target.value)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    try {
+                      e.currentTarget.showPicker();
+                    } catch (err) {}
+                  }}
+                  className="block flex-1 bg-transparent border-0 p-0 text-slate-700 focus:ring-0 focus:outline-hidden text-sm font-bold cursor-pointer"
+                />
+              </div>
+            </div>
+
+            {/* Cantidad de horas */}
+            <div className="space-y-2">
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                Cantidad de horas
+              </label>
+              <input
+                type="number"
+                inputMode="decimal"
+                min={0.25}
+                max={24}
+                step={0.25}
+                required
+                value={cantidadHoras}
+                onChange={(e) => setCantidadHoras(e.target.value)}
+                className="block w-full border border-slate-200 rounded-xl px-3.5 py-3 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-600/25 focus:border-blue-600 transition-all font-bold text-slate-700 bg-brand-input-bg"
+              />
+              <p className="text-[10px] font-semibold text-slate-400">
+                Se calcula solo con Desde/Hasta; podés ajustarla.
+              </p>
             </div>
           </div>
 

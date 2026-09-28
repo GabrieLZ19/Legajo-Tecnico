@@ -163,6 +163,20 @@ export default function InformesPage() {
     });
   };
 
+  const formatVisitSchedule = (inf: {
+    fecha_hora_visita: string;
+    fecha_hora_fin?: string | null;
+    cantidad_horas?: string | null;
+  }) => {
+    const desde = formatTableTime(inf.fecha_hora_visita);
+    if (!inf.fecha_hora_fin) return desde;
+    const hasta = formatTableTime(inf.fecha_hora_fin);
+    const horas = inf.cantidad_horas?.trim()
+      ? ` · ${inf.cantidad_horas.trim()} h`
+      : "";
+    return `${desde}–${hasta}${horas}`;
+  };
+
   const formatFullDate = (dateStr: string) => {
     if (!dateStr) return "";
     return new Date(dateStr).toLocaleDateString("es-AR");
@@ -497,7 +511,7 @@ export default function InformesPage() {
                           {formatTableDate(inf.fecha_hora_visita)}
                         </span>
                         <span className="block text-xs font-semibold text-slate-400 mt-0.5">
-                          {formatTableTime(inf.fecha_hora_visita)}
+                          {formatVisitSchedule(inf)}
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-6 py-4.5 font-bold text-slate-900">
@@ -600,7 +614,7 @@ export default function InformesPage() {
                     <div className="flex flex-col gap-2">
                       <span className="text-xs font-bold text-slate-400">
                         {formatFullDate(inf.fecha_hora_visita)} ·{" "}
-                        {formatTableTime(inf.fecha_hora_visita)}
+                        {formatVisitSchedule(inf)}
                       </span>
                       {user?.rol === "ente_regulador" ? (
                         <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full w-fit">

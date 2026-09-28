@@ -126,6 +126,8 @@ export interface InformeVisita {
   numero_informe: number;
   actividad?: string;
   fecha_hora_visita: string;
+  fecha_hora_fin?: string | null;
+  cantidad_horas?: string | null;
   lugar_visita?: string;
   contacto_visita?: string;
   declaracion_legal?: string;

@@ -44,6 +44,14 @@ import {
   imagenesFromUrls,
 } from "@/components/ImagenesVisitaSection";
 import { mapPool } from "@/lib/mapPool";
+import { calcHorasFromRange } from "@/lib/cap-agenda";
+
+function timeFromIso(iso?: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
 
 export default function EditarInformePage() {
   const router = useRouter();
@@ -68,6 +76,15 @@ export default function EditarInformePage() {
   const [actividad, setActividad] = useState("");
   const [fecha, setFecha] = useState("");
   const [hora, setHora] = useState("");
+  const [horaHasta, setHoraHasta] = useState("");
+  const [cantidadHoras, setCantidadHoras] = useState("");
+
+  const syncHorasVisita = (desde: string, hasta: string) => {
+    setHora(desde);
+    setHoraHasta(hasta);
+    const auto = calcHorasFromRange(desde, hasta);
+    if (auto) setCantidadHoras(auto);
+  };
 
   interface AccionLocal {
     id?: string;
@@ -156,11 +173,23 @@ export default function EditarInformePage() {
       actividad,
       fecha,
       hora,
+      horaHasta,
+      cantidadHoras,
       declaracion_legal: editorRef.current?.innerHTML || "",
       observaciones: observacionesCargadas,
       imagenes_visita: imagenesVisita,
     }),
-    [lugar, actividad, fecha, hora, observacionesCargadas, imagenesVisita, editorTick],
+    [
+      lugar,
+      actividad,
+      fecha,
+      hora,
+      horaHasta,
+      cantidadHoras,
+      observacionesCargadas,
+      imagenesVisita,
+      editorTick,
+    ],
   );
 
   const {
@@ -176,7 +205,17 @@ export default function EditarInformePage() {
     informeId: id,
     enabled: !!empresa?.id && draftReady && !!informe,
     pause: loading || loadingInforme,
-    watch: [lugar, actividad, fecha, hora, observacionesCargadas, imagenesVisita, editorTick],
+    watch: [
+      lugar,
+      actividad,
+      fecha,
+      hora,
+      horaHasta,
+      cantidadHoras,
+      observacionesCargadas,
+      imagenesVisita,
+      editorTick,
+    ],
     getSnapshot: getAutosaveSnapshot,
     crearInforme: crearInforme as any,
     editarInforme: editarInforme as any,
@@ -284,9 +323,15 @@ export default function EditarInformePage() {
       const dateObj = new Date(informe.fecha_hora_visita);
       setFecha(dateObj.toISOString().split("T")[0]);
 
-      const hours = String(dateObj.getHours()).padStart(2, "0");
-      const minutes = String(dateObj.getMinutes()).padStart(2, "0");
-      setHora(`${hours}:${minutes}`);
+      const desde = timeFromIso(informe.fecha_hora_visita);
+      const hasta = timeFromIso(informe.fecha_hora_fin);
+      setHora(desde);
+      setHoraHasta(hasta);
+      setCantidadHoras(
+        informe.cantidad_horas?.trim() ||
+          calcHorasFromRange(desde, hasta) ||
+          "",
+      );
 
       if (informe.puntos_mejora) {
         const loadedObs = informe.puntos_mejora.map((pm: any) => {
@@ -344,9 +389,18 @@ export default function EditarInformePage() {
             localDraft.fecha ||
               new Date(informe.fecha_hora_visita).toISOString().split("T")[0],
           );
-          const dateObj = new Date(informe.fecha_hora_visita);
-          const fallbackHora = `${String(dateObj.getHours()).padStart(2, "0")}:${String(dateObj.getMinutes()).padStart(2, "0")}`;
-          setHora(localDraft.hora || fallbackHora);
+          const fallbackDesde = timeFromIso(informe.fecha_hora_visita);
+          const fallbackHasta = timeFromIso(informe.fecha_hora_fin);
+          const desde = localDraft.hora || fallbackDesde;
+          const hasta = localDraft.horaHasta || fallbackHasta;
+          setHora(desde);
+          setHoraHasta(hasta);
+          setCantidadHoras(
+            localDraft.cantidadHoras ||
+              informe.cantidad_horas?.trim() ||
+              calcHorasFromRange(desde, hasta) ||
+              "",
+          );
           setObservacionesCargadas(
             (localDraft.observaciones || []).map((obs) => {
               const idTemp =
@@ -575,12 +629,41 @@ export default function EditarInformePage() {
     setError(null);
 
     try {
+      if (!horaHasta) {
+        showAlert(
+          "warning",
+          "Falta la hora de fin",
+          "Indicá hasta qué hora duró la visita.",
+        );
+        setLoading(false);
+        return;
+      }
       const dateObj = new Date(`${fecha}T${hora}:00`);
+      const dateFinObj = new Date(`${fecha}T${horaHasta}:00`);
+      if (
+        Number.isNaN(dateObj.getTime()) ||
+        Number.isNaN(dateFinObj.getTime())
+      ) {
+        showAlert("error", "Horario inválido", "Revisá la fecha y el horario.");
+        setLoading(false);
+        return;
+      }
+      if (dateFinObj.getTime() <= dateObj.getTime()) {
+        showAlert(
+          "warning",
+          "Horario inválido",
+          "La hora Hasta debe ser posterior a Desde.",
+        );
+        setLoading(false);
+        return;
+      }
       const finalDeclaracion = editorRef.current?.innerHTML || "";
 
       const payload = {
         actividad: actividad,
         fecha_hora_visita: dateObj.toISOString(),
+        fecha_hora_fin: dateFinObj.toISOString(),
+        cantidad_horas: cantidadHoras.trim() || null,
         lugar_visita: lugar,
         declaracion_legal: finalDeclaracion,
         observaciones: "",
@@ -676,9 +759,15 @@ export default function EditarInformePage() {
     setActividad(informe.actividad || "");
     const dateObj = new Date(informe.fecha_hora_visita);
     setFecha(dateObj.toISOString().split("T")[0]);
-    const hours = String(dateObj.getHours()).padStart(2, "0");
-    const minutes = String(dateObj.getMinutes()).padStart(2, "0");
-    setHora(`${hours}:${minutes}`);
+    const desde = timeFromIso(informe.fecha_hora_visita);
+    const hasta = timeFromIso(informe.fecha_hora_fin);
+    setHora(desde);
+    setHoraHasta(hasta);
+    setCantidadHoras(
+      informe.cantidad_horas?.trim() ||
+        calcHorasFromRange(desde, hasta) ||
+        "",
+    );
 
     if (informe.puntos_mejora) {
       setObservacionesCargadas(
@@ -850,7 +939,7 @@ export default function EditarInformePage() {
 
               <div className="space-y-2">
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  Hora de Visita
+                  Desde
                 </label>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
@@ -860,10 +949,48 @@ export default function EditarInformePage() {
                     type="time"
                     required
                     value={hora}
-                    onChange={(e) => setHora(e.target.value)}
+                    onChange={(e) => syncHorasVisita(e.target.value, horaHasta)}
                     className="block w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl bg-brand-input-bg text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-blue-600/25 focus:border-blue-600 text-xs font-bold transition-all"
                   />
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  Hasta
+                </label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
+                    <Clock className="h-4 w-4" />
+                  </span>
+                  <input
+                    type="time"
+                    required
+                    value={horaHasta}
+                    onChange={(e) => syncHorasVisita(hora, e.target.value)}
+                    className="block w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl bg-brand-input-bg text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-blue-600/25 focus:border-blue-600 text-xs font-bold transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2 sm:col-span-2">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  Cantidad de horas
+                </label>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min={0.25}
+                  max={24}
+                  step={0.25}
+                  required
+                  value={cantidadHoras}
+                  onChange={(e) => setCantidadHoras(e.target.value)}
+                  className="block w-full px-4 py-3 border border-slate-200 rounded-xl bg-brand-input-bg text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-blue-600/25 focus:border-blue-600 text-xs font-bold transition-all"
+                />
+                <p className="text-[10px] font-semibold text-slate-400">
+                  Se calcula solo con Desde/Hasta; podés ajustarla.
+                </p>
               </div>
             </div>
           </div>

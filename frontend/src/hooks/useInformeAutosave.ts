@@ -46,6 +46,8 @@ type Snapshot = {
   actividad: string;
   fecha: string;
   hora: string;
+  horaHasta: string;
+  cantidadHoras: string;
   declaracion_legal: string;
   observaciones: ObsConImagen[];
   imagenes_visita: ImagenVisitaConArchivo[];
@@ -113,6 +115,8 @@ function fingerprint(snapshot: Snapshot): string {
     actividad: snapshot.actividad,
     fecha: snapshot.fecha,
     hora: snapshot.hora,
+    horaHasta: snapshot.horaHasta,
+    cantidadHoras: snapshot.cantidadHoras,
     declaracion_legal: snapshot.declaracion_legal,
     observaciones: stripObsForLocal(snapshot.observaciones),
     imagenes_visita: stripImagenesForLocal(snapshot.imagenes_visita),
@@ -203,6 +207,8 @@ export function useInformeAutosave(options: Options) {
       actividad: snap.actividad,
       fecha: snap.fecha,
       hora: snap.hora,
+      horaHasta: snap.horaHasta,
+      cantidadHoras: snap.cantidadHoras,
       declaracion_legal: snap.declaracion_legal,
       observaciones: stripObsForLocal(snap.observaciones),
       imagenes_visita: stripImagenesForLocal(snap.imagenes_visita),
@@ -300,6 +306,8 @@ export function useInformeAutosave(options: Options) {
 
     const fechaIso = buildFechaHoraIso(snap.fecha, snap.hora);
     if (!fechaIso) return false;
+    const fechaFinIso = buildFechaHoraIso(snap.fecha, snap.horaHasta);
+    const cantidadHoras = snap.cantidadHoras?.trim() || null;
 
     savingRef.current = true;
     setStatus("saving");
@@ -335,6 +343,8 @@ export function useInformeAutosave(options: Options) {
           data: {
             actividad: snap.actividad,
             fecha_hora_visita: fechaIso,
+            fecha_hora_fin: fechaFinIso,
+            cantidad_horas: cantidadHoras,
             lugar_visita: snap.lugar,
             declaracion_legal: snap.declaracion_legal,
             observaciones: "",
@@ -347,6 +357,8 @@ export function useInformeAutosave(options: Options) {
           empresa_id: empresaId,
           actividad: snap.actividad,
           fecha_hora_visita: fechaIso,
+          fecha_hora_fin: fechaFinIso,
+          cantidad_horas: cantidadHoras,
           lugar_visita: snap.lugar,
           contacto_visita: "Responsable de Planta",
           declaracion_legal: snap.declaracion_legal,
@@ -416,6 +428,8 @@ export function useInformeAutosave(options: Options) {
         actividad: snap.actividad,
         fecha: snap.fecha,
         hora: snap.hora,
+        horaHasta: snap.horaHasta,
+        cantidadHoras: snap.cantidadHoras,
         declaracion_legal: snap.declaracion_legal,
         observaciones: stripObsForLocal(snap.observaciones),
         imagenes_visita: stripImagenesForLocal(

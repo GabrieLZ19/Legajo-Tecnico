@@ -26,7 +26,12 @@ export type InformeDraftPayload = {
   lugar: string;
   actividad: string;
   fecha: string;
+  /** Hora de inicio (Desde). Compat: drafts viejos solo tenían `hora`. */
   hora: string;
+  /** Hora de fin (Hasta). */
+  horaHasta?: string;
+  /** Cantidad de horas de visita (calculada / editable). */
+  cantidadHoras?: string;
   declaracion_legal: string;
   observaciones: InformeDraftObservacion[];
   imagenes_visita?: InformeDraftImagenVisita[];

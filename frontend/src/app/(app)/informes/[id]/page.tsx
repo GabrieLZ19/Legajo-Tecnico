@@ -218,10 +218,23 @@ export default function InformeDetallePage() {
   // Formatear la fecha para los títulos
   const fechaVisita = new Date(informe.fecha_hora_visita);
   const fechaFormateada = fechaVisita.toLocaleDateString("es-AR");
-  const horaFormateada = fechaVisita.toLocaleTimeString("es-AR", {
+  const horaDesdeFormateada = fechaVisita.toLocaleTimeString("es-AR", {
     hour: "2-digit",
     minute: "2-digit",
   });
+  const horaHastaFormateada = informe.fecha_hora_fin
+    ? new Date(informe.fecha_hora_fin).toLocaleTimeString("es-AR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+  const horarioFormateado = horaHastaFormateada
+    ? `${horaDesdeFormateada} a ${horaHastaFormateada}${
+        informe.cantidad_horas?.trim()
+          ? ` · ${informe.cantidad_horas.trim()} h`
+          : ""
+      }`
+    : horaDesdeFormateada;
 
   // Buscar nombres de firmantes si existen
   const firmaP = informe.firmas_informe?.find((f) => f.tipo === "preventor");
@@ -263,7 +276,7 @@ export default function InformeDetallePage() {
             </p>
             <p className="text-xs text-slate-500 font-bold mt-0.5">
               {informe.lugar_visita || "Planta"} — {fechaFormateada} ·{" "}
-              {horaFormateada}
+              {horarioFormateado}
             </p>
           </div>
         </div>
@@ -332,7 +345,7 @@ export default function InformeDetallePage() {
                   Fecha y Hora
                 </span>
                 <span className="text-xs font-bold text-slate-700">
-                  {fechaFormateada} · {horaFormateada}
+                  {fechaFormateada} · {horarioFormateado}
                 </span>
               </div>
             </div>
@@ -706,7 +719,7 @@ export default function InformeDetallePage() {
                 <div>
                   <span className="block text-slate-800">Creado</span>
                   <span className="text-[10px] text-slate-400 font-bold">
-                    {fechaFormateada} · {horaFormateada}
+                    {fechaFormateada} · {horarioFormateado}
                   </span>
                 </div>
               </div>
