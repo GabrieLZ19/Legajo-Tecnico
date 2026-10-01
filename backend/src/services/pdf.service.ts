@@ -2,6 +2,7 @@ import PDFDocument from "pdfkit";
 import sharp from "sharp";
 import { supabaseAdmin } from "../config/supabase";
 import { storageService } from "./storage.service";
+import { formatDateAR, formatTimeAR } from "../utils/datetime";
 
 // Helper para descargar una imagen a Buffer (soporta buckets privados)
 async function descargarImagenBuffer(
@@ -73,7 +74,7 @@ function limpiarHtmlParaPdf(html: string): string {
 }
 
 /** Versión del layout/contenido del PDF. Subir al cambiar secciones (ej. evidencias de visita). */
-const PDF_TEMPLATE_VERSION = 3;
+const PDF_TEMPLATE_VERSION = 4;
 
 /** Extrae el Date.now() embebido en `informe_{n}_{timestamp}.pdf` o `..._{timestamp}_v2.pdf`. */
 function extractPdfGeneratedAtMs(url: string | null | undefined): number | null {
@@ -398,19 +399,13 @@ export const pdfService = {
         doc.text(
           (() => {
             const inicio = new Date(informe.fecha_hora_visita);
-            const fechaTxt = inicio.toLocaleDateString("es-AR");
-            const desdeTxt = inicio.toLocaleTimeString("es-AR", {
-              hour: "2-digit",
-              minute: "2-digit",
-            });
+            const fechaTxt = formatDateAR(inicio);
+            const desdeTxt = formatTimeAR(inicio);
             if (!informe.fecha_hora_fin) {
               return `${fechaTxt} ${desdeTxt}`;
             }
             const fin = new Date(informe.fecha_hora_fin);
-            const hastaTxt = fin.toLocaleTimeString("es-AR", {
-              hour: "2-digit",
-              minute: "2-digit",
-            });
+            const hastaTxt = formatTimeAR(fin);
             const horas =
               typeof informe.cantidad_horas === "string" &&
               informe.cantidad_horas.trim()
@@ -1042,7 +1037,7 @@ export const pdfService = {
             .fillColor(secondaryColor)
             .font("Helvetica")
             .text(
-              `Fecha: ${new Date(firmaPreventor.firmado_at).toLocaleDateString()}`,
+              `Fecha: ${formatDateAR(firmaPreventor.firmado_at)}`,
               70,
               yPos + 87,
               { width: 150, align: "center" },
@@ -1084,7 +1079,7 @@ export const pdfService = {
             .fillColor(secondaryColor)
             .font("Helvetica")
             .text(
-              `Fecha: ${new Date(firmaDueno.firmado_at).toLocaleDateString()}`,
+              `Fecha: ${formatDateAR(firmaDueno.firmado_at)}`,
               325,
               yPos + 87,
               { width: 150, align: "center" },
