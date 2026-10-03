@@ -9,7 +9,11 @@ export type AppModuleKey =
   | "informes"
   | "planAccion"
   | "epp"
-  | "capacitaciones";
+  | "capacitaciones"
+  | "mediciones"
+  | "art"
+  | "checklists"
+  | "denunciaEventos";
 
 export type AppNavModule = {
   key: AppModuleKey;
@@ -48,6 +52,34 @@ export const APP_NAV_MODULES: AppNavModule[] = [
     href: "/capacitaciones",
     label: "Capacitaciones",
     shortLabel: "Capacit.",
+  },
+  {
+    key: "mediciones",
+    module: "Mediciones",
+    href: "/mediciones",
+    label: "Mediciones",
+    shortLabel: "Medic.",
+  },
+  {
+    key: "art",
+    module: "ART",
+    href: "/art",
+    label: "ART",
+    shortLabel: "ART",
+  },
+  {
+    key: "checklists",
+    module: "Checklists",
+    href: "/checklists",
+    label: "Checklists",
+    shortLabel: "Check",
+  },
+  {
+    key: "denunciaEventos",
+    module: "Denuncia de eventos",
+    href: "/denuncia-eventos",
+    label: "Denuncia de Eventos",
+    shortLabel: "Denuncia",
   },
 ];
 
@@ -175,6 +207,27 @@ const WRITE_ROUTE_RULES: WriteRouteRule[] = [
       pathname.startsWith("/capacitaciones/biblioteca/nueva") ||
       /\/capacitaciones\/biblioteca\/[^/]+\/?$/.test(pathname) ||
       /\/capacitaciones\/[^/]+\/editar\/?$/.test(pathname),
+  },
+  {
+    key: "mediciones",
+    match: (pathname) =>
+      pathname.endsWith("/mediciones/nuevo") ||
+      /\/mediciones\/[^/]+\/editar\/?$/.test(pathname),
+  },
+  {
+    key: "art",
+    match: (pathname) =>
+      pathname.endsWith("/art/nuevo") ||
+      /\/art\/[^/]+\/editar\/?$/.test(pathname),
+  },
+  {
+    key: "checklists",
+    match: (pathname) =>
+      pathname.endsWith("/checklists/plantillas/nueva") ||
+      pathname.endsWith("/checklists/equipos/nuevo") ||
+      pathname.endsWith("/checklists/inspecciones/nueva") ||
+      /\/checklists\/plantillas\/[^/]+\/editar\/?$/.test(pathname) ||
+      /\/checklists\/equipos\/[^/]+\/editar\/?$/.test(pathname),
   },
 ];
 

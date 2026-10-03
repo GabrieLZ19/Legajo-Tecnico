@@ -113,11 +113,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     const path =
       typeof window !== "undefined" ? window.location.pathname : "";
     const isLoginPage = path.includes("/login");
+    const isPublicAppRoute =
+      path.startsWith("/evaluacion") ||
+      path.startsWith("/firmar") ||
+      path.startsWith("/cotizar") ||
+      path.startsWith("/entrega-epp") ||
+      path.startsWith("/inspeccion");
 
     const restore = async () => {
-      if (isLoginPage) {
+      if (isLoginPage || isPublicAppRoute) {
         // No borrar cookies aquí: un clear al montar login rompe el post-login
         // cuando hay redirect de vuelta. Solo no hidratar UI desde perfil stale.
+        // Rutas públicas (QR inspección, etc.): no exigir /auth/me.
         setUser(null);
         setEmpresa(null);
         setLoading(false);
@@ -140,7 +147,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     void restore();
 
     const onFocus = () => {
-      if (isLoginPage) return;
+      if (isLoginPage || isPublicAppRoute) return;
       void api
         .get("/auth/me")
         .then(({ data }) => {

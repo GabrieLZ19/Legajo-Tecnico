@@ -62,6 +62,26 @@ export const MODULE_PERMISSIONS: Record<RolUsuario, RoleModulePermission[]> = {
       description: "Administra capacitaciones y asistencias.",
     },
     {
+      module: "Mediciones",
+      access: "total",
+      description: "Carga mediciones e informes con fecha de vencimiento.",
+    },
+    {
+      module: "ART",
+      access: "total",
+      description: "Gestiona documentación ART con vencimientos.",
+    },
+    {
+      module: "Checklists",
+      access: "total",
+      description: "Plantillas, equipos e inspecciones por checklist.",
+    },
+    {
+      module: "Denuncia de eventos",
+      access: "lectura",
+      description: "Acceso al módulo de denuncia de eventos.",
+    },
+    {
       module: "Métricas y reportes",
       access: "lectura",
       description: "Consulta el desempeño operativo de sus empresas.",
@@ -92,6 +112,26 @@ export const MODULE_PERMISSIONS: Record<RolUsuario, RoleModulePermission[]> = {
       module: "Capacitaciones",
       access: "lectura",
       description: "Consulta capacitaciones y firma como responsable de la empresa.",
+    },
+    {
+      module: "Mediciones",
+      access: "lectura",
+      description: "Consulta mediciones e informes con vencimiento.",
+    },
+    {
+      module: "ART",
+      access: "lectura",
+      description: "Consulta documentación ART de su empresa.",
+    },
+    {
+      module: "Checklists",
+      access: "lectura",
+      description: "Consulta plantillas, equipos e inspecciones.",
+    },
+    {
+      module: "Denuncia de eventos",
+      access: "lectura",
+      description: "Acceso al módulo de denuncia de eventos.",
     },
     {
       module: "Métricas y reportes",
@@ -126,6 +166,26 @@ export const MODULE_PERMISSIONS: Record<RolUsuario, RoleModulePermission[]> = {
       description: "Gestiona altas, material y asistencias.",
     },
     {
+      module: "Mediciones",
+      access: "total",
+      description: "Control total sobre mediciones y vencimientos.",
+    },
+    {
+      module: "ART",
+      access: "total",
+      description: "Control total sobre documentación ART.",
+    },
+    {
+      module: "Checklists",
+      access: "total",
+      description: "Gestiona plantillas, equipos e inspecciones.",
+    },
+    {
+      module: "Denuncia de eventos",
+      access: "lectura",
+      description: "Acceso al módulo de denuncia de eventos.",
+    },
+    {
       module: "Métricas y reportes",
       access: "total",
       description: "Acceso completo a tablero y reportes globales.",
@@ -156,6 +216,26 @@ export const MODULE_PERMISSIONS: Record<RolUsuario, RoleModulePermission[]> = {
       module: "Capacitaciones",
       access: "lectura",
       description: "Consulta registros de capacitaciones autorizadas.",
+    },
+    {
+      module: "Mediciones",
+      access: "lectura",
+      description: "Consulta mediciones autorizadas.",
+    },
+    {
+      module: "ART",
+      access: "lectura",
+      description: "Consulta documentación ART autorizada.",
+    },
+    {
+      module: "Checklists",
+      access: "lectura",
+      description: "Consulta inspecciones autorizadas.",
+    },
+    {
+      module: "Denuncia de eventos",
+      access: "oculto",
+      description: "Sin acceso al módulo de denuncia.",
     },
     {
       module: "Métricas y reportes",

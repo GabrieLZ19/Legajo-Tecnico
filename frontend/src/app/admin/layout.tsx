@@ -19,6 +19,7 @@ import {
   History,
   GraduationCap,
   HardHat,
+  ClipboardCheck,
 } from "lucide-react";
 import { NotificationBell } from "@/components/notification-bell";
 
@@ -62,6 +63,11 @@ export default function AdminLayout({
       name: "Biblioteca Capacitaciones",
       href: "/admin/capacitaciones-biblioteca",
       icon: GraduationCap,
+    },
+    {
+      name: "Biblioteca Checklists",
+      href: "/admin/checklists-biblioteca",
+      icon: ClipboardCheck,
     },
     {
       name: "Proveedores EPP",

@@ -17,14 +17,20 @@ import {
   ClipboardList,
   GitBranch,
   Building2,
+  Ruler,
+  Shield,
+  ClipboardCheck,
+  CalendarClock,
   type LucideIcon,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { getSucursalLabel, getBaseCuit, formatCuitDisplay } from "@/lib/cuit";
 import {
   canWriteAppModule,
   getVisibleAppNavModules,
   type AppModuleKey,
 } from "@/lib/moduleAccess";
+import { documentosVencimientoService } from "@/utils/services/documentosVencimiento.service";
 
 const MODULE_CARD_META: Record<
   AppModuleKey,
@@ -54,6 +60,30 @@ const MODULE_CARD_META: Record<
     iconWrap: "bg-purple-50",
     iconColor: "text-purple-600",
   },
+  mediciones: {
+    title: "Mediciones",
+    icon: Ruler,
+    iconWrap: "bg-cyan-50",
+    iconColor: "text-cyan-600",
+  },
+  art: {
+    title: "ART",
+    icon: Shield,
+    iconWrap: "bg-indigo-50",
+    iconColor: "text-indigo-600",
+  },
+  checklists: {
+    title: "Checklists",
+    icon: ClipboardCheck,
+    iconWrap: "bg-orange-50",
+    iconColor: "text-orange-600",
+  },
+  denunciaEventos: {
+    title: "Denuncia de Eventos",
+    icon: AlertTriangle,
+    iconWrap: "bg-amber-50",
+    iconColor: "text-amber-600",
+  },
 };
 
 export default function DashboardPage() {
@@ -65,6 +95,11 @@ export default function DashboardPage() {
     empresa?.id,
     { limit: 100 },
   );
+  const { data: vencimientosProximos = [] } = useQuery({
+    queryKey: ["documentos-proximos", empresa?.id],
+    queryFn: () => documentosVencimientoService.proximos(empresa!.id, 60, 6),
+    enabled: !!empresa?.id,
+  });
 
   const canCreate = canWriteAppModule(user, "informes");
   const visibleModules = getVisibleAppNavModules(user);
@@ -280,6 +315,88 @@ export default function DashboardPage() {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Matriz de vencimiento (solo próximos 60 días) */}
+      {vencimientosProximos.length > 0 && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-2xs space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl border border-amber-500/20 bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
+                <CalendarClock className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-slate-900">
+                  Matriz de vencimiento
+                </h2>
+                <p className="text-xs font-medium text-slate-500 mt-0.5">
+                  Mediciones y ART próximos a vencer (ventana 60 días · máx. 6)
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <Link
+                href="/art"
+                className="text-xs font-bold text-slate-500 hover:text-brand-primary"
+              >
+                ART
+              </Link>
+              <Link
+                href="/mediciones"
+                className="text-xs font-bold text-brand-secondary hover:text-brand-primary"
+              >
+                Ver matriz
+              </Link>
+            </div>
+          </div>
+          <ul className="divide-y divide-slate-100 rounded-xl border border-slate-100 overflow-hidden">
+            {vencimientosProximos.map((item) => {
+              const urgente = item.urgencia === "alta";
+              const etiqueta =
+                item.categoria === "art" ? "ART" : "Medición";
+              return (
+                <li key={item.id}>
+                  <Link
+                    href={item.href}
+                    className={`flex items-center justify-between gap-3 px-4 py-3 transition-colors ${
+                      urgente
+                        ? "bg-amber-50/80 hover:bg-amber-50"
+                        : "bg-white hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-bold text-slate-800 truncate">
+                          {item.titulo}
+                        </span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md border border-slate-200 text-slate-600 bg-slate-50">
+                          {etiqueta}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Vence el{" "}
+                        {new Date(
+                          item.fecha_vencimiento + "T12:00:00",
+                        ).toLocaleDateString("es-AR")}
+                      </p>
+                    </div>
+                    <span
+                      className={`shrink-0 text-xs font-bold px-2.5 py-1 rounded-md border ${
+                        urgente
+                          ? "bg-amber-100 text-amber-800 border-amber-200"
+                          : "bg-sky-50 text-sky-700 border-sky-100"
+                      }`}
+                    >
+                      {item.dias_restantes < 0
+                        ? `Vencido ${Math.abs(item.dias_restantes)}d`
+                        : `${item.dias_restantes}d`}
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
 

@@ -160,6 +160,45 @@ export interface InformeVisita {
   } | null;
 }
 
+export type CategoriaDocumento = "medicion" | "art";
+
+export interface DocumentoAdjunto {
+  id: string;
+  documento_id: string;
+  nombre_original: string;
+  storage_path: string;
+  mime_type?: string | null;
+  url?: string | null;
+  url_firmada?: string | null;
+  created_at: string;
+}
+
+export interface DocumentoVencimiento {
+  id: string;
+  empresa_id: string;
+  categoria: CategoriaDocumento;
+  titulo: string;
+  /** Caja/tipo: iluminación, ruido, etc. (Excel ítem 34). */
+  tipo?: string | null;
+  fecha_vencimiento: string;
+  notas?: string | null;
+  creado_por?: string | null;
+  created_at: string;
+  updated_at: string;
+  adjuntos?: DocumentoAdjunto[];
+}
+
+export interface DocumentoVencimientoProximo {
+  id: string;
+  empresa_id: string;
+  categoria: CategoriaDocumento;
+  titulo: string;
+  fecha_vencimiento: string;
+  dias_restantes: number;
+  urgencia: "alta" | "media";
+  href: string;
+}
+
 export interface MetricasDashboard {
   empresa_id: string;
   informes_mes: number;
@@ -448,5 +487,92 @@ export interface EppHistoricoFiltros {
   fecha_hasta?: string;
   limit?: number;
   offset?: number;
+}
+
+// ── Checklists / Inspecciones ──
+export type CriticidadChecklist = "alta" | "media" | "baja";
+export type CalificacionChecklist = "bien" | "regular" | "mal";
+export type ResultadoInspeccion = "aprobada" | "observada" | "rechazada";
+
+export interface ChecklistPlantillaItem {
+  id?: string;
+  texto: string;
+  orden: number;
+  criticidad: CriticidadChecklist;
+}
+
+export interface ChecklistPlantilla {
+  id: string;
+  titulo: string;
+  tipo_equipo: string;
+  ambito: "empresa" | "global";
+  empresa_id?: string | null;
+  estado_publicacion?: EstadoPublicacionPlantilla | null;
+  aprobado_por?: string | null;
+  aprobado_at?: string | null;
+  rechazo_motivo?: string | null;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+  total_items?: number;
+  autor_nombre?: string | null;
+  items?: ChecklistPlantillaItem[];
+  checklist_plantilla_items?: ChecklistPlantillaItem[];
+}
+
+export interface Equipo {
+  id: string;
+  empresa_id: string;
+  nombre: string;
+  tipo_equipo: string;
+  codigo_interno?: string | null;
+  qr_token: string;
+  qr_url?: string;
+  activo: boolean;
+  ubicacion?: string | null;
+  notas?: string | null;
+  created_at: string;
+  updated_at: string;
+  historial?: Inspeccion[];
+}
+
+export interface InspeccionItem {
+  id: string;
+  texto: string;
+  orden: number;
+  criticidad: CriticidadChecklist;
+  calificacion: CalificacionChecklist;
+}
+
+export interface InspeccionAccion {
+  id: string;
+  inspeccion_id: string;
+  empresa_id: string;
+  descripcion: string;
+  responsable?: string | null;
+  fecha_vencimiento?: string | null;
+  estado: "pendiente" | "en_curso" | "cumplida";
+  created_at: string;
+}
+
+export interface Inspeccion {
+  id: string;
+  empresa_id: string;
+  equipo_id: string;
+  plantilla_id?: string | null;
+  plantilla_titulo: string;
+  inspector_id?: string | null;
+  inspector_nombre?: string | null;
+  fecha: string;
+  resultado: ResultadoInspeccion;
+  estado: string;
+  observaciones?: string | null;
+  equipos?: Pick<Equipo, "id" | "nombre" | "tipo_equipo" | "codigo_interno">;
+  items?: InspeccionItem[];
+  inspeccion_items?: InspeccionItem[];
+  acciones?: InspeccionAccion[];
+  inspeccion_acciones?: InspeccionAccion[];
+  total_acciones?: number;
+  acciones_pendientes?: number;
 }
 

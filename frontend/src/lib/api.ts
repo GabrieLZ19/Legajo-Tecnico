@@ -48,7 +48,8 @@ api.interceptors.response.use(
         path.startsWith("/evaluacion") ||
         path.startsWith("/firmar") ||
         path.startsWith("/cotizar") ||
-        path.startsWith("/entrega-epp");
+        path.startsWith("/entrega-epp") ||
+        path.startsWith("/inspeccion");
       const isLogout = requestUrl.includes("/auth/logout");
       // 401 de validación/cambio de contraseña ≠ sesión inválida
       const isPasswordCheck =
