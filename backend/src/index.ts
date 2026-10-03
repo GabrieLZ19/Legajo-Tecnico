@@ -20,6 +20,8 @@ import capacitacionPlantillasRoutes from "./routes/capacitacion-plantillas.route
 import eppProveedoresSugeridosRoutes from "./routes/eppProveedoresSugeridos.routes";
 import enteRoutes from "./routes/ente.routes";
 import archivoRoutes from "./routes/archivo.routes";
+import documentosVencimientoRoutes from "./routes/documentosVencimiento.routes";
+import checklistRoutes from "./routes/checklist.routes";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -78,6 +80,8 @@ app.use("/api/capacitacion-plantillas", capacitacionPlantillasRoutes);
 app.use("/api/epp-proveedores-sugeridos", eppProveedoresSugeridosRoutes);
 app.use("/api/ente", enteRoutes);
 app.use("/api/archivo", archivoRoutes);
+app.use("/api/documentos-vencimiento", documentosVencimientoRoutes);
+app.use("/api/checklists", checklistRoutes);
 
 // Middleware de manejo de errores
 app.use(errorHandler);

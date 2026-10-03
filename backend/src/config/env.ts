@@ -11,6 +11,12 @@ const envSchema = z.object({
   SUPABASE_SECRET_KEY: z.string(),
   SUPABASE_JWKS_URL: z.string().url(),
   FRONTEND_URL: z.string().url().default('http://localhost:3000'),
+  /** Secret para job diario de avisos de vencimiento (header x-cron-secret). */
+  CRON_SECRET: z.string().optional(),
+  /** API key Resend para emails de vencimiento (opcional). */
+  RESEND_API_KEY: z.string().optional(),
+  /** Remitente verificado en Resend. */
+  EMAIL_FROM: z.string().email().optional(),
 });
 
 const _env = envSchema.safeParse(process.env);

@@ -10,6 +10,7 @@ const KNOWN_BUCKETS = [
   "capacitacion_registros",
   "logos_consultora",
   "logos_empresa",
+  "documentos_vencimiento",
 ] as const;
 
 export type StorageBucket = (typeof KNOWN_BUCKETS)[number] | string;
