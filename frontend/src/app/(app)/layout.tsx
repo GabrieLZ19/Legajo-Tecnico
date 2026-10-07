@@ -214,42 +214,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
           {/* Right Side Info */}
           <div className="flex items-center gap-2 lg:gap-3 shrink-0 ml-auto">
-            {/* Company Selector / Pill (Desktop) */}
-            {localEmpresa && (
-              <div className="hidden xl:flex relative">
-                <button
-                  onClick={() =>
-                    puedeSeleccionarEmpresa &&
-                    setShowEmpresaSelector(!showEmpresaSelector)
-                  }
-                  className={`flex items-center gap-2 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-full text-xs font-semibold text-slate-700 transition-all max-w-[340px] ${
-                    puedeSeleccionarEmpresa
-                      ? "hover:bg-slate-200 hover:border-slate-300 cursor-pointer"
-                      : ""
-                  }`}
-                  title={`${localEmpresa.razon_social}${localSucursal ? ` · Sucursal: ${localSucursal}` : ""} · ${localEmpresa.cuit}`}
-                >
-                  <Building2 className="h-3.5 w-3.5 text-blue-600 shrink-0" />
-                  <span className="truncate font-bold text-slate-900">{localEmpresa.razon_social}</span>
-                  {localSucursal ? (
-                    <span className="inline-flex items-center gap-0.5 bg-blue-600 text-white font-extrabold text-[10px] px-1.5 py-0.5 rounded shadow-2xs shrink-0">
-                      <GitBranch className="h-2.5 w-2.5" />
-                      {localSucursal}
-                    </span>
-                  ) : null}
-                  <span className="text-slate-300 shrink-0">•</span>
-                  <span className="text-slate-500 shrink-0 tabular-nums text-[11px]">
-                    {formatCuitDisplay(getBaseCuit(localEmpresa.cuit))}
-                  </span>
-                  {puedeSeleccionarEmpresa && (
-                    <ChevronDown
-                      className={`h-3.5 w-3.5 text-slate-400 shrink-0 transition-transform ${showEmpresaSelector ? "rotate-180" : ""}`}
-                    />
-                  )}
-                </button>
-              </div>
-            )}
-
             {/* Notification Bell */}
             <NotificationBell />
 
@@ -278,63 +242,103 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      {/* Barra de Sucursal & Empresa Activa en Celular y Tablet */}
+      {/* Barra de empresa activa (debajo del navbar, todos los breakpoints) */}
       {localEmpresa && (
-        <div className="xl:hidden bg-slate-50/80 border-b border-slate-200/70 px-3.5 sm:px-6 py-2">
-          <button
-            type="button"
-            onClick={() => puedeSeleccionarEmpresa && setShowEmpresaSelector(true)}
-            disabled={!puedeSeleccionarEmpresa}
-            className={`w-full group rounded-xl border transition-all text-left flex items-center justify-between gap-2.5 p-2.5 ${
-              puedeSeleccionarEmpresa
-                ? "bg-white hover:bg-blue-50/30 border-slate-200 hover:border-blue-300 shadow-2xs active:scale-[0.99] cursor-pointer"
-                : "bg-white/95 border-slate-200/80 shadow-2xs"
-            }`}
-          >
-            <div className="flex items-center gap-2.5 min-w-0 flex-1">
-              <div className="relative h-9 w-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center shrink-0 shadow-xs shadow-blue-500/25">
-                <Building2 className="h-4.5 w-4.5" />
-                {localSucursal && (
-                  <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 bg-emerald-400 rounded-full border-2 border-white" />
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-xs font-black text-slate-900 tracking-tight truncate">
-                    {localEmpresa.razon_social}
-                  </span>
-                  {localSucursal ? (
-                    <span className="inline-flex items-center gap-0.5 bg-blue-600 text-white font-black text-[10px] px-1.5 py-0.5 rounded shadow-2xs shrink-0 tracking-wide">
-                      <GitBranch className="h-2.5 w-2.5" />
-                      {localSucursal}
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center text-[10px] font-semibold text-slate-500 bg-slate-100 border border-slate-200/80 px-1.5 py-0.2 rounded shrink-0">
-                      Sede Principal
-                    </span>
+        <div className="bg-slate-50/80 border-b border-slate-200/70">
+          {/* Desktop / XL: pill en el bloque bajo el navbar */}
+          <div className="hidden xl:flex w-full px-4 sm:px-6 lg:px-8 xl:px-10 py-2.5 items-center justify-end">
+            <button
+              type="button"
+              onClick={() =>
+                puedeSeleccionarEmpresa &&
+                setShowEmpresaSelector(!showEmpresaSelector)
+              }
+              className={`flex items-center gap-2 bg-white border border-slate-200 px-3.5 py-2 rounded-full text-xs font-semibold text-slate-700 shadow-2xs transition-all max-w-[420px] ${
+                puedeSeleccionarEmpresa
+                  ? "hover:bg-slate-50 hover:border-slate-300 cursor-pointer"
+                  : "cursor-default"
+              }`}
+              title={`${localEmpresa.razon_social}${localSucursal ? ` · Sucursal: ${localSucursal}` : ""} · ${localEmpresa.cuit}`}
+            >
+              <Building2 className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+              <span className="truncate font-bold text-slate-900">
+                {localEmpresa.razon_social}
+              </span>
+              {localSucursal ? (
+                <span className="inline-flex items-center gap-0.5 bg-blue-600 text-white font-extrabold text-[10px] px-1.5 py-0.5 rounded shadow-2xs shrink-0">
+                  <GitBranch className="h-2.5 w-2.5" />
+                  {localSucursal}
+                </span>
+              ) : null}
+              <span className="text-slate-300 shrink-0">•</span>
+              <span className="text-slate-500 shrink-0 tabular-nums text-[11px]">
+                {formatCuitDisplay(getBaseCuit(localEmpresa.cuit))}
+              </span>
+              {puedeSeleccionarEmpresa && (
+                <ChevronDown
+                  className={`h-3.5 w-3.5 text-slate-400 shrink-0 transition-transform ${showEmpresaSelector ? "rotate-180" : ""}`}
+                />
+              )}
+            </button>
+          </div>
+
+          {/* Celular / Tablet: tarjeta expandida */}
+          <div className="xl:hidden px-3.5 sm:px-6 py-2">
+            <button
+              type="button"
+              onClick={() => puedeSeleccionarEmpresa && setShowEmpresaSelector(true)}
+              disabled={!puedeSeleccionarEmpresa}
+              className={`w-full group rounded-xl border transition-all text-left flex items-center justify-between gap-2.5 p-2.5 ${
+                puedeSeleccionarEmpresa
+                  ? "bg-white hover:bg-blue-50/30 border-slate-200 hover:border-blue-300 shadow-2xs active:scale-[0.99] cursor-pointer"
+                  : "bg-white/95 border-slate-200/80 shadow-2xs"
+              }`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                <div className="relative h-9 w-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center shrink-0 shadow-xs shadow-blue-500/25">
+                  <Building2 className="h-4.5 w-4.5" />
+                  {localSucursal && (
+                    <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 bg-emerald-400 rounded-full border-2 border-white" />
                   )}
                 </div>
-                <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium truncate mt-0.5">
-                  {localEmpresa.localidad && (
-                    <span className="flex items-center gap-0.5 text-slate-600 font-semibold truncate">
-                      <MapPin className="h-2.5 w-2.5 text-slate-400 shrink-0" />
-                      {localEmpresa.localidad}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-xs font-black text-slate-900 tracking-tight truncate">
+                      {localEmpresa.razon_social}
                     </span>
-                  )}
-                  {localEmpresa.localidad && <span className="text-slate-300">•</span>}
-                  <span className="text-slate-400 font-mono text-[10px]">
-                    {formatCuitDisplay(getBaseCuit(localEmpresa.cuit))}
-                  </span>
+                    {localSucursal ? (
+                      <span className="inline-flex items-center gap-0.5 bg-blue-600 text-white font-black text-[10px] px-1.5 py-0.5 rounded shadow-2xs shrink-0 tracking-wide">
+                        <GitBranch className="h-2.5 w-2.5" />
+                        {localSucursal}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center text-[10px] font-semibold text-slate-500 bg-slate-100 border border-slate-200/80 px-1.5 py-0.2 rounded shrink-0">
+                        Sede Principal
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium truncate mt-0.5">
+                    {localEmpresa.localidad && (
+                      <span className="flex items-center gap-0.5 text-slate-600 font-semibold truncate">
+                        <MapPin className="h-2.5 w-2.5 text-slate-400 shrink-0" />
+                        {localEmpresa.localidad}
+                      </span>
+                    )}
+                    {localEmpresa.localidad && <span className="text-slate-300">•</span>}
+                    <span className="text-slate-400 font-mono text-[10px]">
+                      {formatCuitDisplay(getBaseCuit(localEmpresa.cuit))}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
-            {puedeSeleccionarEmpresa && (
-              <div className="flex items-center gap-1 text-[11px] font-bold text-blue-700 bg-blue-50 group-hover:bg-blue-100/80 border border-blue-200/60 px-2.5 py-1.5 rounded-lg shrink-0 transition-colors shadow-2xs">
-                <span>Cambiar</span>
-                <ChevronDown className="h-3 w-3 stroke-2.5 transition-transform group-hover:translate-y-0.5" />
-              </div>
-            )}
-          </button>
+              {puedeSeleccionarEmpresa && (
+                <div className="flex items-center gap-1 text-[11px] font-bold text-blue-700 bg-blue-50 group-hover:bg-blue-100/80 border border-blue-200/60 px-2.5 py-1.5 rounded-lg shrink-0 transition-colors shadow-2xs">
+                  <span>Cambiar</span>
+                  <ChevronDown className="h-3 w-3 stroke-2.5 transition-transform group-hover:translate-y-0.5" />
+                </div>
+              )}
+            </button>
+          </div>
         </div>
       )}
 
