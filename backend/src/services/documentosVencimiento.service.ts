@@ -46,6 +46,7 @@ export const documentosVencimientoService = {
     q?: string;
     limit?: number;
     offset?: number;
+    soloVisibleEnte?: boolean;
   }) {
     const limit = Math.min(Math.max(params.limit ?? 50, 1), 200);
     const offset = Math.max(params.offset ?? 0, 0);
@@ -61,6 +62,10 @@ export const documentosVencimientoService = {
       )
       .eq("empresa_id", params.empresaId)
       .eq("categoria", params.categoria);
+
+    if (params.soloVisibleEnte) {
+      query = query.eq("visible_ente_regulador", true);
+    }
 
     if (params.tipo) {
       query = query.eq("tipo", params.tipo);
@@ -139,11 +144,13 @@ export const documentosVencimientoService = {
     categoria: CategoriaDocumento;
     titulo: string;
     tipo?: string | null;
-    fecha_vencimiento: string;
+    fecha_vencimiento?: string | null;
+    sin_vencimiento?: boolean;
     notas?: string | null;
     creado_por: string;
     files?: Express.Multer.File[];
   }) {
+    const sinVencimiento = Boolean(params.sin_vencimiento);
     const { data: doc, error } = await supabaseAdmin
       .from("documentos_vencimiento")
       .insert({
@@ -151,7 +158,8 @@ export const documentosVencimientoService = {
         categoria: params.categoria,
         titulo: params.titulo,
         tipo: params.tipo?.trim() || null,
-        fecha_vencimiento: params.fecha_vencimiento,
+        sin_vencimiento: sinVencimiento,
+        fecha_vencimiento: sinVencimiento ? null : params.fecha_vencimiento,
         notas: params.notas ?? null,
         creado_por: params.creado_por,
       })
@@ -172,13 +180,38 @@ export const documentosVencimientoService = {
     patch: {
       titulo?: string;
       tipo?: string | null;
-      fecha_vencimiento?: string;
+      fecha_vencimiento?: string | null;
+      sin_vencimiento?: boolean;
       notas?: string | null;
     },
   ) {
+    const updateData: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
+    if (patch.titulo !== undefined) updateData.titulo = patch.titulo;
+    if (patch.tipo !== undefined) updateData.tipo = patch.tipo;
+    if (patch.notas !== undefined) updateData.notas = patch.notas;
+
+    if (patch.sin_vencimiento === true) {
+      updateData.sin_vencimiento = true;
+      updateData.fecha_vencimiento = null;
+    } else if (patch.sin_vencimiento === false) {
+      updateData.sin_vencimiento = false;
+      if (patch.fecha_vencimiento !== undefined) {
+        updateData.fecha_vencimiento = patch.fecha_vencimiento;
+      }
+    } else if (patch.fecha_vencimiento !== undefined) {
+      updateData.fecha_vencimiento = patch.fecha_vencimiento;
+      if (patch.fecha_vencimiento === null) {
+        updateData.sin_vencimiento = true;
+      } else {
+        updateData.sin_vencimiento = false;
+      }
+    }
+
     const { error } = await supabaseAdmin
       .from("documentos_vencimiento")
-      .update({ ...patch, updated_at: new Date().toISOString() })
+      .update(updateData)
       .eq("id", id);
 
     if (error) throw error;
@@ -276,6 +309,8 @@ export const documentosVencimientoService = {
       .from("documentos_vencimiento")
       .select("id, empresa_id, categoria, titulo, fecha_vencimiento")
       .eq("empresa_id", params.empresaId)
+      .eq("sin_vencimiento", false)
+      .not("fecha_vencimiento", "is", null)
       .gte("fecha_vencimiento", desde)
       .lte("fecha_vencimiento", hasta)
       .order("fecha_vencimiento", { ascending: true })
@@ -317,6 +352,8 @@ export const documentosVencimientoService = {
         empresas!inner(id, razon_social, consultora_id)
       `,
       )
+      .eq("sin_vencimiento", false)
+      .not("fecha_vencimiento", "is", null)
       .gte("fecha_vencimiento", hoyYmd)
       .lte("fecha_vencimiento", hasta);
 

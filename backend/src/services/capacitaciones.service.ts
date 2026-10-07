@@ -6,6 +6,7 @@ import {
   CapacitacionDiapositiva,
   assertDiapositivasPayloadOk,
   ensureDiapositivas,
+  externalizeDiapositivasDataUrls,
   resolveDiapositivasAndTemario,
   signDiapositivasImages,
 } from "../utils/cap-diapositivas";
@@ -442,12 +443,20 @@ export const capacitacionesService = {
       ? []
       : preguntasAInsertar || [];
 
-    const { diapositivas, temario } = resolveDiapositivasAndTemario({
+    const resolved = resolveDiapositivasAndTemario({
       diapositivas: params.diapositivas?.length
         ? params.diapositivas
         : diapositivasClonadas,
       temario: params.temario,
     });
+    const diapositivas = await externalizeDiapositivasDataUrls(
+      resolved.diapositivas,
+      params.preventor_id,
+    );
+    const temario =
+      diapositivas.length > 0
+        ? diapositivas.map((d) => d.contenido || "").join("")
+        : resolved.temario;
     assertDiapositivasPayloadOk(diapositivas);
 
     // Insertar en la tabla 'capacitaciones' sin columnas inexistentes
@@ -672,7 +681,7 @@ export const capacitacionesService = {
       .from("capacitaciones")
       .select(
         `
-        id, titulo, temario, estado, fecha, con_evaluacion,
+        id, titulo, temario, diapositivas, estado, fecha, con_evaluacion,
         capacitacion_preguntas(id, enunciado, opciones, respuesta_correcta, orden)
       `,
       )
@@ -695,11 +704,22 @@ export const capacitacionesService = {
           es_multiple: esRespuestaMultiple(p.respuesta_correcta),
         }));
 
+    const diapositivasRaw = ensureDiapositivas(
+      data.diapositivas as CapacitacionDiapositiva[] | null | undefined,
+      data.temario,
+    );
+    const diapositivas = await signDiapositivasImages(diapositivasRaw);
+    const temarioFirmado =
+      diapositivas.length > 0
+        ? diapositivas.map((d) => d.contenido || "").join("")
+        : data.temario;
+
     return {
       data: {
         id: data.id,
         titulo: data.titulo,
-        temario: data.temario,
+        temario: temarioFirmado,
+        diapositivas,
         estado: data.estado,
         fecha: data.fecha,
         con_evaluacion: data.con_evaluacion,
@@ -1018,7 +1038,7 @@ export const capacitacionesService = {
 
     const { data: cap, error: capError } = await supabaseAdmin
       .from("capacitaciones")
-      .select("estado")
+      .select("estado, preventor_id")
       .eq("id", id)
       .single();
 
@@ -1050,9 +1070,17 @@ export const capacitacionesService = {
         diapositivas,
         temario,
       });
-      assertDiapositivasPayloadOk(resolved.diapositivas);
-      updatePayload.temario = resolved.temario;
-      updatePayload.diapositivas = resolved.diapositivas;
+      const mediaOwnerId = (cap.preventor_id as string) || id;
+      const externalized = await externalizeDiapositivasDataUrls(
+        resolved.diapositivas,
+        mediaOwnerId,
+      );
+      updatePayload.diapositivas = externalized;
+      updatePayload.temario =
+        externalized.length > 0
+          ? externalized.map((d) => d.contenido || "").join("")
+          : resolved.temario;
+      assertDiapositivasPayloadOk(externalized);
     }
 
     const { error: updateError } = await supabaseAdmin

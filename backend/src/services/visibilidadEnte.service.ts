@@ -4,7 +4,8 @@ export type TablaVisibilidadEnte =
   | 'informes_visita'
   | 'acciones_mejora'
   | 'capacitaciones'
-  | 'epp_entregas';
+  | 'epp_entregas'
+  | 'documentos_vencimiento';
 
 export async function actualizarVisibilidadEnte(
   tabla: TablaVisibilidadEnte,

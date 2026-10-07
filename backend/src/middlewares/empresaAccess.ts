@@ -176,6 +176,31 @@ export async function assertEntregaAccess(user: AuthUser, entregaId: string) {
   }
 }
 
+export async function assertDocumentoVencimientoAccess(
+  user: AuthUser,
+  documentoId: string,
+) {
+  const { data } = await supabaseAdmin
+    .from("documentos_vencimiento")
+    .select("empresa_id, categoria, visible_ente_regulador")
+    .eq("id", documentoId)
+    .maybeSingle();
+  if (!data?.empresa_id) {
+    throw new HttpError(404, "Documento no encontrado");
+  }
+  await assertEmpresaAccess(user, data.empresa_id as string);
+  if (
+    user.rol === "ente_regulador" &&
+    data.categoria === "medicion" &&
+    !data.visible_ente_regulador
+  ) {
+    throw new HttpError(
+      403,
+      "Esta medición no está habilitada para el ente regulador",
+    );
+  }
+}
+
 export async function userPerteneceAEmpresa(
   perfil: {
     id: string;

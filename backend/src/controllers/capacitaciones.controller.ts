@@ -95,8 +95,26 @@ export const capacitacionesController = {
         });
       }
 
+      if (!file.buffer?.length) {
+        return res.status(400).json({
+          error:
+            "La imagen llegó vacía al servidor. Probá de nuevo o usá «Insertar Imagen» con un JPG/PNG más liviano.",
+        });
+      }
+
       const path = `${req.user!.id}/${randomUUID()}.${ext}`;
-      await storageService.subirArchivo(CAP_MEDIA_BUCKET, path, file);
+      const normalized: Express.Multer.File = {
+        ...file,
+        mimetype:
+          file.mimetype && file.mimetype !== "application/octet-stream"
+            ? file.mimetype
+            : ext === "png"
+              ? "image/png"
+              : ext === "webp"
+                ? "image/webp"
+                : "image/jpeg",
+      };
+      await storageService.subirArchivo(CAP_MEDIA_BUCKET, path, normalized);
       // Bucket privado: devolver signed URL para que el editor pueda mostrar la imagen.
       // Al guardar, resolveDiapositivasAndTemario canonicaliza a la URL pública.
       const canonical = storageService.obtenerUrlPublica(CAP_MEDIA_BUCKET, path);

@@ -7,6 +7,7 @@ import {
   actualizarDocumentoSchema,
   crearDocumentoSchema,
 } from "../schemas/documentosVencimiento.schema";
+import { visibilidadEnteSchema } from "../schemas/planAccion.schema";
 
 const router = Router();
 const puedeEscribir = requireRole("preventor", "admin");
@@ -33,6 +34,12 @@ router.post(
   },
   validate(crearDocumentoSchema),
   documentosVencimientoController.crear,
+);
+router.patch(
+  "/:id/visibilidad-ente",
+  puedeEscribir,
+  validate(visibilidadEnteSchema),
+  documentosVencimientoController.actualizarVisibilidadEnte,
 );
 router.patch(
   "/:id",

@@ -3,6 +3,7 @@ import {
   CapacitacionDiapositiva,
   assertDiapositivasPayloadOk,
   ensureDiapositivas,
+  externalizeDiapositivasDataUrls,
   resolveDiapositivasAndTemario,
   signDiapositivasImages,
 } from "../utils/cap-diapositivas";
@@ -165,10 +166,18 @@ export const capacitacionPlantillasService = {
       throw new Error("empresa_id es requerido para plantillas de empresa");
     }
 
-    const { diapositivas, temario } = resolveDiapositivasAndTemario({
+    const resolved = resolveDiapositivasAndTemario({
       diapositivas: params.diapositivas,
       temario: params.temario,
     });
+    const diapositivas = await externalizeDiapositivasDataUrls(
+      resolved.diapositivas,
+      params.created_by,
+    );
+    const temario =
+      diapositivas.length > 0
+        ? diapositivas.map((d) => d.contenido || "").join("")
+        : resolved.temario;
     assertDiapositivasPayloadOk(diapositivas);
 
     const estadoPublicacion =
@@ -226,9 +235,22 @@ export const capacitacionPlantillasService = {
         diapositivas: params.diapositivas,
         temario: params.temario,
       });
-      assertDiapositivasPayloadOk(resolved.diapositivas);
-      updatePayload.temario = resolved.temario;
-      updatePayload.diapositivas = resolved.diapositivas;
+      const { data: owner } = await supabaseAdmin
+        .from("capacitacion_plantillas")
+        .select("created_by")
+        .eq("id", id)
+        .maybeSingle();
+      const mediaOwnerId = (owner?.created_by as string) || id;
+      const externalized = await externalizeDiapositivasDataUrls(
+        resolved.diapositivas,
+        mediaOwnerId,
+      );
+      updatePayload.diapositivas = externalized;
+      updatePayload.temario =
+        externalized.length > 0
+          ? externalized.map((d) => d.contenido || "").join("")
+          : resolved.temario;
+      assertDiapositivasPayloadOk(externalized);
     }
 
     const { error } = await supabaseAdmin

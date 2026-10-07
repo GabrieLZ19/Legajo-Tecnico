@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { storageService } from "../services/storage.service";
 import { HttpError } from "./httpError";
 import { sanitizeRichHtml } from "./sanitizeHtml";
@@ -12,8 +13,17 @@ export const CAP_MEDIA_BUCKET = "capacitacion_materiales";
 /** Límite duro del JSON de diapositivas al guardar (~8 MB; Express acepta 15). */
 const MAX_DIAPOSITIVAS_JSON_BYTES = 8 * 1024 * 1024;
 
-/** Data URL individual demasiado grande (indica pegado sin subir a Storage). */
+/**
+ * Tras externalizar, no debería quedar casi ningún data URL.
+ * Si queda uno enorme, el cliente no pudo procesarlo.
+ */
 const MAX_DATA_URL_CHARS = 200_000;
+
+/** Máximo a intentar subir automáticamente desde el backend (~4.5 MB binarios). */
+const MAX_EXTERNALIZE_DATA_URL_CHARS = 6 * 1024 * 1024;
+
+const DATA_URL_RE =
+  /data:image\/([a-z0-9.+-]+);base64,([A-Za-z0-9+/=\s]+)/gi;
 
 const IMG_SRC_RE = /(<img\b[^>]*?\bsrc=["'])([^"']+)(["'])/gi;
 
@@ -80,6 +90,89 @@ export function ensureDiapositivas(
   temario?: string | null,
 ): CapacitacionDiapositiva[] {
   return resolveDiapositivasAndTemario({ diapositivas, temario }).diapositivas;
+}
+
+function mimeToExt(mime: string): string {
+  const m = mime.toLowerCase();
+  if (m.includes("png")) return "png";
+  if (m.includes("webp")) return "webp";
+  if (m.includes("gif")) return "gif";
+  return "jpg";
+}
+
+/**
+ * Sube data:image embebidas a Storage y las reemplaza por URL pública.
+ * Red de seguridad si el cliente no externalizó antes de guardar.
+ */
+export async function externalizeDiapositivasDataUrls(
+  diapositivas: CapacitacionDiapositiva[],
+  userId: string,
+): Promise<CapacitacionDiapositiva[]> {
+  const out: CapacitacionDiapositiva[] = [];
+
+  for (const slide of diapositivas) {
+    let html = slide.contenido || "";
+    const matches = Array.from(html.matchAll(DATA_URL_RE));
+    if (matches.length === 0) {
+      out.push({ contenido: html });
+      continue;
+    }
+
+    // Deduplicar por data URL compacta (sin whitespace en base64)
+    const seen = new Map<string, string>();
+    for (const match of matches) {
+      const compact = match[0].replace(/\s+/g, "");
+      if (seen.has(compact)) continue;
+      if (compact.length > MAX_EXTERNALIZE_DATA_URL_CHARS) {
+        throw new HttpError(
+          400,
+          "Hay imágenes embebidas demasiado grandes. Usá «Insertar Imagen» para cada foto en lugar de pegar la filmina completa.",
+        );
+      }
+
+      const mime = `image/${match[1]}`.toLowerCase();
+      if (mime.includes("svg")) {
+        throw new HttpError(400, "No se permiten imágenes SVG embebidas.");
+      }
+
+      let buffer: Buffer;
+      try {
+        buffer = Buffer.from(match[2].replace(/\s+/g, ""), "base64");
+      } catch {
+        throw new HttpError(
+          400,
+          "Hay una imagen embebida inválida en las diapositivas.",
+        );
+      }
+
+      if (buffer.length === 0) continue;
+
+      const ext = mimeToExt(mime);
+      const path = `${userId}/${randomUUID()}.${ext}`;
+      await storageService.subirArchivo(CAP_MEDIA_BUCKET, path, {
+        buffer,
+        mimetype: mime.startsWith("image/") ? mime : "image/jpeg",
+        originalname: `embedded.${ext}`,
+        fieldname: "imagen",
+        encoding: "7bit",
+        size: buffer.length,
+      } as Express.Multer.File);
+
+      seen.set(
+        compact,
+        storageService.obtenerUrlPublica(CAP_MEDIA_BUCKET, path),
+      );
+    }
+
+    html = html.replace(DATA_URL_RE, (full) => {
+      const compact = full.replace(/\s+/g, "");
+      return seen.get(compact) || full;
+    });
+
+    out.push({ contenido: html });
+  }
+
+  return out;
 }
 
 /**

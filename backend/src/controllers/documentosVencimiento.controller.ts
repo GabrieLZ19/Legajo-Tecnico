@@ -3,7 +3,11 @@ import {
   documentosVencimientoService,
   type CategoriaDocumento,
 } from "../services/documentosVencimiento.service";
-import { assertEmpresaAccess } from "../middlewares/empresaAccess";
+import {
+  assertDocumentoVencimientoAccess,
+  assertEmpresaAccess,
+} from "../middlewares/empresaAccess";
+import { actualizarVisibilidadEnte } from "../services/visibilidadEnte.service";
 import { env } from "../config/env";
 import { supabaseAdmin } from "../config/supabase";
 
@@ -30,7 +34,7 @@ async function assertDocAccess(
     err.statusCode = 404;
     throw err;
   }
-  await assertEmpresaAccess(req.user!, doc.empresa_id as string);
+  await assertDocumentoVencimientoAccess(req.user!, documentoId);
   return doc;
 }
 
@@ -47,6 +51,8 @@ export const documentosVencimientoController = {
         return res.status(400).json({ error: "categoria inválida" });
       }
       await assertEmpresaAccess(req.user!, empresaId as string);
+      const soloVisibleEnte =
+        req.user!.rol === "ente_regulador" && categoria === "medicion";
       const result = await documentosVencimientoService.listar({
         empresaId: empresaId as string,
         categoria: categoria as CategoriaDocumento,
@@ -54,6 +60,7 @@ export const documentosVencimientoController = {
         q: q ? String(q) : undefined,
         limit: limit ? Number(limit) : undefined,
         offset: offset ? Number(offset) : undefined,
+        soloVisibleEnte,
       });
       res.json(result);
     } catch (error) {
@@ -118,8 +125,15 @@ export const documentosVencimientoController = {
 
   async crear(req: Request, res: Response, next: NextFunction) {
     try {
-      const { empresa_id, categoria, titulo, tipo, fecha_vencimiento, notas } =
-        req.body;
+      const {
+        empresa_id,
+        categoria,
+        titulo,
+        tipo,
+        fecha_vencimiento,
+        sin_vencimiento,
+        notas,
+      } = req.body;
       await assertEmpresaAccess(req.user!, empresa_id as string);
       const files = (req.files as Express.Multer.File[] | undefined) || [];
       const doc = await documentosVencimientoService.crear({
@@ -128,6 +142,7 @@ export const documentosVencimientoController = {
         titulo,
         tipo,
         fecha_vencimiento,
+        sin_vencimiento: Boolean(sin_vencimiento),
         notas,
         creado_por: req.user!.id,
         files,
@@ -144,6 +159,45 @@ export const documentosVencimientoController = {
       await assertDocAccess(req, id);
       const doc = await documentosVencimientoService.actualizar(id, req.body);
       res.json(doc);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async actualizarVisibilidadEnte(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) {
+    try {
+      const id = String(req.params.id);
+      const { visible_ente_regulador } = req.body;
+      if (typeof visible_ente_regulador !== "boolean") {
+        return res
+          .status(400)
+          .json({ error: "visible_ente_regulador debe ser boolean" });
+      }
+      await assertDocumentoVencimientoAccess(req.user!, id);
+      const { data: doc, error } = await supabaseAdmin
+        .from("documentos_vencimiento")
+        .select("categoria")
+        .eq("id", id)
+        .maybeSingle();
+      if (error) throw error;
+      if (!doc) {
+        return res.status(404).json({ error: "Documento no encontrado" });
+      }
+      if (doc.categoria !== "medicion") {
+        return res.status(400).json({
+          error: "La visibilidad ante el ente solo aplica a mediciones",
+        });
+      }
+      const data = await actualizarVisibilidadEnte(
+        "documentos_vencimiento",
+        id,
+        visible_ente_regulador,
+      );
+      res.json(data);
     } catch (error) {
       next(error);
     }

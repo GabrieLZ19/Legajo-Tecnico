@@ -22,6 +22,25 @@ export type ParsedStorageRef = {
 
 const DEFAULT_SIGNED_TTL_SEC = 60 * 60; // 1 hora
 
+function storageErrorMessage(error: unknown): string {
+  if (!error || typeof error !== "object") return String(error ?? "error desconocido");
+  const err = error as {
+    message?: string;
+    statusCode?: string | number;
+    status?: number;
+    name?: string;
+    error?: string;
+  };
+  const parts = [
+    err.message && err.message !== "<none>" ? err.message : null,
+    err.error && err.error !== "<none>" ? err.error : null,
+    err.statusCode ? `code=${err.statusCode}` : null,
+    err.status ? `http=${err.status}` : null,
+    err.name || null,
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(" | ") : "respuesta vacía de Storage";
+}
+
 export const storageService = {
   /**
    * Sube un archivo de Multer a un bucket de Supabase Storage
@@ -31,20 +50,53 @@ export const storageService = {
     path: string,
     file: Express.Multer.File,
   ): Promise<string> {
-    const { error } = await supabaseAdmin.storage
-      .from(bucket)
-      .upload(path, file.buffer, {
-        contentType: file.mimetype,
-        upsert: true,
-      });
-
-    if (error) {
+    if (!file?.buffer || file.buffer.length === 0) {
       throw new Error(
-        `Error al subir archivo a Storage (${bucket}): ${error.message}`,
+        `Archivo vacío al subir a Storage (${bucket}). Reintentá con otra imagen.`,
       );
     }
 
-    return path;
+    const body = Buffer.isBuffer(file.buffer)
+      ? file.buffer
+      : Buffer.from(file.buffer);
+    const contentType =
+      (file.mimetype || "").trim() || "application/octet-stream";
+
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      const { error } = await supabaseAdmin.storage
+        .from(bucket)
+        .upload(path, body, {
+          contentType,
+          upsert: true,
+        });
+
+      if (!error) return path;
+
+      lastError = error;
+      console.error(
+        `Storage upload failed (${bucket}/${path}) attempt ${attempt}:`,
+        {
+          message: (error as { message?: string }).message,
+          statusCode: (error as { statusCode?: string }).statusCode,
+          status: (error as { status?: number }).status,
+          size: body.length,
+          contentType,
+        },
+      );
+
+      // Reintento solo ante fallos genéricos / vacíos
+      const msg = String((error as { message?: string }).message || "");
+      if (attempt < 2 && (!msg || msg === "<none>" || /fetch|network|timeout/i.test(msg))) {
+        await new Promise((r) => setTimeout(r, 400));
+        continue;
+      }
+      break;
+    }
+
+    throw new Error(
+      `Error al subir archivo a Storage (${bucket}): ${storageErrorMessage(lastError)}`,
+    );
   },
 
   /**
