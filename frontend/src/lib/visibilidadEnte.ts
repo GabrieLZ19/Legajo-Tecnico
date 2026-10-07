@@ -39,3 +39,14 @@ export async function actualizarVisibilidadAccion(
   });
   return data;
 }
+
+export async function actualizarVisibilidadMedicion(
+  id: string,
+  visible: boolean,
+) {
+  const { data } = await api.patch(
+    `/documentos-vencimiento/${id}/visibilidad-ente`,
+    { visible_ente_regulador: visible },
+  );
+  return data;
+}

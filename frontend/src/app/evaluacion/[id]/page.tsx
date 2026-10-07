@@ -16,11 +16,15 @@ import {
   AlertCircle,
   Square,
   CheckSquare,
+  Presentation,
 } from "lucide-react";
 import type SignatureCanvas from "react-signature-canvas";
 import SignaturePad, { readSignatureOrThrow } from "@/components/SignaturePad";
 import SignatureImageImport from "@/components/SignatureImageImport";
 import { isSignatureEmpty } from "@/lib/signature";
+import { sanitizeRichHtml } from "@/lib/sanitizeHtml";
+import { normalizeDiapositivas } from "@/lib/cap-diapositivas";
+import type { CapacitacionDiapositiva } from "@/types";
 
 interface Pregunta {
   id: string;
@@ -53,6 +57,7 @@ function loadPersistedState(capacitacionId: string) {
       sector?: string;
       respuestas?: Record<string, number | number[]>;
       currentPreguntaIndex?: number;
+      slideIndex?: number;
       step?: string;
     };
   } catch {
@@ -65,6 +70,8 @@ function clearPersistedState(capacitacionId: string) {
   localStorage.removeItem(`${STORAGE_PREFIX}${capacitacionId}`);
 }
 
+type EvaluacionStep = "filminas" | "datos" | "test" | "firma" | "resultado";
+
 function persistState(
   capacitacionId: string,
   state: {
@@ -73,11 +80,18 @@ function persistState(
     sector: string;
     respuestas: Record<string, number | number[]>;
     currentPreguntaIndex: number;
-    step: "datos" | "test" | "firma" | "resultado";
+    slideIndex: number;
+    step: EvaluacionStep;
   },
 ) {
   if (typeof window === "undefined") return;
-  if (state.step !== "datos" && state.step !== "test") return;
+  if (
+    state.step !== "datos" &&
+    state.step !== "test" &&
+    state.step !== "filminas"
+  ) {
+    return;
+  }
   localStorage.setItem(`${STORAGE_PREFIX}${capacitacionId}`, JSON.stringify(state));
 }
 
@@ -95,6 +109,7 @@ interface CapData {
   id: string;
   titulo: string;
   temario?: string;
+  diapositivas?: CapacitacionDiapositiva[] | null;
   estado: string;
   con_evaluacion?: boolean;
   capacitacion_preguntas: Pregunta[];
@@ -129,15 +144,19 @@ export default function EvaluacionPublicaPage() {
     revision?: ItemRevision[];
   } | null>(null);
 
-  const [step, setStep] = useState<"datos" | "test" | "firma" | "resultado">(
-    "datos",
-  );
+  const [step, setStep] = useState<EvaluacionStep>("filminas");
   const [currentPreguntaIndex, setCurrentPreguntaIndex] = useState(0);
+  const [slideIndex, setSlideIndex] = useState(0);
+  const [slides, setSlides] = useState<CapacitacionDiapositiva[]>([]);
+  const restoredStepRef = useRef<EvaluacionStep | null>(null);
 
   useEffect(() => {
     if (!id) return;
     const state = loadPersistedState(id);
-    if (!state) return;
+    if (!state) {
+      restoredStepRef.current = null;
+      return;
+    }
 
     if (state.nombre) setNombre(state.nombre);
     if (state.dni) setDni(state.dni);
@@ -146,12 +165,17 @@ export default function EvaluacionPublicaPage() {
     if (state.currentPreguntaIndex !== undefined) {
       setCurrentPreguntaIndex(state.currentPreguntaIndex);
     }
+    if (typeof state.slideIndex === "number") {
+      setSlideIndex(Math.max(0, state.slideIndex));
+    }
 
     // Nunca restaurar firma/resultado: evita envíos con respuestas vacías
-    if (state.step === "test") {
-      setStep("test");
+    if (state.step === "test" || state.step === "datos" || state.step === "filminas") {
+      restoredStepRef.current = state.step;
+      setStep(state.step);
     } else {
-      setStep("datos");
+      restoredStepRef.current = "filminas";
+      setStep("filminas");
       if (state.step === "firma" || state.step === "resultado") {
         clearPersistedState(id);
       }
@@ -166,23 +190,46 @@ export default function EvaluacionPublicaPage() {
       sector,
       respuestas,
       currentPreguntaIndex,
+      slideIndex,
       step,
     });
-  }, [id, nombre, dni, sector, respuestas, currentPreguntaIndex, step]);
+  }, [id, nombre, dni, sector, respuestas, currentPreguntaIndex, slideIndex, step]);
 
   useEffect(() => {
-    if (id) {
-      getCapacitacionPublica(id)
-        .then((data) => {
-          setCap(data);
-          if (data.estado !== "activa") {
-            setError("Esta capacitación no está activa para evaluaciones.");
-          }
-        })
-        .catch((err) => {
-          setError("Capacitación no encontrada o inactiva.");
+    if (!id) return;
+    getCapacitacionPublica(id)
+      .then((data) => {
+        setCap(data);
+        const nextSlides = normalizeDiapositivas(
+          data.diapositivas,
+          data.temario,
+        ).filter((s) => {
+          const html = s.contenido || "";
+          const text = html.replace(/<[^>]+>/g, "").trim();
+          return Boolean(text) || /<img[\s>]/i.test(html);
         });
-    }
+        setSlides(nextSlides);
+
+        const restored = restoredStepRef.current;
+        if (nextSlides.length === 0) {
+          if (!restored || restored === "filminas") setStep("datos");
+        } else if (!restored) {
+          setStep("filminas");
+          setSlideIndex(0);
+        } else if (restored === "filminas") {
+          setSlideIndex((idx) =>
+            Math.min(idx, Math.max(0, nextSlides.length - 1)),
+          );
+        }
+
+        if (data.estado !== "activa") {
+          setError("Esta capacitación no está activa para evaluaciones.");
+        }
+      })
+      .catch(() => {
+        setError("Capacitación no encontrada o inactiva.");
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cargar una vez por id
   }, [id]);
 
   const esMultiple = (p: Pregunta) => {
@@ -376,9 +423,16 @@ export default function EvaluacionPublicaPage() {
     setResultado(null);
     setRespuestas({});
     setCurrentPreguntaIndex(0);
-    setStep("datos");
+    setSlideIndex(0);
+    restoredStepRef.current = null;
+    setStep(slides.length > 0 ? "filminas" : "datos");
     setError(null);
     sigRef.current?.clear();
+  };
+
+  const terminarFilminas = () => {
+    setError(null);
+    setStep("datos");
   };
 
   const totalPreguntas = cap?.capacitacion_preguntas?.length || 0;
@@ -409,7 +463,15 @@ export default function EvaluacionPublicaPage() {
   }
 
   const containerClass =
-    step === "test" || step === "resultado" ? "max-w-2xl" : "max-w-md";
+    step === "filminas"
+      ? "max-w-3xl"
+      : step === "test" || step === "resultado"
+        ? "max-w-2xl"
+        : "max-w-md";
+
+  const totalSlides = slides.length;
+  const slideActual = slides[slideIndex] ?? null;
+  const esUltimaFilmina = slideIndex >= totalSlides - 1;
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-between p-4 sm:p-6 md:p-8">
@@ -419,11 +481,15 @@ export default function EvaluacionPublicaPage() {
         {/* Header */}
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
-            <GraduationCap className="h-5 w-5 text-blue-600" />
+            {step === "filminas" ? (
+              <Presentation className="h-5 w-5 text-blue-600" />
+            ) : (
+              <GraduationCap className="h-5 w-5 text-blue-600" />
+            )}
           </div>
           <div>
             <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest block">
-              Registro Digital
+              {step === "filminas" ? "Material de capacitación" : "Registro Digital"}
             </span>
             <h1 className="text-sm font-black text-slate-800 uppercase tracking-tight line-clamp-1">
               {cap?.titulo || "Capacitación"}
@@ -437,15 +503,94 @@ export default function EvaluacionPublicaPage() {
           </div>
         )}
 
+        {/* Step: Filminas */}
+        {step === "filminas" && slideActual && (
+          <div className="space-y-5">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-bold text-slate-500">
+                Diapositiva{" "}
+                <span className="text-blue-600">{slideIndex + 1}</span> de{" "}
+                {totalSlides}
+              </p>
+              <div className="h-2 flex-1 max-w-[140px] bg-slate-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-blue-600 rounded-full transition-all"
+                  style={{
+                    width: `${Math.round(((slideIndex + 1) / totalSlides) * 100)}%`,
+                  }}
+                />
+              </div>
+            </div>
+
+            <div
+              className="cap-html-content rounded-2xl border border-slate-100 bg-slate-50 p-4 sm:p-6 min-h-[220px] max-h-[55vh] overflow-y-auto text-sm text-slate-800 leading-relaxed
+                [&_img]:rounded-xl [&_img]:max-w-full [&_img]:mx-auto [&_img]:my-3
+                [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5
+                [&_table]:w-full [&_h1]:text-xl [&_h1]:font-black [&_h2]:text-lg [&_h2]:font-bold"
+              dangerouslySetInnerHTML={{
+                __html: sanitizeRichHtml(slideActual.contenido || "<p>—</p>"),
+              }}
+            />
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSlideIndex((i) => Math.max(0, i - 1))}
+                disabled={slideIndex === 0}
+                className="inline-flex items-center justify-center gap-1 px-4 py-3 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-bold disabled:opacity-40 cursor-pointer hover:bg-slate-50"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Anterior
+              </button>
+
+              {esUltimaFilmina ? (
+                <button
+                  type="button"
+                  onClick={terminarFilminas}
+                  className="flex-1 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition-all cursor-pointer shadow-md shadow-blue-500/10"
+                >
+                  {cap?.con_evaluacion === false
+                    ? "Continuar a firmar asistencia"
+                    : "Continuar a la evaluación"}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSlideIndex((i) => Math.min(totalSlides - 1, i + 1))
+                  }
+                  className="flex-1 inline-flex items-center justify-center gap-1 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition-all cursor-pointer shadow-md shadow-blue-500/10"
+                >
+                  Siguiente
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            {!esUltimaFilmina && (
+              <button
+                type="button"
+                onClick={terminarFilminas}
+                className="w-full text-center text-[11px] font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                Ya vi el material · ir a{" "}
+                {cap?.con_evaluacion === false ? "firmar" : "evaluar"}
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Step: Datos */}
         {step === "datos" && (
           <div className="space-y-5">
             <div className="text-center mb-2">
-              <h2 className="text-lg font-black text-slate-900">Bienvenido</h2>
+              <h2 className="text-lg font-black text-slate-900">
+                {slides.length > 0 ? "Listo para registrar" : "Bienvenido"}
+              </h2>
               <p className="text-xs text-slate-500 font-semibold mt-1">
                 {cap?.con_evaluacion === false
-                  ? "Ingresá tus datos para registrar la asistencia."
-                  : "Ingresá tus datos para registrar la asistencia y evaluación."}
+                  ? "Ingresá tus datos para firmar y registrar la asistencia."
+                  : "Ingresá tus datos para completar la evaluación y registrar la asistencia."}
               </p>
             </div>
 

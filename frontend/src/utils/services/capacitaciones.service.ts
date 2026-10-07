@@ -36,11 +36,21 @@ export const capacitacionesService = {
    */
   async subirMediaDiapositiva(file: File): Promise<string> {
     const form = new FormData();
-    form.append("imagen", file);
+    const filename =
+      file.name && /\.(jpe?g|png|webp)$/i.test(file.name)
+        ? file.name
+        : `diapositiva.${
+            file.type.includes("png")
+              ? "png"
+              : file.type.includes("webp")
+                ? "webp"
+                : "jpg"
+          }`;
+    form.append("imagen", file, filename);
     const { data } = await api.post<{ url: string }>(
       "/capacitaciones/media",
       form,
-      { timeout: 60_000 },
+      { timeout: 120_000 },
     );
     if (!data?.url) {
       throw new Error("El servidor no devolvió la URL de la imagen");

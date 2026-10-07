@@ -17,7 +17,7 @@ interface FirmaCanvasProps {
 
 export const FirmaCanvas: React.FC<FirmaCanvasProps> = ({ onSave, onCancel, title = 'Registrar Firma Digital' }) => {
   const sigCanvas = useRef<SignatureCanvas>(null);
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const { showAlert } = useAlert();
 
   const handleClear = () => {
@@ -46,9 +46,7 @@ export const FirmaCanvas: React.FC<FirmaCanvasProps> = ({ onSave, onCancel, titl
       <div className="text-center">
         <h3 className="text-lg font-bold text-slate-900">{title}</h3>
         <p className="text-xs text-slate-500 mt-1">
-          {user?.sello_url
-            ? 'Usá tu sello precargado, dibujá, subí una imagen o pegá un recorte (Ctrl+V).'
-            : 'Dibujá tu firma, subí una imagen o pegá un recorte (Ctrl+V / Cmd+V).'}
+          Insertá tu sello, dibujá, subí una imagen o pegá un recorte (Ctrl+V).
         </p>
       </div>
 
@@ -76,6 +74,14 @@ export const FirmaCanvas: React.FC<FirmaCanvasProps> = ({ onSave, onCancel, titl
           <UsarMiSelloButton
             canvasRef={sigCanvas}
             selloUrl={user?.sello_url}
+            onSelloChanged={() => {
+              void refreshUser();
+              showAlert(
+                'success',
+                'Sello guardado',
+                'Quedó precargado para próximas firmas.',
+              );
+            }}
             onError={handleImageError}
           />
           <SignatureImageImport

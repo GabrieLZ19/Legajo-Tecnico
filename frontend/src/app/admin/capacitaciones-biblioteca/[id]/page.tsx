@@ -69,7 +69,7 @@ export default function EditarPlantillaGlobalPage() {
       showAlert("success", "Éxito", "Plantilla actualizada.");
       router.push("/admin/capacitaciones-biblioteca");
     } catch (err: any) {
-      setError(err.response?.data?.error || "Error al actualizar.");
+      setError(err.response?.data?.error || err.message || "Error al actualizar.");
     } finally {
       setSaving(false);
     }

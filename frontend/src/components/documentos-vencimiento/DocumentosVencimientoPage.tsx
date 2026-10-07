@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   CalendarClock,
+  CheckCircle2,
   ChevronRight,
   FilePlus2,
   FileText,
@@ -19,6 +20,8 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { useAlert } from "@/context/AlertContext";
 import { canWriteAppModule, type AppModuleKey } from "@/lib/moduleAccess";
+import { actualizarVisibilidadMedicion } from "@/lib/visibilidadEnte";
+import { VisibleEnteToggle } from "@/components/VisibleEnteToggle";
 import { documentosVencimientoService } from "@/utils/services/documentosVencimiento.service";
 import type { CategoriaDocumento, DocumentoVencimiento } from "@/types";
 
@@ -34,18 +37,23 @@ type Props = {
 const TIPOS_SUGERIDOS_MEDICION = [
   "Iluminación",
   "Ruido",
+  "PT",
   "Vibraciones",
-  "Calor / Estrés térmico",
-  "Polvo / Partículas",
-  "Gases / Vapores",
+  "Estrés térmico",
+  "Mat. Particulado",
+  "Ergonomía",
+  "Carga de fuego",
+  "Informe general",
   "Otro",
 ];
 
 const TIPOS_SUGERIDOS_ART = [
-  "Plan de evacuación",
+  "Visita de ART",
+  "RAR",
+  "RGRL",
   "Programa de seguridad",
-  "Relevamiento de riesgos",
-  "Constancia ART",
+  "Aviso de obra",
+  "Informe general",
   "Otro",
 ];
 
@@ -56,8 +64,18 @@ function diasHasta(fecha: string) {
   return Math.round((target.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-function badgeVencimiento(fecha: string) {
-  const dias = diasHasta(fecha);
+function badgeVencimiento(doc: {
+  fecha_vencimiento?: string | null;
+  sin_vencimiento?: boolean;
+}) {
+  if (doc.sin_vencimiento || !doc.fecha_vencimiento) {
+    return {
+      label: "Sin vencimiento",
+      className: "bg-slate-50 text-slate-600 border-slate-200",
+      tone: "sin" as const,
+    };
+  }
+  const dias = diasHasta(doc.fecha_vencimiento);
   if (dias < 0) {
     return {
       label: `Vencido hace ${Math.abs(dias)}d`,
@@ -86,7 +104,7 @@ function badgeVencimiento(fecha: string) {
   };
 }
 
-type FiltroEstado = "todos" | "vencido" | "30" | "60" | "ok";
+type FiltroEstado = "todos" | "vencido" | "30" | "60" | "ok" | "sin";
 
 export function DocumentosVencimientoPage({
   categoria,
@@ -143,27 +161,42 @@ export function DocumentosVencimientoPage({
     let d30 = 0;
     let d60 = 0;
     let ok = 0;
+    let sin = 0;
     for (const doc of documentos) {
+      if (doc.sin_vencimiento || !doc.fecha_vencimiento) {
+        sin += 1;
+        continue;
+      }
       const d = diasHasta(doc.fecha_vencimiento);
       if (d < 0) vencidos += 1;
       else if (d <= 30) d30 += 1;
       else if (d <= 60) d60 += 1;
       else ok += 1;
     }
-    return { total: documentos.length, vencidos, d30, d60, ok };
+    return { total: documentos.length, vencidos, d30, d60, ok, sin };
   }, [documentos]);
 
   const filtrados = useMemo(() => {
     return documentos
       .filter((doc) => {
-        const d = diasHasta(doc.fecha_vencimiento);
+        const sin = Boolean(doc.sin_vencimiento || !doc.fecha_vencimiento);
+        if (filtroEstado === "sin") return sin;
+        if (sin) return filtroEstado === "todos";
+        const d = diasHasta(doc.fecha_vencimiento!);
         if (filtroEstado === "vencido") return d < 0;
         if (filtroEstado === "30") return d >= 0 && d <= 30;
         if (filtroEstado === "60") return d > 30 && d <= 60;
         if (filtroEstado === "ok") return d > 60;
         return true;
       })
-      .sort((a, b) => a.fecha_vencimiento.localeCompare(b.fecha_vencimiento));
+      .sort((a, b) => {
+        const aSin = Boolean(a.sin_vencimiento || !a.fecha_vencimiento);
+        const bSin = Boolean(b.sin_vencimiento || !b.fecha_vencimiento);
+        if (aSin && bSin) return a.titulo.localeCompare(b.titulo, "es");
+        if (aSin) return 1;
+        if (bSin) return -1;
+        return a.fecha_vencimiento!.localeCompare(b.fecha_vencimiento!);
+      });
   }, [documentos, filtroEstado]);
 
   const handleDelete = async (doc: DocumentoVencimiento) => {
@@ -194,6 +227,25 @@ export function DocumentosVencimientoPage({
       setDeletingId(null);
     }
   };
+
+  const handleVisibilidadChange = async (id: string, visible: boolean) => {
+    try {
+      await actualizarVisibilidadMedicion(id, visible);
+      await queryClient.invalidateQueries({
+        queryKey: ["documentos-vencimiento", empresa?.id, categoria],
+      });
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      showAlert(
+        "error",
+        "Error",
+        axiosErr.response?.data?.error ||
+          "No se pudo actualizar la visibilidad ante el ente regulador.",
+      );
+    }
+  };
+
+  const muestraVisibilidadEnte = categoria === "medicion";
 
   return (
     <div className="w-full space-y-6">
@@ -338,7 +390,8 @@ export function DocumentosVencimientoPage({
       ) : (
         <div className="space-y-3">
           {filtrados.map((doc) => {
-            const badge = badgeVencimiento(doc.fecha_vencimiento);
+            const badge = badgeVencimiento(doc);
+            const sinVence = Boolean(doc.sin_vencimiento || !doc.fecha_vencimiento);
             return (
               <div
                 key={doc.id}
@@ -358,7 +411,9 @@ export function DocumentosVencimientoPage({
                         ? "bg-rose-50 border-rose-100 text-rose-600"
                         : badge.tone === "urgente"
                           ? "bg-amber-50 border-amber-100 text-amber-600"
-                          : "bg-blue-50 border-blue-100 text-brand-primary"
+                          : badge.tone === "sin"
+                            ? "bg-slate-50 border-slate-200 text-slate-500"
+                            : "bg-blue-50 border-blue-100 text-brand-primary"
                     }`}
                   >
                     <FileText className="h-5 w-5" />
@@ -375,10 +430,11 @@ export function DocumentosVencimientoPage({
                       )}
                     </div>
                     <p className="text-xs text-slate-500 mt-1">
-                      Vence el{" "}
-                      {new Date(
-                        doc.fecha_vencimiento + "T12:00:00",
-                      ).toLocaleDateString("es-AR")}
+                      {sinVence
+                        ? "Sin vencimiento"
+                        : `Vence el ${new Date(
+                            doc.fecha_vencimiento! + "T12:00:00",
+                          ).toLocaleDateString("es-AR")}`}
                       {" · "}
                       <span className="inline-flex items-center gap-1">
                         <Paperclip className="h-3 w-3" />
@@ -394,7 +450,19 @@ export function DocumentosVencimientoPage({
                   </div>
                 </Link>
 
-                <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                <div className="flex items-center gap-2 shrink-0 self-end sm:self-center flex-wrap justify-end">
+                  {muestraVisibilidadEnte &&
+                    (user?.rol === "ente_regulador" ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                        <CheckCircle2 className="h-3 w-3" /> Habilitado
+                      </span>
+                    ) : (
+                      <VisibleEnteToggle
+                        checked={Boolean(doc.visible_ente_regulador)}
+                        disabled={!canWrite}
+                        onChange={(v) => void handleVisibilidadChange(doc.id, v)}
+                      />
+                    ))}
                   <span
                     className={`inline-flex px-2.5 py-1 rounded-lg border text-xs font-bold ${badge.className}`}
                   >

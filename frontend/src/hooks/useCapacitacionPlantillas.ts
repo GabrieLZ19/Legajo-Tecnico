@@ -1,6 +1,10 @@
 import { useState, useCallback } from "react";
 import { api } from "@/lib/api";
 import {
+  deriveTemario,
+  externalizeDiapositivasImages,
+} from "@/lib/cap-diapositivas";
+import {
   AmbitoCapacitacionPlantilla,
   CapacitacionDiapositiva,
   CapacitacionPlantilla,
@@ -117,12 +121,17 @@ export function useCapacitacionPlantillas() {
       setLoading(true);
       setError(null);
       try {
+        const diapositivas = Array.isArray(payload.diapositivas)
+          ? await externalizeDiapositivasImages(payload.diapositivas)
+          : payload.diapositivas;
         const { data } = await api.post("/capacitacion-plantillas", {
           ambito: payload.ambito,
           empresa_id: payload.empresa_id,
           titulo: payload.titulo,
-          temario: payload.temario,
-          diapositivas: payload.diapositivas,
+          diapositivas,
+          temario: Array.isArray(diapositivas)
+            ? deriveTemario(diapositivas)
+            : payload.temario,
           preguntas: payload.preguntas
             ? mapPreguntasPayload(payload.preguntas)
             : [],
@@ -130,7 +139,9 @@ export function useCapacitacionPlantillas() {
         return data as CapacitacionPlantilla;
       } catch (err: any) {
         setError(
-          err.response?.data?.error || "Error al crear la plantilla",
+          err.response?.data?.error ||
+            err.message ||
+            "Error al crear la plantilla",
         );
         throw err;
       } finally {
@@ -153,10 +164,15 @@ export function useCapacitacionPlantillas() {
       setLoading(true);
       setError(null);
       try {
+        const diapositivas = Array.isArray(payload.diapositivas)
+          ? await externalizeDiapositivasImages(payload.diapositivas)
+          : payload.diapositivas;
         const { data } = await api.put(`/capacitacion-plantillas/${id}`, {
           titulo: payload.titulo,
-          temario: payload.temario,
-          diapositivas: payload.diapositivas,
+          diapositivas,
+          temario: Array.isArray(diapositivas)
+            ? deriveTemario(diapositivas)
+            : payload.temario,
           preguntas: payload.preguntas
             ? mapPreguntasPayload(payload.preguntas)
             : [],
@@ -164,7 +180,9 @@ export function useCapacitacionPlantillas() {
         return data as CapacitacionPlantilla;
       } catch (err: any) {
         setError(
-          err.response?.data?.error || "Error al actualizar la plantilla",
+          err.response?.data?.error ||
+            err.message ||
+            "Error al actualizar la plantilla",
         );
         throw err;
       } finally {

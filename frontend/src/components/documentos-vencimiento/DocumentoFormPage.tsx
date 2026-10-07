@@ -16,18 +16,23 @@ const ACCEPT =
 const TIPOS_MEDICION = [
   "Iluminación",
   "Ruido",
+  "PT",
   "Vibraciones",
-  "Calor / Estrés térmico",
-  "Polvo / Partículas",
-  "Gases / Vapores",
+  "Estrés térmico",
+  "Mat. Particulado",
+  "Ergonomía",
+  "Carga de fuego",
+  "Informe general",
   "Otro",
 ];
 
 const TIPOS_ART = [
-  "Plan de evacuación",
+  "Visita de ART",
+  "RAR",
+  "RGRL",
   "Programa de seguridad",
-  "Relevamiento de riesgos",
-  "Constancia ART",
+  "Aviso de obra",
+  "Informe general",
   "Otro",
 ];
 
@@ -52,6 +57,7 @@ export function DocumentoFormPage({
   const [tipo, setTipo] = useState(tipos[0]);
   const [tipoOtro, setTipoOtro] = useState("");
   const [fecha, setFecha] = useState("");
+  const [sinVencimiento, setSinVencimiento] = useState(false);
   const [notas, setNotas] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [saving, setSaving] = useState(false);
@@ -60,11 +66,13 @@ export function DocumentoFormPage({
     e.preventDefault();
     if (!empresa?.id) return;
     const tipoFinal = tipo === "Otro" ? tipoOtro.trim() : tipo;
-    if (!titulo.trim() || !fecha || !tipoFinal) {
+    if (!titulo.trim() || !tipoFinal || (!sinVencimiento && !fecha)) {
       showAlert(
         "warning",
         "Datos incompletos",
-        "Completá título, tipo y fecha de vencimiento.",
+        sinVencimiento
+          ? "Completá título y tipo."
+          : "Completá título, tipo y fecha de vencimiento.",
       );
       return;
     }
@@ -75,7 +83,8 @@ export function DocumentoFormPage({
         categoria,
         titulo: titulo.trim(),
         tipo: tipoFinal,
-        fecha_vencimiento: fecha,
+        sin_vencimiento: sinVencimiento,
+        fecha_vencimiento: sinVencimiento ? null : fecha,
         notas: notas.trim() || null,
         files,
       });
@@ -123,8 +132,8 @@ export function DocumentoFormPage({
             {tituloPagina}
           </h1>
           <p className="text-sm text-brand-text-muted mt-1">
-            Adjuntá PDF, Word o imágenes, asigná tipo y fecha de vencimiento.
-            Impactará en la matriz del panel de inicio.
+            Adjuntá PDF, Word o imágenes y asigná tipo. Si tiene vencimiento,
+            aparece en la matriz del panel de inicio.
           </p>
         </div>
       </div>
@@ -184,16 +193,31 @@ export function DocumentoFormPage({
             )}
           </div>
 
-          <div>
-            <label className="block text-sm font-bold text-slate-700 mb-1.5">
+          <div className="space-y-2">
+            <label className="block text-sm font-bold text-slate-700">
               Fecha de vencimiento
+            </label>
+            <label className="inline-flex items-center gap-2 select-none cursor-pointer">
+              <input
+                type="checkbox"
+                checked={sinVencimiento}
+                onChange={(e) => {
+                  setSinVencimiento(e.target.checked);
+                  if (e.target.checked) setFecha("");
+                }}
+                className="h-4 w-4 rounded border-slate-300 text-brand-primary focus:ring-brand-secondary/30 cursor-pointer"
+              />
+              <span className="text-sm font-semibold text-slate-700">
+                Sin vencimiento
+              </span>
             </label>
             <input
               type="date"
               value={fecha}
               onChange={(e) => setFecha(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-brand-input-bg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary/30 focus:border-brand-secondary"
-              required
+              disabled={sinVencimiento}
+              className="w-full rounded-xl border border-slate-200 bg-brand-input-bg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary/30 focus:border-brand-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+              required={!sinVencimiento}
             />
           </div>
 

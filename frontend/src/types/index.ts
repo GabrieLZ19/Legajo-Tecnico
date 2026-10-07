@@ -180,9 +180,11 @@ export interface DocumentoVencimiento {
   titulo: string;
   /** Caja/tipo: iluminación, ruido, etc. (Excel ítem 34). */
   tipo?: string | null;
-  fecha_vencimiento: string;
+  fecha_vencimiento?: string | null;
+  sin_vencimiento?: boolean;
   notas?: string | null;
   creado_por?: string | null;
+  visible_ente_regulador?: boolean;
   created_at: string;
   updated_at: string;
   adjuntos?: DocumentoAdjunto[];

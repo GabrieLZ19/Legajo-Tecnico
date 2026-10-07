@@ -422,8 +422,8 @@ export default function PresentarCapacitacionPage() {
               }`}
             >
               {cap?.con_evaluacion === false
-                ? "Escaneá el código QR para firmar y registrar la asistencia"
-                : "Escaneá el código QR para completar la evaluación"}
+                ? "Escaneá el QR para ver las filminas (si hace falta) y firmar la asistencia"
+                : "Escaneá el QR para ver las filminas y luego completar la evaluación"}
             </p>
             {qrData?.qr ? (
               <img

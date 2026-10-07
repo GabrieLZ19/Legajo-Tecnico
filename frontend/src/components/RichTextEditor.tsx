@@ -93,6 +93,8 @@ interface RichTextEditorProps {
 }
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+/** Límite antes de comprimir (capturas / filminas pegadas desde PowerPoint). */
+const MAX_RAW_IMAGE_BYTES = 25 * 1024 * 1024;
 
 const SLIDE_COMPRESS_OPTS = {
   maxWidth: 1280,
@@ -102,6 +104,9 @@ const SLIDE_COMPRESS_OPTS = {
 
 async function uploadSlideImage(file: File): Promise<string> {
   const compressed = await compressImage(file, SLIDE_COMPRESS_OPTS);
+  if (compressed.size > MAX_IMAGE_BYTES) {
+    throw new Error("La imagen no debe superar los 5MB después de comprimir.");
+  }
   return capacitacionesService.subirMediaDiapositiva(compressed);
 }
 
@@ -114,7 +119,7 @@ async function fileFromImageSrc(src: string): Promise<File | null> {
     if (!response.ok) return null;
     const blob = await response.blob();
     if (!blob.type.startsWith("image/")) return null;
-    if (blob.size > MAX_IMAGE_BYTES) return null;
+    if (blob.size > MAX_RAW_IMAGE_BYTES) return null;
     return new File([blob], "pasted-image", {
       type: blob.type || "image/png",
     });
@@ -151,7 +156,7 @@ async function resolveClipboardImagesInHtml(
 
     if (!file && fileIndex < clipboardImages.length) {
       const candidate = clipboardImages[fileIndex++];
-      if (candidate.size <= MAX_IMAGE_BYTES) {
+      if (candidate.size <= MAX_RAW_IMAGE_BYTES) {
         file = candidate;
       }
     }
@@ -255,11 +260,11 @@ export default function RichTextEditor({
       return false;
     }
 
-    if (file.size > MAX_IMAGE_BYTES) {
+    if (file.size > MAX_RAW_IMAGE_BYTES) {
       showAlertRef.current(
         "warning",
         "Imagen muy pesada",
-        "La imagen no debe superar los 5MB.",
+        "La imagen es demasiado grande para procesarla. Probá con una captura más liviana.",
       );
       return false;
     }

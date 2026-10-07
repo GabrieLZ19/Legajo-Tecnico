@@ -34,7 +34,7 @@ interface ItemEntrega {
 
 export default function NuevaEntregaEppPage() {
   const router = useRouter();
-  const { user, empresa } = useAuth();
+  const { user, empresa, refreshUser } = useAuth();
   const { getTiposEpp, crearTipoEpp, crearEntregaEpp, getEmpleados } =
     useEpp();
   const { showAlert } = useAlert();
@@ -570,6 +570,14 @@ export default function NuevaEntregaEppPage() {
             <UsarMiSelloButton
               canvasRef={sigEmpleadorRef}
               selloUrl={user?.sello_url}
+              onSelloChanged={() => {
+                void refreshUser();
+                showAlert(
+                  "success",
+                  "Sello guardado",
+                  "Quedó precargado para próximas firmas.",
+                );
+              }}
               onError={(msg) => showAlert("error", "Sello", msg)}
             />
             <SignatureImageImport

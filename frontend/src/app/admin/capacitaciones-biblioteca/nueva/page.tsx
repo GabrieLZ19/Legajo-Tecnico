@@ -44,7 +44,11 @@ export default function NuevaPlantillaGlobalPage() {
       showAlert("success", "Éxito", "Plantilla publicada en la biblioteca LT.");
       router.push("/admin/capacitaciones-biblioteca");
     } catch (err: any) {
-      setError(err.response?.data?.error || "Error al guardar la plantilla.");
+      setError(
+        err.response?.data?.error ||
+          err.message ||
+          "Error al guardar la plantilla.",
+      );
     } finally {
       setSaving(false);
     }

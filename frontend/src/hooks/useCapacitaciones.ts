@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { api } from "@/lib/api";
 import { capacitacionesService } from "@/utils/services/capacitaciones.service";
+import {
+  deriveTemario,
+  externalizeDiapositivasImages,
+} from "@/lib/cap-diapositivas";
 import type {
   CapacitacionHistoricoFiltros,
   CapacitacionHistoricoRow,
@@ -253,10 +257,23 @@ export function useCapacitaciones() {
     setLoading(true);
     setError(null);
     try {
-      const { data } = await api.post("/capacitaciones", payload);
+      const diapositivas = Array.isArray(payload?.diapositivas)
+        ? await externalizeDiapositivasImages(payload.diapositivas)
+        : payload?.diapositivas;
+      const { data } = await api.post("/capacitaciones", {
+        ...payload,
+        diapositivas,
+        temario: Array.isArray(diapositivas)
+          ? deriveTemario(diapositivas)
+          : payload?.temario,
+      });
       return data;
     } catch (err: any) {
-      setError(err.response?.data?.error || "Error al crear la capacitación");
+      setError(
+        err.response?.data?.error ||
+          err.message ||
+          "Error al crear la capacitación",
+      );
       throw err;
     } finally {
       setLoading(false);
@@ -346,10 +363,23 @@ export function useCapacitaciones() {
     setLoading(true);
     setError(null);
     try {
-      const { data } = await api.put(`/capacitaciones/${id}`, payload);
+      const diapositivas = Array.isArray(payload?.diapositivas)
+        ? await externalizeDiapositivasImages(payload.diapositivas)
+        : payload?.diapositivas;
+      const { data } = await api.put(`/capacitaciones/${id}`, {
+        ...payload,
+        diapositivas,
+        temario: Array.isArray(diapositivas)
+          ? deriveTemario(diapositivas)
+          : payload?.temario,
+      });
       return data;
     } catch (err: any) {
-      setError(err.response?.data?.error || "Error al actualizar la capacitación");
+      setError(
+        err.response?.data?.error ||
+          err.message ||
+          "Error al actualizar la capacitación",
+      );
       throw err;
     } finally {
       setLoading(false);

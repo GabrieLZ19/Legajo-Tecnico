@@ -301,7 +301,9 @@ export default function EditarCapacitacionPage() {
       router.push(`/capacitaciones/${id}`);
     } catch (err: any) {
       setError(
-        err.response?.data?.error || "Error al actualizar la capacitación.",
+        err.response?.data?.error ||
+          err.message ||
+          "Error al actualizar la capacitación.",
       );
     } finally {
       setSaving(false);

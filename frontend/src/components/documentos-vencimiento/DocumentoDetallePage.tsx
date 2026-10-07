@@ -46,6 +46,7 @@ export function DocumentoDetallePage({
   const [titulo, setTitulo] = useState("");
   const [tipo, setTipo] = useState("");
   const [fecha, setFecha] = useState("");
+  const [sinVencimiento, setSinVencimiento] = useState(false);
   const [notas, setNotas] = useState("");
 
   const { data: doc, isLoading, refetch } = useQuery({
@@ -58,18 +59,28 @@ export function DocumentoDetallePage({
     if (!doc) return;
     setTitulo(doc.titulo);
     setTipo(doc.tipo || "");
-    setFecha(doc.fecha_vencimiento);
+    setSinVencimiento(Boolean(doc.sin_vencimiento || !doc.fecha_vencimiento));
+    setFecha(doc.fecha_vencimiento || "");
     setNotas(doc.notas || "");
   }, [doc]);
 
   const handleSave = async () => {
     if (!canWrite) return;
+    if (!sinVencimiento && !fecha) {
+      showAlert(
+        "warning",
+        "Datos incompletos",
+        "Indicá la fecha de vencimiento o marcá Sin vencimiento.",
+      );
+      return;
+    }
     setSaving(true);
     try {
       await documentosVencimientoService.actualizar(id, {
         titulo: titulo.trim(),
         tipo: tipo.trim() || null,
-        fecha_vencimiento: fecha,
+        sin_vencimiento: sinVencimiento,
+        fecha_vencimiento: sinVencimiento ? null : fecha,
         notas: notas.trim() || null,
       });
       await refetch();
@@ -179,7 +190,9 @@ export function DocumentoDetallePage({
     );
   }
 
+  const sinVenceDoc = Boolean(doc.sin_vencimiento || !doc.fecha_vencimiento);
   const dias = (() => {
+    if (sinVenceDoc || !doc.fecha_vencimiento) return null;
     const hoy = new Date();
     hoy.setHours(12, 0, 0, 0);
     const target = new Date(doc.fecha_vencimiento + "T12:00:00");
@@ -241,19 +254,27 @@ export function DocumentoDetallePage({
                 </h1>
                 <p className="mt-2 inline-flex items-center gap-1.5 text-sm text-slate-600">
                   <Calendar className="h-4 w-4 text-brand-primary" />
-                  {dias < 0
-                    ? `Vencido hace ${Math.abs(dias)} días`
-                    : `Vence en ${dias} días`}
+                  {dias === null
+                    ? "Sin vencimiento"
+                    : dias < 0
+                      ? `Vencido hace ${Math.abs(dias)} días`
+                      : `Vence en ${dias} días`}
                 </p>
               </div>
               <span
                 className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${
-                  dias <= 30
-                    ? "bg-amber-50 text-amber-800 border-amber-200"
-                    : "bg-sky-50 text-sky-700 border-sky-100"
+                  dias === null
+                    ? "bg-slate-50 text-slate-600 border-slate-200"
+                    : dias <= 30
+                      ? "bg-amber-50 text-amber-800 border-amber-200"
+                      : "bg-sky-50 text-sky-700 border-sky-100"
                 }`}
               >
-                {dias <= 30 ? "Prioritario" : "En seguimiento"}
+                {dias === null
+                  ? "Sin vencimiento"
+                  : dias <= 30
+                    ? "Prioritario"
+                    : "En seguimiento"}
               </span>
             </div>
 
@@ -274,22 +295,41 @@ export function DocumentoDetallePage({
                   </p>
                 )}
               </div>
-              <div>
-                <label className="block text-xs font-bold uppercase text-slate-500 mb-1">
+              <div className="space-y-2">
+                <label className="block text-xs font-bold uppercase text-slate-500">
                   Fecha de vencimiento
                 </label>
                 {canWrite ? (
-                  <input
-                    type="date"
-                    value={fecha}
-                    onChange={(e) => setFecha(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-brand-input-bg px-3 py-2 text-sm"
-                  />
+                  <>
+                    <label className="inline-flex items-center gap-2 select-none cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={sinVencimiento}
+                        onChange={(e) => {
+                          setSinVencimiento(e.target.checked);
+                          if (e.target.checked) setFecha("");
+                        }}
+                        className="h-4 w-4 rounded border-slate-300 text-brand-primary focus:ring-brand-secondary/30 cursor-pointer"
+                      />
+                      <span className="text-sm font-semibold text-slate-700">
+                        Sin vencimiento
+                      </span>
+                    </label>
+                    <input
+                      type="date"
+                      value={fecha}
+                      onChange={(e) => setFecha(e.target.value)}
+                      disabled={sinVencimiento}
+                      className="w-full rounded-xl border border-slate-200 bg-brand-input-bg px-3 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    />
+                  </>
                 ) : (
                   <p className="text-sm font-semibold text-slate-800">
-                    {new Date(
-                      doc.fecha_vencimiento + "T12:00:00",
-                    ).toLocaleDateString("es-AR")}
+                    {sinVenceDoc || !doc.fecha_vencimiento
+                      ? "Sin vencimiento"
+                      : new Date(
+                          doc.fecha_vencimiento + "T12:00:00",
+                        ).toLocaleDateString("es-AR")}
                   </p>
                 )}
               </div>

@@ -205,7 +205,11 @@ export default function NuevaCapacitacionPage() {
       );
       router.push("/capacitaciones");
     } catch (err: any) {
-      setError(err.response?.data?.error || "Error al crear la capacitación.");
+      setError(
+        err.response?.data?.error ||
+          err.message ||
+          "Error al crear la capacitación.",
+      );
     } finally {
       setSaving(false);
     }

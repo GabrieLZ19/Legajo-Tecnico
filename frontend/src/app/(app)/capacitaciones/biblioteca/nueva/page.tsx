@@ -98,7 +98,7 @@ export default function NuevaPlantillaEmpresaPage() {
       );
       router.push("/capacitaciones/biblioteca");
     } catch (err: any) {
-      setError(err.response?.data?.error || "Error al guardar.");
+      setError(err.response?.data?.error || err.message || "Error al guardar.");
     } finally {
       setSaving(false);
     }

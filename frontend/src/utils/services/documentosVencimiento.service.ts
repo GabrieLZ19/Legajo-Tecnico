@@ -63,7 +63,8 @@ export const documentosVencimientoService = {
     categoria: CategoriaDocumento;
     titulo: string;
     tipo?: string | null;
-    fecha_vencimiento: string;
+    fecha_vencimiento?: string | null;
+    sin_vencimiento?: boolean;
     notas?: string | null;
     files?: File[];
   }) {
@@ -72,7 +73,13 @@ export const documentosVencimientoService = {
     form.append("categoria", params.categoria);
     form.append("titulo", params.titulo);
     if (params.tipo) form.append("tipo", params.tipo);
-    form.append("fecha_vencimiento", params.fecha_vencimiento);
+    form.append(
+      "sin_vencimiento",
+      params.sin_vencimiento ? "true" : "false",
+    );
+    if (!params.sin_vencimiento && params.fecha_vencimiento) {
+      form.append("fecha_vencimiento", params.fecha_vencimiento);
+    }
     if (params.notas) form.append("notas", params.notas);
     for (const file of params.files || []) {
       form.append("adjuntos", file);
@@ -90,7 +97,8 @@ export const documentosVencimientoService = {
     patch: {
       titulo?: string;
       tipo?: string | null;
-      fecha_vencimiento?: string;
+      fecha_vencimiento?: string | null;
+      sin_vencimiento?: boolean;
       notas?: string | null;
     },
   ) {

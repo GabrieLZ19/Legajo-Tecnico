@@ -57,7 +57,7 @@ export default function CapacitacionRegistroFirmas({
   onSave,
   onAlert,
 }: Props) {
-  const { user, empresa } = useAuth();
+  const { user, empresa, refreshUser } = useAuth();
   const [instructor, setInstructor] = useState(cap.instructor || "");
   const [agenda, setAgenda] = useState<CapAgendaValue>(() =>
     agendaFromStored({
@@ -252,9 +252,8 @@ export default function CapacitacionRegistroFirmas({
                 <SignaturePad ref={sigCapRef} heightClassName="h-36" />
               </div>
               <p className="text-[11px] text-slate-400 font-semibold">
-                {user?.sello_url
-                  ? "Podés usar tu sello precargado, subir una imagen o pegar un recorte (Ctrl+V)."
-                  : "También podés subir una imagen o pegar un recorte (Ctrl+V)."}
+                Podés insertar tu sello, subir una imagen o pegar un recorte
+                (Ctrl+V).
               </p>
               <input
                 type="text"
@@ -274,8 +273,16 @@ export default function CapacitacionRegistroFirmas({
                 <UsarMiSelloButton
                   canvasRef={sigCapRef}
                   selloUrl={user?.sello_url}
+                  onSelloChanged={() => {
+                    void refreshUser();
+                    onAlert(
+                      "success",
+                      "Sello guardado",
+                      "Quedó precargado para próximas firmas.",
+                    );
+                  }}
                   onError={(msg) => onAlert("error", "Sello", msg)}
-                  className="flex-1 min-w-[120px] inline-flex items-center justify-center gap-1.5 py-2 border border-blue-200 bg-blue-50 text-blue-800 rounded-xl text-xs font-bold hover:bg-blue-100 disabled:opacity-50"
+                  className="flex-1 min-w-[120px] inline-flex items-center justify-center gap-1.5 py-2 border border-blue-200 bg-blue-50 text-blue-800 rounded-xl text-xs font-bold hover:bg-blue-100 disabled:opacity-50 cursor-pointer"
                 />
                 <SignatureImageImport
                   canvasRef={sigCapRef}
@@ -329,9 +336,8 @@ export default function CapacitacionRegistroFirmas({
                 <SignaturePad ref={sigEmpRef} heightClassName="h-36" />
               </div>
               <p className="text-[11px] text-slate-400 font-semibold">
-                {user?.sello_url
-                  ? "Podés usar tu sello precargado, subir una imagen o pegar un recorte (Ctrl+V)."
-                  : "También podés subir una imagen o pegar un recorte (Ctrl+V)."}
+                Podés insertar tu sello, subir una imagen o pegar un recorte
+                (Ctrl+V).
               </p>
               <input
                 type="text"
@@ -351,8 +357,16 @@ export default function CapacitacionRegistroFirmas({
                 <UsarMiSelloButton
                   canvasRef={sigEmpRef}
                   selloUrl={user?.sello_url}
+                  onSelloChanged={() => {
+                    void refreshUser();
+                    onAlert(
+                      "success",
+                      "Sello guardado",
+                      "Quedó precargado para próximas firmas.",
+                    );
+                  }}
                   onError={(msg) => onAlert("error", "Sello", msg)}
-                  className="flex-1 min-w-[120px] inline-flex items-center justify-center gap-1.5 py-2 border border-blue-200 bg-blue-50 text-blue-800 rounded-xl text-xs font-bold hover:bg-blue-100 disabled:opacity-50"
+                  className="flex-1 min-w-[120px] inline-flex items-center justify-center gap-1.5 py-2 border border-blue-200 bg-blue-50 text-blue-800 rounded-xl text-xs font-bold hover:bg-blue-100 disabled:opacity-50 cursor-pointer"
                 />
                 <SignatureImageImport
                   canvasRef={sigEmpRef}

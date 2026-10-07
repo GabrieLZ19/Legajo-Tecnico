@@ -890,9 +890,7 @@ export default function DetalleCapacitacionPage() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
             <QrCode className="h-4 w-4 text-blue-600" />
-            {cap.con_evaluacion === false
-              ? "Código QR de Asistencia"
-              : "Código QR de Evaluación"}
+            Código QR de Capacitación
           </h2>
           {!qrData && (
             <button
@@ -918,18 +916,14 @@ export default function DetalleCapacitacionPage() {
             <div className="bg-white p-4 rounded-2xl border-2 border-blue-100 shadow-lg animate-in zoom-in-95 duration-200">
               <img
                 src={qrData.qr}
-                alt={
-                  cap.con_evaluacion === false
-                    ? "QR de asistencia"
-                    : "QR de evaluación"
-                }
+                alt="QR de capacitación"
                 className="w-64 h-64"
               />
             </div>
             <p className="text-xs text-slate-500 font-medium text-center max-w-sm">
               {cap.con_evaluacion === false
-                ? "Los empleados deben escanear este código QR con su teléfono para firmar y registrar su asistencia."
-                : "Los empleados deben escanear este código QR con su teléfono para completar la evaluación y registrar su asistencia."}
+                ? "Al escanear, ven las filminas y al final firman la asistencia."
+                : "Al escanear, ven las filminas y al final completan la evaluación."}
             </p>
             <div className="flex gap-2">
               <button
@@ -1283,9 +1277,7 @@ export default function DetalleCapacitacionPage() {
           <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl border border-slate-100 flex flex-col space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
               <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">
-                {cap.con_evaluacion === false
-                  ? "Compartir Asistencia"
-                  : "Compartir Evaluación"}
+                Compartir Capacitación
               </h3>
               <button
                 type="button"
@@ -1298,8 +1290,8 @@ export default function DetalleCapacitacionPage() {
 
             <p className="text-xs text-slate-500 font-medium">
               {cap.con_evaluacion === false
-                ? "Compartí el enlace público para que los empleados firmen y registren su asistencia."
-                : "Compartí el enlace de evaluación pública con los empleados que asistieron a la capacitación."}
+                ? "El enlace muestra las filminas y al final permite firmar la asistencia."
+                : "El enlace muestra las filminas y al final permite completar la evaluación."}
             </p>
 
             <div className="space-y-2 pt-2">
@@ -1307,12 +1299,12 @@ export default function DetalleCapacitacionPage() {
               <a
                 href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
                   cap.con_evaluacion === false
-                    ? `Hola, te comparto el link para firmar la asistencia de la capacitación "${cap.titulo}":\n\n${
+                    ? `Hola, te comparto la capacitación "${cap.titulo}". Primero vas a ver las filminas y al final podés firmar la asistencia:\n\n${
                         typeof window !== "undefined"
                           ? `${window.location.origin}/evaluacion/${id}`
                           : ""
                       }`
-                    : `Hola, te comparto el link para completar la evaluación de la capacitación "${cap.titulo}":\n\n${
+                    : `Hola, te comparto la capacitación "${cap.titulo}". Primero vas a ver las filminas y al final podés hacer la evaluación:\n\n${
                         typeof window !== "undefined"
                           ? `${window.location.origin}/evaluacion/${id}`
                           : ""
@@ -1340,21 +1332,19 @@ export default function DetalleCapacitacionPage() {
               {/* Email */}
               <a
                 href={`mailto:?subject=${encodeURIComponent(
-                  cap.con_evaluacion === false
-                    ? `Asistencia de Capacitación: ${cap.titulo}`
-                    : `Evaluación de Capacitación: ${cap.titulo}`,
+                  `Capacitación: ${cap.titulo}`,
                 )}&body=${encodeURIComponent(
                   cap.con_evaluacion === false
-                    ? `Hola,\n\nTe comparto el link para firmar la asistencia de la capacitación "${
+                    ? `Hola,\n\nTe comparto la capacitación "${
                         cap.titulo
-                      }":\n\n${
+                      }". Primero vas a ver las filminas y al final podés firmar la asistencia:\n\n${
                         typeof window !== "undefined"
                           ? `${window.location.origin}/evaluacion/${id}`
                           : ""
                       }\n\nSaludos.`
-                    : `Hola,\n\nTe comparto el link para completar la evaluación de la capacitación "${
+                    : `Hola,\n\nTe comparto la capacitación "${
                         cap.titulo
-                      }":\n\n${
+                      }". Primero vas a ver las filminas y al final podés hacer la evaluación:\n\n${
                         typeof window !== "undefined"
                           ? `${window.location.origin}/evaluacion/${id}`
                           : ""
