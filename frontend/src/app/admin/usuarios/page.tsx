@@ -217,7 +217,7 @@ export default function AdminUsuariosPage() {
   }
 
   return (
-    <div className="space-y-6 w-full max-w-full">
+    <div className="flex w-full max-w-full flex-col gap-6">
       <div className="flex flex-col gap-4 border-b border-slate-200/60 pb-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-2xl font-black tracking-tight text-slate-900">
@@ -318,8 +318,8 @@ export default function AdminUsuariosPage() {
       ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(340px,440px)]">
-        <div className="space-y-5">
-          <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col gap-5">
+          <div className="flex shrink-0 flex-wrap gap-2">
             {roleFilters.map((filter) => (
               <button
                 key={filter.value}
@@ -346,20 +346,26 @@ export default function AdminUsuariosPage() {
           />
         </div>
 
-        <PermissionsPanel
-          usuario={selectedUsuario}
-          onSaved={(updated) => {
-            setSelectedUsuarioId(updated.id);
-            showAlert(
-              "success",
-              "Permisos guardados",
-              `Se actualizó el alcance de ${updated.nombre_completo || updated.username}.`,
-            );
-          }}
-          onError={(message) => {
-            showAlert("error", "No se pudieron guardar", message);
-          }}
-        />
+        <div>
+          <div className="xl:sticky xl:top-4 xl:z-20">
+          <div className="xl:max-h-[calc(100dvh-2rem)] xl:overflow-y-auto xl:overscroll-contain">
+          <PermissionsPanel
+            usuario={selectedUsuario}
+            onSaved={(updated) => {
+              setSelectedUsuarioId(updated.id);
+              showAlert(
+                "success",
+                "Permisos guardados",
+                `Se actualizó el alcance de ${updated.nombre_completo || updated.username}.`,
+              );
+            }}
+            onError={(message) => {
+              showAlert("error", "No se pudieron guardar", message);
+            }}
+          />
+          </div>
+          </div>
+        </div>
       </div>
 
 

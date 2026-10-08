@@ -91,7 +91,7 @@ export default function AdminLayout({
   };
 
   return (
-    <div className="min-h-screen flex bg-slate-50">
+    <div className="flex h-dvh overflow-hidden bg-slate-50">
       {/* Sidebar Desktop */}
       <aside className="hidden md:flex flex-col w-64 bg-brand-dark text-white shrink-0 border-r border-slate-900">
         {/* Header Logo */}
@@ -266,7 +266,7 @@ export default function AdminLayout({
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0 pt-16 md:pt-0 overflow-y-auto">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto pt-16 md:pt-0">
         <div className="flex-1 w-full max-w-full p-6 md:p-8 lg:px-10 xl:px-12 pb-12">
           {children}
         </div>

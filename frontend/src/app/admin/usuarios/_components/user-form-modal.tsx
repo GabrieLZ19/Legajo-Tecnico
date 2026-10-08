@@ -153,9 +153,9 @@ export function UserFormModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-md">
-      <div className="w-full max-w-4xl overflow-hidden rounded-[28px] border border-blue-100 bg-white shadow-[0_30px_80px_rgba(15,23,42,0.24)]">
-        <div className="border-b border-blue-100 bg-linear-to-r from-blue-50 to-white px-6 py-5">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-md sm:p-4">
+      <div className="grid max-h-[90vh] w-full max-w-4xl grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-[28px] border border-blue-100 bg-white shadow-[0_30px_80px_rgba(15,23,42,0.24)]">
+        <div className="shrink-0 border-b border-blue-100 bg-linear-to-r from-blue-50 to-white px-6 py-5">
           <div className="flex items-start justify-between gap-4">
             <div>
               <span className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">
@@ -184,8 +184,10 @@ export function UserFormModal({
 
         <form
           onSubmit={handleSubmit}
-          className="grid gap-6 px-6 py-6 lg:grid-cols-[minmax(0,1.35fr)_360px]"
+          className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto]"
         >
+          <div className="min-h-0 overflow-y-auto overscroll-contain px-6 py-6">
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_360px]">
           <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Nombre completo" required>
@@ -493,14 +495,16 @@ export function UserFormModal({
               </div>
             ) : null}
           </aside>
+          </div>
+          </div>
 
-          <div className="flex items-center justify-between border-t border-blue-100 pt-2 lg:col-span-2">
+          <div className="flex flex-col gap-3 border-t border-blue-100 bg-white px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-[11px] font-medium text-slate-500">
               {isEditing
                 ? "Los cambios se aplican sobre el perfil existente."
                 : "La cuenta queda lista para iniciar sesión con las credenciales definidas."}
             </p>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
                 onClick={onClose}
