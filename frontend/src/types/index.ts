@@ -569,7 +569,7 @@ export interface Inspeccion {
   resultado: ResultadoInspeccion;
   estado: string;
   observaciones?: string | null;
-  equipos?: Pick<Equipo, "id" | "nombre" | "tipo_equipo" | "codigo_interno">;
+  equipos?: Pick<Equipo, "id" | "nombre" | "tipo_equipo" | "codigo_interno" | "ubicacion">;
   items?: InspeccionItem[];
   inspeccion_items?: InspeccionItem[];
   acciones?: InspeccionAccion[];

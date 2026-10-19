@@ -27,13 +27,16 @@ const TIPOS_MEDICION = [
 ];
 
 const TIPOS_ART = [
-  "Visita de ART",
-  "RAR",
-  "RGRL",
-  "Programa de seguridad",
   "Aviso de obra",
   "Informe general",
-  "Otro",
+  "Ministerio de trabajo",
+  "Programa de seguridad",
+  "RAR",
+  "Res. 81 (SVCC)",
+  "RGRL",
+  "Súper intendencia",
+  "Visita de ART",
+  "Otros",
 ];
 
 type Props = {
@@ -65,7 +68,8 @@ export function DocumentoFormPage({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!empresa?.id) return;
-    const tipoFinal = tipo === "Otro" ? tipoOtro.trim() : tipo;
+    const isOtro = tipo === "Otro" || tipo === "Otros";
+    const tipoFinal = isOtro ? (tipoOtro.trim() || tipo) : tipo;
     if (!titulo.trim() || !tipoFinal || (!sinVencimiento && !fecha)) {
       showAlert(
         "warning",
@@ -181,14 +185,13 @@ export function DocumentoFormPage({
                 </button>
               ))}
             </div>
-            {tipo === "Otro" && (
+            {(tipo === "Otro" || tipo === "Otros") && (
               <input
                 type="text"
                 value={tipoOtro}
                 onChange={(e) => setTipoOtro(e.target.value)}
-                placeholder="Indicá el tipo"
-                className="w-full rounded-xl border border-slate-200 bg-brand-input-bg px-3 py-2.5 text-sm"
-                required
+                placeholder="Especificar tipo personalizado (opcional)"
+                className="w-full rounded-xl border border-slate-200 bg-brand-input-bg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary/30 focus:border-brand-secondary"
               />
             )}
           </div>

@@ -146,6 +146,13 @@ export const checklistsService = {
     return data;
   },
 
+  async eliminarEquipo(id: string) {
+    const { data } = await api.delete<{ softDeleted: boolean }>(
+      `/checklists/equipos/${id}`,
+    );
+    return data;
+  },
+
   // Inspecciones
   async listarInspecciones(params: {
     empresaId: string;

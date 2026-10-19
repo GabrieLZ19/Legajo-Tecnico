@@ -48,13 +48,16 @@ const TIPOS_SUGERIDOS_MEDICION = [
 ];
 
 const TIPOS_SUGERIDOS_ART = [
-  "Visita de ART",
-  "RAR",
-  "RGRL",
-  "Programa de seguridad",
   "Aviso de obra",
   "Informe general",
-  "Otro",
+  "Ministerio de trabajo",
+  "Programa de seguridad",
+  "RAR",
+  "Res. 81 (SVCC)",
+  "RGRL",
+  "Súper intendencia",
+  "Visita de ART",
+  "Otros",
 ];
 
 function diasHasta(fecha: string) {
@@ -150,10 +153,19 @@ export function DocumentosVencimientoPage({
   const documentos = data?.documentos || [];
 
   const tiposFiltro = useMemo(() => {
-    const set = new Set([...sugeridos.filter((t) => t !== "Otro"), ...tiposGuardados]);
-    return Array.from(set).sort((a, b) =>
-      a.localeCompare(b, "es", { sensitivity: "base" }),
-    );
+    const list = Array.from(
+      new Set([
+        ...sugeridos.filter((t) => t !== "Otro" && t !== "Otros"),
+        ...tiposGuardados.filter((t) => t !== "Otro" && t !== "Otros"),
+      ]),
+    ).sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+
+    const tieneOtros =
+      sugeridos.includes("Otros") ||
+      sugeridos.includes("Otro") ||
+      tiposGuardados.some((t) => t === "Otro" || t === "Otros");
+
+    return tieneOtros ? [...list, "Otros"] : list;
   }, [sugeridos, tiposGuardados]);
 
   const stats = useMemo(() => {

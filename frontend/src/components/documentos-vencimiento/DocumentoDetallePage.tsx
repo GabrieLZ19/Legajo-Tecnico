@@ -23,6 +23,32 @@ import type { CategoriaDocumento } from "@/types";
 const ACCEPT =
   ".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,image/jpeg,image/png,image/webp,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
+const SUGERENCIAS_ART = [
+  "Aviso de obra",
+  "Informe general",
+  "Ministerio de trabajo",
+  "Programa de seguridad",
+  "RAR",
+  "Res. 81 (SVCC)",
+  "RGRL",
+  "Súper intendencia",
+  "Visita de ART",
+  "Otros",
+];
+
+const SUGERENCIAS_MEDICION = [
+  "Iluminación",
+  "Ruido",
+  "PT",
+  "Vibraciones",
+  "Estrés térmico",
+  "Mat. Particulado",
+  "Ergonomía",
+  "Carga de fuego",
+  "Informe general",
+  "Otro",
+];
+
 type Props = {
   categoria: CategoriaDocumento;
   moduleKey: AppModuleKey;
@@ -284,11 +310,22 @@ export function DocumentoDetallePage({
                   Tipo
                 </label>
                 {canWrite ? (
-                  <input
-                    value={tipo}
-                    onChange={(e) => setTipo(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-brand-input-bg px-3 py-2 text-sm"
-                  />
+                  <>
+                    <input
+                      list="tipos-doc-sugeridos"
+                      value={tipo}
+                      onChange={(e) => setTipo(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-brand-input-bg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary/30 focus:border-brand-secondary"
+                    />
+                    <datalist id="tipos-doc-sugeridos">
+                      {(categoria === "art"
+                        ? SUGERENCIAS_ART
+                        : SUGERENCIAS_MEDICION
+                      ).map((s) => (
+                        <option key={s} value={s} />
+                      ))}
+                    </datalist>
+                  </>
                 ) : (
                   <p className="text-sm font-semibold text-slate-800">
                     {doc.tipo || "—"}
