@@ -245,6 +245,20 @@ export const checklistController = {
     }
   },
 
+  async eliminarEquipo(req: Request, res: Response, next: NextFunction) {
+    try {
+      const existing = await equiposService.obtenerPorId(paramStr(req.params.id));
+      if (!existing) {
+        return res.status(404).json({ error: "Equipo no encontrado" });
+      }
+      await assertEmpresaAccess(req.user!, existing.empresa_id);
+      const result = await equiposService.eliminar(paramStr(req.params.id));
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  },
+
   // ——— Inspecciones ———
   async listarInspecciones(req: Request, res: Response, next: NextFunction) {
     try {
@@ -360,16 +374,34 @@ export const checklistController = {
       const plantillasEmpresa = await checklistPlantillasService.listar({
         ambito: "empresa",
         empresa_id: equipo.empresa_id,
-        tipo_equipo: equipo.tipo_equipo,
       });
       const plantillasLt = await checklistPlantillasService.listar({
         ambito: "global",
         incluirNoPublicadas: false,
-        tipo_equipo: equipo.tipo_equipo,
+      });
+
+      const todasPlantillas = [...plantillasEmpresa, ...plantillasLt];
+      const tipoNorm = (equipo.tipo_equipo || "").toLowerCase().trim();
+
+      // Priorizar las que coinciden con el tipo de equipo, pero no descartar las demás
+      todasPlantillas.sort((a, b) => {
+        const aTipo = String(a.tipo_equipo || "").toLowerCase().trim();
+        const bTipo = String(b.tipo_equipo || "").toLowerCase().trim();
+        const aMatch =
+          aTipo === tipoNorm ||
+          (tipoNorm.length > 2 && aTipo.includes(tipoNorm)) ||
+          (aTipo.length > 2 && tipoNorm.includes(aTipo));
+        const bMatch =
+          bTipo === tipoNorm ||
+          (tipoNorm.length > 2 && bTipo.includes(tipoNorm)) ||
+          (bTipo.length > 2 && tipoNorm.includes(bTipo));
+        if (aMatch && !bMatch) return -1;
+        if (!aMatch && bMatch) return 1;
+        return 0;
       });
 
       const plantillasDetalle = await Promise.all(
-        [...plantillasEmpresa, ...plantillasLt].map(async (p) => {
+        todasPlantillas.map(async (p) => {
           const plantillaId = String(p.id);
           const full =
             await checklistPlantillasService.obtenerPorId(plantillaId);

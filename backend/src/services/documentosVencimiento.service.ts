@@ -68,7 +68,14 @@ export const documentosVencimientoService = {
     }
 
     if (params.tipo) {
-      query = query.eq("tipo", params.tipo);
+      const tipoLower = params.tipo.trim().toLowerCase();
+      if (tipoLower === "súper intendencia" || tipoLower === "superintendencia") {
+        query = query.or("tipo.ilike.%súper intendencia%,tipo.ilike.%superintendencia%");
+      } else if (tipoLower === "otros" || tipoLower === "otro") {
+        query = query.or("tipo.ilike.otros,tipo.ilike.otro");
+      } else {
+        query = query.eq("tipo", params.tipo);
+      }
     }
     if (params.q?.trim()) {
       const q = params.q

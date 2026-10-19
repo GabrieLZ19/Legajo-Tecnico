@@ -77,6 +77,11 @@ router.patch(
   validate(actualizarEquipoSchema),
   checklistController.actualizarEquipo,
 );
+router.delete(
+  "/equipos/:id",
+  puedeEscribir,
+  checklistController.eliminarEquipo,
+);
 
 // Inspecciones
 router.get("/inspecciones", checklistController.listarInspecciones);

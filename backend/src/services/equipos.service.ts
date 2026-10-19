@@ -101,6 +101,29 @@ export const equiposService = {
     return data;
   },
 
+  async eliminar(id: string) {
+    const { count } = await supabaseAdmin
+      .from("checklist_inspecciones")
+      .select("id", { count: "exact", head: true })
+      .eq("equipo_id", id);
+
+    if (count && count > 0) {
+      const { error } = await supabaseAdmin
+        .from("equipos")
+        .update({ activo: false, updated_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+      return { softDeleted: true };
+    }
+
+    const { error } = await supabaseAdmin
+      .from("equipos")
+      .delete()
+      .eq("id", id);
+    if (error) throw error;
+    return { softDeleted: false };
+  },
+
   qrUrl(token: string) {
     const base = env.FRONTEND_URL.replace(/\/$/, "");
     return `${base}/inspeccion/qr/${token}`;

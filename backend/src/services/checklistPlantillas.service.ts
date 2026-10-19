@@ -18,8 +18,8 @@ function mapListRow(p: Record<string, unknown>) {
     | undefined;
   return {
     id: p.id,
-    titulo: p.titulo,
-    tipo_equipo: p.tipo_equipo,
+    titulo: String(p.titulo || ""),
+    tipo_equipo: String(p.tipo_equipo || ""),
     ambito: p.ambito,
     empresa_id: p.empresa_id,
     estado_publicacion: p.estado_publicacion ?? null,
@@ -73,7 +73,7 @@ export const checklistPlantillasService = {
     }
 
     if (params.tipo_equipo) {
-      query = query.eq("tipo_equipo", params.tipo_equipo);
+      query = query.ilike("tipo_equipo", `%${params.tipo_equipo.trim()}%`);
     }
 
     const { data, error } = await query;
@@ -239,6 +239,11 @@ export const checklistPlantillasService = {
   },
 
   async eliminar(id: string) {
+    await supabaseAdmin
+      .from("checklist_plantilla_items")
+      .delete()
+      .eq("plantilla_id", id);
+
     const { error } = await supabaseAdmin
       .from("checklist_plantillas")
       .delete()
