@@ -83,9 +83,6 @@ export default function InspeccionQrPublicPage() {
         if (cancelled) return;
         setEquipo(data.equipo);
         setPlantillas(data.plantillas);
-        if (data.plantillas.length === 1) {
-          setPlantillaId(data.plantillas[0].id);
-        }
       } catch (err: unknown) {
         const axiosErr = err as { response?: { data?: { error?: string } } };
         if (!cancelled) {
@@ -123,6 +120,39 @@ export default function InspeccionQrPublicPage() {
   const dictamen = useMemo(() => {
     return evaluarInspeccion(items);
   }, [items]);
+
+  const { plantillasSugeridas, otrasPlantillas } = useMemo(() => {
+    if (!equipo?.tipo_equipo) {
+      return { plantillasSugeridas: [], otrasPlantillas: plantillas };
+    }
+    const eqType = equipo.tipo_equipo.toLowerCase().trim();
+    const sugeridas: ChecklistPlantilla[] = [];
+    const otras: ChecklistPlantilla[] = [];
+
+    for (const p of plantillas) {
+      const pType = (p.tipo_equipo || "").toLowerCase().trim();
+      const match =
+        pType === eqType ||
+        (eqType.length > 2 && pType.includes(eqType)) ||
+        (pType.length > 2 && eqType.includes(pType));
+      if (match) {
+        sugeridas.push(p);
+      } else {
+        otras.push(p);
+      }
+    }
+    return { plantillasSugeridas: sugeridas, otrasPlantillas: otras };
+  }, [equipo?.tipo_equipo, plantillas]);
+
+  useEffect(() => {
+    if (!plantillaId && plantillas.length > 0) {
+      if (plantillasSugeridas.length === 1) {
+        setPlantillaId(plantillasSugeridas[0].id);
+      } else if (plantillasSugeridas.length === 0 && plantillas.length === 1) {
+        setPlantillaId(plantillas[0].id);
+      }
+    }
+  }, [plantillas, plantillasSugeridas, plantillaId]);
 
   const handleMarcarTodosBien = () => {
     setItems((prev) =>
@@ -340,9 +370,16 @@ export default function InspeccionQrPublicPage() {
 
           {/* Selector de Checklist */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-              Checklist a aplicar *
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Checklist a aplicar *
+              </label>
+              {equipo && plantillasSugeridas.length > 0 && (
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                  {plantillasSugeridas.length} sugerida(s)
+                </span>
+              )}
+            </div>
             <select
               value={plantillaId}
               onChange={(e) => setPlantillaId(e.target.value)}
@@ -350,11 +387,30 @@ export default function InspeccionQrPublicPage() {
               required
             >
               <option value="">Seleccionar checklist…</option>
-              {plantillas.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.titulo} ({p.tipo_equipo})
-                </option>
-              ))}
+              {plantillasSugeridas.length > 0 && (
+                <optgroup label="Sugeridas para este tipo de equipo">
+                  {plantillasSugeridas.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.titulo} ({p.tipo_equipo})
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {otrasPlantillas.length > 0 && (
+                <optgroup
+                  label={
+                    plantillasSugeridas.length > 0
+                      ? "Otras plantillas disponibles"
+                      : "Todas las plantillas"
+                  }
+                >
+                  {otrasPlantillas.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.titulo} ({p.tipo_equipo})
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </select>
             {plantillas.length === 0 && (
               <p className="text-xs text-amber-600 mt-1">

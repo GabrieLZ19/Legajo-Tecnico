@@ -34,10 +34,7 @@ import { useAlert } from "@/context/AlertContext";
 import { canWriteAppModule } from "@/lib/moduleAccess";
 import { checklistsService } from "@/utils/services/checklists.service";
 import { evaluarInspeccion } from "@/lib/inspeccionCalculos";
-import type {
-  CalificacionChecklist,
-  CriticidadChecklist,
-} from "@/types";
+import type { CalificacionChecklist, CriticidadChecklist } from "@/types";
 
 type ItemDraft = {
   texto: string;
@@ -64,10 +61,19 @@ function NuevaInspeccionForm() {
 
   const [equipoId, setEquipoId] = useState(preEquipoId);
   const [plantillaId, setPlantillaId] = useState(prePlantillaId);
+  const [inspectorNombre, setInspectorNombre] = useState(
+    user?.nombre_completo || user?.username || "",
+  );
   const [items, setItems] = useState<ItemDraft[]>([]);
   const [acciones, setAcciones] = useState<AccionDraft[]>([]);
   const [observaciones, setObservaciones] = useState("");
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!inspectorNombre && (user?.nombre_completo || user?.username)) {
+      setInspectorNombre(user.nombre_completo || user.username || "");
+    }
+  }, [user, inspectorNombre]);
 
   // Listar equipos
   const { data: equipos = [], isLoading: loadingEquipos } = useQuery({
@@ -134,7 +140,10 @@ function NuevaInspeccionForm() {
     if (!plantillaId && equipoId) {
       if (plantillasSugeridas.length === 1) {
         setPlantillaId(plantillasSugeridas[0].id);
-      } else if (plantillasSugeridas.length === 0 && todasPlantillas.length === 1) {
+      } else if (
+        plantillasSugeridas.length === 0 &&
+        todasPlantillas.length === 1
+      ) {
         setPlantillaId(todasPlantillas[0].id);
       }
     }
@@ -171,7 +180,11 @@ function NuevaInspeccionForm() {
         calificacion: "bien",
       })),
     );
-    showAlert("info", "Puntos verificados", "Se marcaron todos los ítems como Conforme (Bien).");
+    showAlert(
+      "info",
+      "Puntos verificados",
+      "Se marcaron todos los ítems como Conforme (Bien).",
+    );
   };
 
   // Agregar acción correctiva a partir de un ítem defectuoso
@@ -220,6 +233,14 @@ function NuevaInspeccionForm() {
       );
       return;
     }
+    if (!inspectorNombre.trim()) {
+      showAlert(
+        "warning",
+        "Falta inspector",
+        "Ingresá el nombre y apellido del inspector u operario que realizó la verificación.",
+      );
+      return;
+    }
     const plantilla = todasPlantillas.find((p) => p.id === plantillaId);
     setSaving(true);
     try {
@@ -228,6 +249,7 @@ function NuevaInspeccionForm() {
         equipo_id: equipoId,
         plantilla_id: plantillaId,
         plantilla_titulo: plantilla?.titulo || "Checklist",
+        inspector_nombre: inspectorNombre.trim(),
         observaciones: observaciones.trim() || null,
         items,
         acciones: acciones
@@ -253,7 +275,9 @@ function NuevaInspeccionForm() {
         "error",
         "Error al guardar",
         axiosErr.response?.data?.error ||
-          (err instanceof Error ? err.message : "No se pudo guardar la inspección"),
+          (err instanceof Error
+            ? err.message
+            : "No se pudo guardar la inspección"),
       );
     } finally {
       setSaving(false);
@@ -280,7 +304,8 @@ function NuevaInspeccionForm() {
           </span>
         </div>
         <p className="text-sm text-slate-500 mt-1">
-          Completá la verificación en campo. El dictamen oficial se calculará automáticamente en base a las criticidades.
+          Completá la verificación en campo. El dictamen oficial se calculará
+          automáticamente en base a las criticidades.
         </p>
       </div>
 
@@ -300,6 +325,28 @@ function NuevaInspeccionForm() {
                 </span>
               </div>
 
+              {/* Identificación del Inspector / Operador */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Nombre y Apellido del Inspector / Operador{" "}
+                  <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input
+                    type="text"
+                    value={inspectorNombre}
+                    onChange={(e) => setInspectorNombre(e.target.value)}
+                    placeholder="Ej: Diego Ariel (Inspector OSH / Operador Nave Central)"
+                    className="w-full rounded-xl border border-slate-200 pl-10 pr-3.5 py-2.5 text-xs font-semibold text-slate-900 bg-white focus:outline-hidden focus:border-brand-primary"
+                    required
+                  />
+                </div>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Profesional o técnico que llevó a cabo la inspección en
+                  planta.
+                </p>
+              </div>
               {/* Selector de Equipo */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
@@ -317,7 +364,8 @@ function NuevaInspeccionForm() {
                   <option value="">Seleccionar equipo de planta…</option>
                   {equipos.map((eq) => (
                     <option key={eq.id} value={eq.id}>
-                      {eq.nombre} — {eq.tipo_equipo} {eq.codigo_interno ? `(TAG: ${eq.codigo_interno})` : ""}
+                      {eq.nombre} — {eq.tipo_equipo}{" "}
+                      {eq.codigo_interno ? `(TAG: ${eq.codigo_interno})` : ""}
                     </option>
                   ))}
                 </select>
@@ -346,13 +394,24 @@ function NuevaInspeccionForm() {
                       {equipo.nombre}
                     </strong>
                     <div className="flex items-center gap-2 text-slate-500 text-[11px] mt-0.5">
-                      <span>Tipo: <strong className="text-slate-700">{equipo.tipo_equipo}</strong></span>
+                      <span>
+                        Tipo:{" "}
+                        <strong className="text-slate-700">
+                          {equipo.tipo_equipo}
+                        </strong>
+                      </span>
                       {equipo.codigo_interno && (
-                        <span>· TAG: <strong className="font-mono text-slate-700">{equipo.codigo_interno}</strong></span>
+                        <span>
+                          · TAG:{" "}
+                          <strong className="font-mono text-slate-700">
+                            {equipo.codigo_interno}
+                          </strong>
+                        </span>
                       )}
                       {equipo.ubicacion && (
                         <span className="flex items-center gap-1">
-                          · <MapPin className="h-3 w-3 text-slate-400" /> {equipo.ubicacion}
+                          · <MapPin className="h-3 w-3 text-slate-400" />{" "}
+                          {equipo.ubicacion}
                         </span>
                       )}
                     </div>
@@ -377,7 +436,8 @@ function NuevaInspeccionForm() {
                   </label>
                   {equipo && plantillasSugeridas.length > 0 && (
                     <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                      {plantillasSugeridas.length} sugerida(s) para {equipo.tipo_equipo}
+                      {plantillasSugeridas.length} sugerida(s) para{" "}
+                      {equipo.tipo_equipo}
                     </span>
                   )}
                 </div>
@@ -400,7 +460,8 @@ function NuevaInspeccionForm() {
                     <optgroup label="Sugeridas para este tipo de equipo">
                       {plantillasSugeridas.map((p) => (
                         <option key={p.id} value={p.id}>
-                          {p.titulo} ({p.tipo_equipo} · {p.ambito === "empresa" ? "Empresa" : "LT"})
+                          {p.titulo} ({p.tipo_equipo} ·{" "}
+                          {p.ambito === "empresa" ? "Empresa" : "LT"})
                         </option>
                       ))}
                     </optgroup>
@@ -415,24 +476,27 @@ function NuevaInspeccionForm() {
                     >
                       {otrasPlantillas.map((p) => (
                         <option key={p.id} value={p.id}>
-                          {p.titulo} ({p.tipo_equipo} · {p.ambito === "empresa" ? "Empresa" : "LT"})
+                          {p.titulo} ({p.tipo_equipo} ·{" "}
+                          {p.ambito === "empresa" ? "Empresa" : "LT"})
                         </option>
                       ))}
                     </optgroup>
                   )}
                 </select>
 
-                {todasPlantillas.length === 0 && !loadingEmpresa && !loadingLt && (
-                  <p className="mt-2 text-xs text-amber-600 bg-amber-50 p-2.5 rounded-xl border border-amber-200">
-                    No tenés plantillas creadas todavía.{" "}
-                    <Link
-                      href="/checklists/plantillas/nueva"
-                      className="underline font-bold text-amber-800"
-                    >
-                      Crear una plantilla
-                    </Link>
-                  </p>
-                )}
+                {todasPlantillas.length === 0 &&
+                  !loadingEmpresa &&
+                  !loadingLt && (
+                    <p className="mt-2 text-xs text-amber-600 bg-amber-50 p-2.5 rounded-xl border border-amber-200">
+                      No tenés plantillas creadas todavía.{" "}
+                      <Link
+                        href="/checklists/plantillas/nueva"
+                        className="underline font-bold text-amber-800"
+                      >
+                        Crear una plantilla
+                      </Link>
+                    </p>
+                  )}
               </div>
             </div>
 
@@ -446,7 +510,8 @@ function NuevaInspeccionForm() {
                       2. Puntos de Inspección ({items.length})
                     </span>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Calificá cada punto según su condición actual observada en la máquina.
+                      Calificá cada punto según su condición actual observada en
+                      la máquina.
                     </p>
                   </div>
 
@@ -517,7 +582,10 @@ function NuevaInspeccionForm() {
                               type="button"
                               onClick={() => {
                                 const next = [...items];
-                                next[idx] = { ...next[idx], calificacion: "bien" };
+                                next[idx] = {
+                                  ...next[idx],
+                                  calificacion: "bien",
+                                };
                                 setItems(next);
                               }}
                               className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
@@ -534,7 +602,10 @@ function NuevaInspeccionForm() {
                               type="button"
                               onClick={() => {
                                 const next = [...items];
-                                next[idx] = { ...next[idx], calificacion: "regular" };
+                                next[idx] = {
+                                  ...next[idx],
+                                  calificacion: "regular",
+                                };
                                 setItems(next);
                               }}
                               className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
@@ -551,7 +622,10 @@ function NuevaInspeccionForm() {
                               type="button"
                               onClick={() => {
                                 const next = [...items];
-                                next[idx] = { ...next[idx], calificacion: "mal" };
+                                next[idx] = {
+                                  ...next[idx],
+                                  calificacion: "mal",
+                                };
                                 setItems(next);
                               }}
                               className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
@@ -576,7 +650,9 @@ function NuevaInspeccionForm() {
                             </span>
                             <button
                               type="button"
-                              onClick={() => handleAgregarAccionParaItem(item.texto)}
+                              onClick={() =>
+                                handleAgregarAccionParaItem(item.texto)
+                              }
                               className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:underline"
                             >
                               <Plus className="h-3 w-3" />
@@ -611,7 +687,8 @@ function NuevaInspeccionForm() {
                       Plan de Acción Correctivo ({acciones.length})
                     </label>
                     <p className="text-[11px] text-slate-400">
-                      Tareas de mantenimiento o reparación requeridas para subsanar los desvíos.
+                      Tareas de mantenimiento o reparación requeridas para
+                      subsanar los desvíos.
                     </p>
                   </div>
 
@@ -620,7 +697,11 @@ function NuevaInspeccionForm() {
                     onClick={() =>
                       setAcciones([
                         ...acciones,
-                        { descripcion: "", responsable: "", fecha_vencimiento: "" },
+                        {
+                          descripcion: "",
+                          responsable: "",
+                          fecha_vencimiento: "",
+                        },
                       ])
                     }
                     className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-bold border border-blue-200 transition-colors cursor-pointer"
@@ -632,7 +713,8 @@ function NuevaInspeccionForm() {
 
                 {acciones.length === 0 ? (
                   <div className="p-4 rounded-xl border border-dashed border-slate-200 text-center text-xs text-slate-400">
-                    No hay acciones correctivas cargadas todavía. Podés sumar una si detectaste desvíos en el equipo.
+                    No hay acciones correctivas cargadas todavía. Podés sumar
+                    una si detectaste desvíos en el equipo.
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -661,7 +743,10 @@ function NuevaInspeccionForm() {
                           value={a.descripcion}
                           onChange={(e) => {
                             const next = [...acciones];
-                            next[idx] = { ...next[idx], descripcion: e.target.value };
+                            next[idx] = {
+                              ...next[idx],
+                              descripcion: e.target.value,
+                            };
                             setAcciones(next);
                           }}
                           placeholder="Descripción detallada de la reparación o tarea correctiva…"
@@ -678,7 +763,10 @@ function NuevaInspeccionForm() {
                               value={a.responsable}
                               onChange={(e) => {
                                 const next = [...acciones];
-                                next[idx] = { ...next[idx], responsable: e.target.value };
+                                next[idx] = {
+                                  ...next[idx],
+                                  responsable: e.target.value,
+                                };
                                 setAcciones(next);
                               }}
                               placeholder="Ej: Mantenimiento Mecánico / Juan Pérez"
@@ -728,7 +816,9 @@ function NuevaInspeccionForm() {
               {/* Botón de envío principal */}
               <button
                 type="submit"
-                disabled={saving || !equipoId || !plantillaId || items.length === 0}
+                disabled={
+                  saving || !equipoId || !plantillaId || items.length === 0
+                }
                 className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-brand-primary hover:bg-brand-primary/95 text-white py-3.5 text-xs font-bold shadow-md disabled:opacity-50 cursor-pointer transition-all"
               >
                 {saving ? (
@@ -763,7 +853,8 @@ function NuevaInspeccionForm() {
                 <div className="text-center py-8 text-slate-400 space-y-2">
                   <ClipboardCheck className="h-8 w-8 mx-auto opacity-50" />
                   <p className="text-xs">
-                    Seleccioná un checklist para ver el cálculo del dictamen en vivo.
+                    Seleccioná un checklist para ver el cálculo del dictamen en
+                    vivo.
                   </p>
                 </div>
               ) : (
@@ -851,13 +942,20 @@ function NuevaInspeccionForm() {
 
                   {/* Motivo Detallado */}
                   <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-[11px] text-slate-600 leading-relaxed">
-                    <strong>Criterio aplicado:</strong> {dictamen.motivoDetallado}
+                    <strong>Criterio aplicado:</strong>{" "}
+                    {dictamen.motivoDetallado}
                   </div>
 
                   {/* Botón rápido sticky */}
                   <button
                     type="submit"
-                    disabled={saving || !equipoId || !plantillaId || items.length === 0}
+                    disabled={
+                      saving ||
+                      !equipoId ||
+                      !plantillaId ||
+                      items.length === 0 ||
+                      !inspectorNombre.trim()
+                    }
                     className="w-full inline-flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-2xs"
                   >
                     {saving ? (
@@ -879,13 +977,17 @@ function NuevaInspeccionForm() {
               </span>
               <ul className="text-[11px] space-y-1 text-blue-800/90 list-disc pl-4 leading-relaxed">
                 <li>
-                  <strong>Rechazo directo:</strong> 1 o más ítems de criticidad <em>Alta</em> calificados como <em>Mal</em>.
+                  <strong>Rechazo directo:</strong> 1 o más ítems de criticidad{" "}
+                  <em>Alta</em> calificados como <em>Mal</em>.
                 </li>
                 <li>
-                  <strong>Observación:</strong> Ítems de criticidad <em>Alta</em> en <em>Regular</em> o <em>Media</em> en <em>Mal</em>.
+                  <strong>Observación:</strong> Ítems de criticidad{" "}
+                  <em>Alta</em> en <em>Regular</em> o <em>Media</em> en{" "}
+                  <em>Mal</em>.
                 </li>
                 <li>
-                  Las tareas correctivas se sincronizan automáticamente con el plan de acción general de la empresa.
+                  Las tareas correctivas se sincronizan automáticamente con el
+                  plan de acción general de la empresa.
                 </li>
               </ul>
             </div>
@@ -902,7 +1004,9 @@ export default function NuevaInspeccionPage() {
       fallback={
         <div className="flex flex-col items-center justify-center py-24 text-slate-400 space-y-3">
           <Loader className="h-8 w-8 animate-spin text-brand-primary" />
-          <p className="text-xs font-semibold">Cargando formulario de inspección…</p>
+          <p className="text-xs font-semibold">
+            Cargando formulario de inspección…
+          </p>
         </div>
       }
     >
