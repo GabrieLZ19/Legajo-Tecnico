@@ -322,18 +322,25 @@ export const checklistController = {
         if (!okEmpresa && !okGlobal) {
           return res.status(403).json({ error: "Plantilla no disponible" });
         }
-        if (plantilla.tipo_equipo !== equipo.tipo_equipo) {
-          return res.status(400).json({
-            error: "La plantilla no corresponde al tipo de equipo",
-          });
+      }
+
+      let inspectorNombre = req.body.inspector_nombre?.trim() || undefined;
+      if (!inspectorNombre && req.user?.id) {
+        const { data: perfil } = await supabaseAdmin
+          .from("perfiles")
+          .select("nombre_completo, username")
+          .eq("id", req.user.id)
+          .single();
+        if (perfil) {
+          inspectorNombre =
+            perfil.nombre_completo?.trim() || perfil.username || undefined;
         }
       }
 
       const insp = await inspeccionesService.crear({
         ...req.body,
         inspector_id: req.user!.id,
-        inspector_nombre:
-          req.body.inspector_nombre || undefined,
+        inspector_nombre: inspectorNombre,
       });
       res.status(201).json(insp);
     } catch (error) {
@@ -461,11 +468,6 @@ export const checklistController = {
         plantilla.estado_publicacion === "aprobada";
       if (!okEmpresa && !okGlobal) {
         return res.status(403).json({ error: "Plantilla no disponible" });
-      }
-      if (plantilla.tipo_equipo !== equipo.tipo_equipo) {
-        return res.status(400).json({
-          error: "La plantilla no corresponde al tipo de equipo",
-        });
       }
 
       const plantillaItems = plantilla.items || [];
